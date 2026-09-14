@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, BrainCircuit, CalendarDays, Upload, Plus, Award, ChevronRight, AlertTriangle, Clock, Scale } from 'lucide-react';
+import { BookOpen, BrainCircuit, CalendarDays, Award, ChevronRight, Clock, Scale, FileText } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
-import { ProgressBar } from '../components/ui/ProgressBar';
 import { fetchCourses, fetchFlashcards, fetchEvents } from '../services/supabaseService';
 import { supabase } from '../lib/supabase';
 
@@ -39,23 +38,22 @@ export function Dashboard() {
   const totalECTS = courses.reduce((acc, c) => acc + (c.status === 'Validé' ? Number(c.ects || 0) : 0), 0);
   const dueCards = flashcards.filter(f => new Date(f.due_at) <= new Date()).length;
   
-  const nextExam = events.find(e => e.category === 'Examen' && new Date(e.event_date) >= new Date());
-  const daysBeforeExam = nextExam 
-    ? Math.ceil((new Date(nextExam.event_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
-    : null;
+  // Filtrer les prochains cours et deadlines (catégorie 'Cours' ou 'Rendu' / 'Séminaire')
+  const upcomingCourses = events.filter(e => e.category === 'Cours' && new Date(e.event_date) >= new Date()).slice(0, 2);
+  const upcomingDeadlines = events.filter(e => (e.category === 'Rendu' || e.category === 'Séminaire') && new Date(e.event_date) >= new Date()).slice(0, 2);
 
   return (
     <div className="flex flex-col gap-6 pt-2 pb-16 animate-in fade-in duration-300 text-text">
       
-      {/* En-tête avec prénom dynamique */}
+      {/* En-tête */}
       <header className="flex justify-between items-center px-1">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent">
+          <div className="w-10 h-10 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent">
             <Scale size={22} />
           </div>
           <div>
             <h1 className="font-serif text-2xl font-bold tracking-tight text-text">Bonjour, {userName}</h1>
-            <p className="text-text-muted text-xs">Tu construis ton avenir, un cours à la fois.</p>
+            <p className="text-text-muted text-xs">Ton espace personnel de droit suisse.</p>
           </div>
         </div>
         <button 
@@ -66,7 +64,7 @@ export function Dashboard() {
         </button>
       </header>
 
-      {/* Progression ECTS */}
+      {/* 1. Progression ECTS */}
       <Card 
         onClick={() => navigate('/courses')}
         className="cursor-pointer bg-surface border-border hover:border-accent/40 transition-all p-5 flex flex-col gap-3 shadow-lg"
@@ -86,28 +84,69 @@ export function Dashboard() {
         </div>
       </Card>
 
-      {/* Widgets rapides */}
-      <Card 
-        onClick={() => navigate('/schedule')}
-        className="cursor-pointer bg-surface border-border hover:border-accent/40 transition-all p-4 flex items-center justify-between group"
-      >
-        <div className="flex items-center gap-4">
-          <div className="w-11 h-11 rounded-xl bg-warning/10 text-warning flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-            <Clock size={22} />
-          </div>
-          <div>
-            <span className="text-[10px] font-semibold tracking-wider text-text-muted uppercase">Prochain examen</span>
-            <h3 className="font-medium text-base text-text mt-0.5">
-              {nextExam ? nextExam.title : 'Aucun examen planifié'}
-            </h3>
-            <p className="text-xs text-warning font-medium mt-0.5">
-              {daysBeforeExam !== null ? `Dans ${daysBeforeExam} jour(s)` : 'Planifie tes échéances dans le calendrier'}
-            </p>
-          </div>
+      {/* 2. Prochains cours planifiés */}
+      <section className="flex flex-col gap-3">
+        <div className="flex justify-between items-center px-1">
+          <h2 className="font-serif text-lg font-semibold">Prochains cours</h2>
+          <button onClick={() => navigate('/schedule')} className="text-xs text-accent font-medium hover:underline cursor-pointer">
+            Calendrier
+          </button>
         </div>
-        <ChevronRight size={18} className="text-text-muted group-hover:text-accent transition-colors" />
-      </Card>
 
+        {upcomingCourses.length === 0 ? (
+          <Card className="bg-surface border-border p-4 text-center text-text-muted text-xs">
+            Aucun cours planifié prochainement. Ajoute des événements dans ton planning.
+          </Card>
+        ) : (
+          upcomingCourses.map(ev => (
+            <Card key={ev.id} className="bg-surface border-border p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center">
+                  <Clock size={18} />
+                </div>
+                <div>
+                  <p className="font-medium text-sm text-text">{ev.title}</p>
+                  <p className="text-xs text-text-muted">{ev.courses?.title || 'Matière'} • {new Date(ev.event_date).toLocaleDateString()}</p>
+                </div>
+              </div>
+              <Badge variant="outline">Cours</Badge>
+            </Card>
+          ))
+        )}
+      </section>
+
+      {/* 3. Deadlines & Rendus */}
+      <section className="flex flex-col gap-3">
+        <div className="flex justify-between items-center px-1">
+          <h2 className="font-serif text-lg font-semibold">Deadlines & Rendus</h2>
+          <button onClick={() => navigate('/schedule')} className="text-xs text-accent font-medium hover:underline cursor-pointer">
+            Voir tout
+          </button>
+        </div>
+
+        {upcomingDeadlines.length === 0 ? (
+          <Card className="bg-surface border-border p-4 text-center text-text-muted text-xs">
+            Aucune deadline de travail ou rendu en cours.
+          </Card>
+        ) : (
+          upcomingDeadlines.map(ev => (
+            <Card key={ev.id} className="bg-surface border-border p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-warning/10 text-warning flex items-center justify-center">
+                  <FileText size={18} />
+                </div>
+                <div>
+                  <p className="font-medium text-sm text-text">{ev.title}</p>
+                  <p className="text-xs text-warning font-medium">Échéance le {new Date(ev.event_date).toLocaleDateString()}</p>
+                </div>
+              </div>
+              <Badge variant="danger">Rendu</Badge>
+            </Card>
+          ))
+        )}
+      </section>
+
+      {/* 4. Widget Flashcards */}
       <Card 
         onClick={() => navigate('/study')}
         className="cursor-pointer bg-surface border-border hover:border-accent/40 transition-all p-4 flex items-center justify-between group"
@@ -117,44 +156,15 @@ export function Dashboard() {
             <BrainCircuit size={22} />
           </div>
           <div>
-            <span className="text-[10px] font-semibold tracking-wider text-text-muted uppercase">Flashcards</span>
+            <span className="text-[10px] font-semibold tracking-wider text-text-muted uppercase">Révisions actives</span>
             <h3 className="font-medium text-base text-text mt-0.5">
-              {dueCards} cartes à réviser
+              {dueCards} flashcards à réviser
             </h3>
-            <p className="text-xs text-text-muted mt-0.5">Renforce ta mémoire à long terme</p>
+            <p className="text-xs text-text-muted mt-0.5">Répétition espacée</p>
           </div>
         </div>
         <ChevronRight size={18} className="text-text-muted group-hover:text-accent transition-colors" />
       </Card>
-
-      {/* Raccourci vers les cours récents */}
-      <section className="flex flex-col gap-3 mt-2">
-        <div className="flex justify-between items-center px-1">
-          <h2 className="font-serif text-lg font-semibold">Accès direct aux cours</h2>
-          <button onClick={() => navigate('/courses')} className="text-xs text-accent font-medium hover:underline cursor-pointer">
-            Voir tout
-          </button>
-        </div>
-
-        {courses.slice(0, 2).map(course => (
-          <Card 
-            key={course.id}
-            onClick={() => navigate(`/courses/${course.id}`)}
-            className="p-4 flex items-center justify-between cursor-pointer hover:border-accent/40 bg-surface"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-surface-elevated text-accent flex items-center justify-center">
-                <BookOpen size={18} />
-              </div>
-              <div>
-                <p className="font-medium text-sm text-text">{course.title}</p>
-                <p className="text-xs text-text-muted">{course.ects} ECTS • {course.status}</p>
-              </div>
-            </div>
-            <Badge variant="outline">{course.course_code || 'COURS'}</Badge>
-          </Card>
-        ))}
-      </section>
 
     </div>
   );
