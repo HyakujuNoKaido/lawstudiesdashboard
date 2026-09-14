@@ -1,7 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Fallback vide pour éviter les crashs dans l'éditeur web avant la configuration de Cloudflare
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co';
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder_key';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error("Les variables d'environnement VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY doivent être définies.");
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
