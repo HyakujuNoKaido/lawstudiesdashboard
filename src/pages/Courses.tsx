@@ -1,9 +1,9 @@
-// src/pages/Courses.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BookOpen, Plus, Trash2, ChevronRight, Scale } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { fetchCourses, deleteCourse } from '../services/supabaseService';
 
 export function Courses() {
@@ -11,6 +11,9 @@ export function Courses() {
   const [courses, setCourses] = useState<any[]>([]);
   const [semesterFilter, setSemesterFilter] = useState('Tous');
   const [loading, setLoading] = useState(true);
+
+  // État pour la modale de confirmation de suppression
+  const [courseToDelete, setCourseToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     loadCourses();
@@ -28,11 +31,11 @@ export function Courses() {
     }
   }
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!confirm("Voulez-vous vraiment supprimer ce cours ? Toutes les données associées (flashcards, chapitres, documents, notes, événements) seront supprimées.")) return;
+  const confirmDelete = async () => {
+    if (!courseToDelete) return;
     try {
-      await deleteCourse(id);
+      await deleteCourse(courseToDelete);
+      setCourseToDelete(null);
       loadCourses();
     } catch (err) {
       console.error("Erreur suppression cours:", err);
@@ -101,7 +104,7 @@ export function Courses() {
 
               <div className="flex items-center gap-2">
                 <button 
-                  onClick={(e) => handleDelete(course.id, e)}
+                  onClick={(e) => { e.stopPropagation(); setCourseToDelete(course.id); }}
                   className="p-2 text-text-muted hover:text-danger transition-colors rounded-lg hover:bg-surface-elevated cursor-pointer"
                   title="Supprimer le cours et ses données"
                 >
@@ -113,6 +116,18 @@ export function Courses() {
           ))}
         </div>
       )}
+
+      {/* Modale de confirmation de suppression */}
+      <ConfirmModal 
+        isOpen={!!courseToDelete}
+        title="Supprimer le cours ?"
+        message="Attention : Cette action est irréversible. Toutes les données associées (flashcards, chapitres, documents, notes, événements du planning) seront définitivement supprimées."
+        confirmText="Supprimer définitivement"
+        cancelText="Annuler"
+        isDanger={true}
+        onConfirm={confirmDelete}
+        onClose={() => setCourseToDelete(null)}
+      />
 
     </div>
   );
