@@ -12,6 +12,8 @@ import { AddCourse } from './pages/AddCourse';
 import { Schedule } from './pages/Schedule';
 import { DocumentUpload } from './pages/DocumentUpload';
 import { DocumentViewer } from './pages/DocumentViewer';
+import { Onboarding } from './pages/Onboarding';
+import { AddGrade } from './pages/AddGrade';
 import { BrainCircuit } from 'lucide-react';
 
 const Study = () => (
@@ -44,11 +46,16 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Route hors Layout pour l'Onboarding */}
+        <Route path="/onboarding" element={<Onboarding />} />
+        
+        {/* Routes du Layout principal */}
         <Route path="/" element={<AppLayout />}>
           <Route index element={<Dashboard />} />
           <Route path="courses" element={<Courses />} />
           <Route path="courses/:courseId" element={<CourseDetail />} />
           <Route path="add/course" element={<AddCourse />} />
+          <Route path="add/grade" element={<AddGrade />} />
           <Route path="add/document" element={<DocumentUpload />} />
           <Route path="import" element={<DocumentImport />} />
           <Route path="study" element={<Study />} />
@@ -56,6 +63,7 @@ export default function App() {
           <Route path="profile" element={<Profile />} />
         </Route>
         
+        {/* Routes Plein Écran */}
         <Route path="/session/:deckId" element={<StudySession />} />
         <Route path="/editor/:noteId" element={<StudyNoteEditor />} />
         <Route path="/viewer/:docId" element={<DocumentViewer />} />
