@@ -1,133 +1,130 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { X } from 'lucide-react';
-
-// Données de démonstration
-const MOCK_CARD = {
-  deckName: 'Droit des obligations (CO)',
-  current: 12,
-  total: 42,
-  front: "Quelles sont les quatre conditions cumulatives de la responsabilité civile extracontractuelle selon l'art. 41 CO ?",
-  back: "1. Un préjudice (dommage ou tort moral)\n2. Un acte illicite\n3. Un lien de causalité (naturelle et adéquate)\n4. Une faute (intentionnelle ou par négligence)",
-  tags: ["Art. 41 CO", "RC"]
-};
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { ChevronLeft, BrainCircuit, Check, RotateCcw } from 'lucide-react';
+import { Card } from '../components/ui/Card';
+import { fetchFlashcards, updateFlashcardProgress } from '../services/supabaseService';
 
 export function StudySession() {
   const navigate = useNavigate();
+  const { deckId } = useParams();
+  const [cards, setCards] = useState<any[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const handleMasteryChoice = (quality: 'again' | 'hard' | 'good' | 'easy') => {
-    // Ici, nous appellerons la fonction calculateNextReview(currentState, quality)
-    // puis nous passerons à la carte suivante.
-    console.log(`Qualité sélectionnée : ${quality}`);
+  useEffect(() => {
+    fetchFlashcards().then(data => {
+      setCards(data);
+    }).finally(() => setLoading(false));
+  }, []);
+
+  const handleAnswer = async (quality: number) => {
+    const card = cards[currentIndex];
+    if (card) {
+      try {
+        const newRepetitions = (card.repetitions || 0) + 1;
+        const interval = quality >= 3 ? (card.interval_days || 1) * 2 : 1;
+        await updateFlashcardProgress(card.id, newRepetitions, interval, card.ease_factor || 2.5);
+      } catch (err) {
+        console.error("Erreur mise à jour flashcard:", err);
+      }
+    }
+
     setIsFlipped(false);
+    if (currentIndex < cards.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+    } else {
+      alert("Session de révision terminée !");
+      navigate('/study');
+    }
   };
 
-  return (
-    <div className="fixed inset-0 bg-background z-50 flex flex-col animate-in slide-in-from-bottom-2 duration-300">
-      
-      {/* En-tête de session */}
-      <header className="flex items-center justify-between p-4 md:p-6 border-b border-border bg-surface">
-        <div className="flex-1">
-          <p className="text-xs text-text-muted font-semibold uppercase tracking-wider mb-1">
-            {MOCK_CARD.deckName}
-          </p>
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-medium">
-              Carte {MOCK_CARD.current} <span className="text-text-muted">/ {MOCK_CARD.total}</span>
-            </span>
-            {/* Mini barre de progression */}
-            <div className="w-24 h-1.5 bg-surface-elevated rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-accent transition-all duration-300"
-                style={{ width: `${(MOCK_CARD.current / MOCK_CARD.total) * 100}%` }}
-              />
-            </div>
-          </div>
-        </div>
-        <button 
-          onClick={() => navigate(-1)}
-          className="w-10 h-10 flex items-center justify-center rounded-full bg-surface-elevated text-text-muted hover:text-text transition-colors"
-          aria-label="Quitter la session"
-        >
-          <X size={20} />
+  if (loading) {
+    return <div className="min-h-screen bg-background flex items-center justify-center text-text-muted text-sm">Chargement des cartes...</div>;
+  }
+
+  if (cards.length === 0) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 gap-4">
+        <BrainCircuit size={48} className="text-text-muted" />
+        <p className="text-text-muted text-sm text-center">Aucune flashcard disponible pour le moment.</p>
+        <button onClick={() => navigate('/study')} className="px-4 py-2 bg-accent text-background rounded-md text-sm font-medium">
+          Retour aux révisions
         </button>
+      </div>
+    );
+  }
+
+  const currentCard = cards[currentIndex];
+
+  return (
+    <div className="min-h-screen bg-background flex flex-col p-4 md:p-8 max-w-xl mx-auto justify-between animate-in fade-in duration-300">
+      
+      <header className="flex items-center justify-between">
+        <button 
+          onClick={() => navigate('/study')}
+          className="flex items-center gap-1 text-text-muted hover:text-text transition-colors -ml-2 p-2"
+        >
+          <ChevronLeft size={20} />
+          <span className="text-sm font-medium">Quitter</span>
+        </button>
+        <span className="text-xs text-text-muted font-medium">
+          Carte {currentIndex + 1} / {cards.length}
+        </span>
       </header>
 
-      {/* Zone de la carte */}
-      <main className="flex-1 flex flex-col p-4 md:p-8 max-w-2xl mx-auto w-full">
-        <div 
-          className="flex-1 bg-surface border border-border rounded-lg p-6 md:p-10 flex flex-col justify-center relative shadow-sm"
+      <main className="my-auto py-8">
+        <Card 
+          onClick={() => setIsFlipped(!isFlipped)}
+          className="min-h-[280px] p-8 flex flex-col items-center justify-center text-center cursor-pointer select-none relative shadow-lg hover:border-accent/40 transition-all"
         >
-          {/* Tags */}
-          <div className="absolute top-4 left-4 flex gap-2">
-            {MOCK_CARD.tags.map(tag => (
-              <span key={tag} className="text-[10px] uppercase tracking-wider font-semibold text-text-muted bg-surface-elevated px-2 py-1 rounded-sm">
-                {tag}
-              </span>
-            ))}
-          </div>
+          <span className="absolute top-4 left-4 text-[10px] uppercase tracking-wider font-semibold text-text-muted">
+            {isFlipped ? 'Réponse' : 'Question'}
+          </span>
+          
+          <p className="font-serif text-xl md:text-2xl my-auto">
+            {isFlipped ? currentCard.back : currentCard.front}
+          </p>
 
-          {/* Recto */}
-          <div className="text-center">
-            <h2 className="text-xl md:text-2xl font-medium leading-relaxed">
-              {MOCK_CARD.front}
-            </h2>
-          </div>
-
-          {/* Verso (révélé) */}
-          {isFlipped && (
-            <div className="mt-8 pt-8 border-t border-border animate-in fade-in duration-300">
-              <div className="text-text-muted whitespace-pre-line text-lg md:text-xl leading-relaxed text-center">
-                {MOCK_CARD.back}
-              </div>
-            </div>
-          )}
-        </div>
+          <span className="absolute bottom-4 text-xs text-text-muted flex items-center gap-1">
+            <RotateCcw size={12} />
+            <span>Appuyez pour retourner</span>
+          </span>
+        </Card>
       </main>
 
-      {/* Contrôles inférieurs */}
-      <footer className="p-4 md:p-8 pb-safe bg-background max-w-2xl mx-auto w-full">
-        {!isFlipped ? (
+      {isFlipped ? (
+        <footer className="grid grid-cols-3 gap-3 pb-4">
+          <button 
+            onClick={() => handleAnswer(1)}
+            className="py-3 bg-danger/10 text-danger rounded-lg font-medium text-xs hover:bg-danger/20 transition-colors"
+          >
+            À revoir (1)
+          </button>
+          <button 
+            onClick={() => handleAnswer(3)}
+            className="py-3 bg-warning/10 text-warning rounded-lg font-medium text-xs hover:bg-warning/20 transition-colors"
+          >
+            Bien (3)
+          </button>
+          <button 
+            onClick={() => handleAnswer(5)}
+            className="py-3 bg-success/10 text-success rounded-lg font-medium text-xs hover:bg-success/20 transition-colors"
+          >
+            Maîtrisé (5)
+          </button>
+        </footer>
+      ) : (
+        <footer className="pb-4">
           <button 
             onClick={() => setIsFlipped(true)}
-            className="w-full py-4 bg-surface-elevated hover:bg-border text-text rounded-md font-medium text-lg transition-colors border border-border active:scale-[0.98]"
+            className="w-full bg-accent text-background rounded-md py-3.5 font-medium text-sm hover:bg-accent-strong transition-colors"
           >
             Afficher la réponse
           </button>
-        ) : (
-          <div className="grid grid-cols-4 gap-2 md:gap-4 animate-in slide-in-from-bottom-4 duration-300">
-            <button 
-              onClick={() => handleMasteryChoice('again')}
-              className="flex flex-col items-center justify-center gap-1 py-3 bg-surface-elevated hover:bg-border border border-border rounded-md transition-colors active:scale-95"
-            >
-              <span className="text-danger font-semibold text-sm">À revoir</span>
-              <span className="text-[10px] text-text-muted font-medium">&lt; 1 min</span>
-            </button>
-            <button 
-              onClick={() => handleMasteryChoice('hard')}
-              className="flex flex-col items-center justify-center gap-1 py-3 bg-surface-elevated hover:bg-border border border-border rounded-md transition-colors active:scale-95"
-            >
-              <span className="text-warning font-semibold text-sm">Difficile</span>
-              <span className="text-[10px] text-text-muted font-medium">10 min</span>
-            </button>
-            <button 
-              onClick={() => handleMasteryChoice('good')}
-              className="flex flex-col items-center justify-center gap-1 py-3 bg-surface-elevated hover:bg-border border border-border rounded-md transition-colors active:scale-95"
-            >
-              <span className="text-accent font-semibold text-sm">Bien</span>
-              <span className="text-[10px] text-text-muted font-medium">1 j</span>
-            </button>
-            <button 
-              onClick={() => handleMasteryChoice('easy')}
-              className="flex flex-col items-center justify-center gap-1 py-3 bg-surface-elevated hover:bg-border border border-border rounded-md transition-colors active:scale-95"
-            >
-              <span className="text-success font-semibold text-sm">Facile</span>
-              <span className="text-[10px] text-text-muted font-medium">4 j</span>
-            </button>
-          </div>
-        )}
-      </footer>
+        </footer>
+      )}
+
     </div>
   );
 }
