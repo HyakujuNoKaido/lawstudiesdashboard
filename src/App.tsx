@@ -1,16 +1,39 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout';
+import { Dashboard } from './pages/Dashboard';
+import { StudySession } from './pages/StudySession';
+import { BrainCircuit } from 'lucide-react';
 
-// Vues temporaires en attendant leur implémentation complète
-const Dashboard = () => (
-  <div className="mt-4">
-    <h1 className="font-serif text-2xl mb-2">Tableau de bord</h1>
-    <p className="text-text-muted text-sm">Bonjour. Voici ta journée.</p>
+// Vue temporaire pour "Réviser" permettant de lancer la session
+const Study = () => (
+  <div className="mt-4 flex flex-col gap-6 animate-in fade-in duration-300">
+    <header>
+      <h1 className="font-serif text-3xl mb-1">Révisions</h1>
+      <p className="text-text-muted text-sm font-medium">42 cartes dues aujourd'hui</p>
+    </header>
+    <div className="bg-surface border border-border rounded-md p-5 flex items-center justify-between">
+      <div className="flex items-center gap-4">
+        <div className="w-10 h-10 bg-surface-elevated rounded flex items-center justify-center">
+          <BrainCircuit className="text-accent" size={20} />
+        </div>
+        <div>
+          <h3 className="font-medium">Droit des obligations (CO)</h3>
+          <p className="text-xs text-text-muted">12 cartes à revoir</p>
+        </div>
+      </div>
+      <Link 
+        to="/session/do-co" 
+        className="px-4 py-2 bg-accent text-background text-sm font-medium rounded hover:bg-accent-strong transition-colors"
+      >
+        Démarrer
+      </Link>
+    </div>
   </div>
 );
+
+// Autres vues temporaires
 const Courses = () => <div className="mt-4"><h1 className="font-serif text-2xl">Cours</h1></div>;
-const Study = () => <div className="mt-4"><h1 className="font-serif text-2xl">Réviser</h1></div>;
 const Schedule = () => <div className="mt-4"><h1 className="font-serif text-2xl">Planning</h1></div>;
 const Profile = () => <div className="mt-4"><h1 className="font-serif text-2xl">Profil</h1></div>;
 
@@ -18,6 +41,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Routes avec navigation */}
         <Route path="/" element={<AppLayout />}>
           <Route index element={<Dashboard />} />
           <Route path="courses" element={<Courses />} />
@@ -25,6 +49,9 @@ export default function App() {
           <Route path="schedule" element={<Schedule />} />
           <Route path="profile" element={<Profile />} />
         </Route>
+        
+        {/* Routes plein écran (sans navigation) */}
+        <Route path="/session/:deckId" element={<StudySession />} />
       </Routes>
     </BrowserRouter>
   );
