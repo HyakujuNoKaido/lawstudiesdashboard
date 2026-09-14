@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft, MoreVertical, FileText, Upload, Plus, Clock, Award } from 'lucide-react';
+import { ChevronLeft, MoreVertical, FileText, Upload, Plus, Clock } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
 import { Card } from '../components/ui/Card';
 import { fetchCourseById, fetchCourseDocuments, fetchCourseGrades } from '../services/supabaseService';
