@@ -8,8 +8,8 @@ const TABS = ['Aperçu', 'Documents', 'Fiches', 'Flashcards', 'Évaluations', 'P
 
 export function CourseDetail() {
   const navigate = useNavigate();
-  const { courseId } = useParams(); // Permettra plus tard de fetch les données depuis Supabase
-  const [activeTab, setActiveTab] = useState('Documents'); // "Documents" par défaut pour la démo
+  const { courseId } = useParams();
+  const [activeTab, setActiveTab] = useState('Documents');
 
   return (
     <div className="flex flex-col gap-6 pt-2 pb-6 animate-in fade-in duration-300">
@@ -60,56 +60,61 @@ export function CourseDetail() {
         ))}
       </div>
 
-      {/* Contenu de l'onglet actif (Démo sur "Documents") */}
+      {/* Contenu de l'onglet actif */}
       <main>
         {activeTab === 'Documents' && (
           <div className="flex flex-col gap-4 animate-in fade-in duration-200">
             <div className="flex justify-between items-center mb-2">
               <h2 className="font-medium">Fichiers du cours</h2>
-              <button className="flex items-center gap-1.5 text-xs font-semibold text-background bg-text px-3 py-1.5 rounded-sm hover:bg-text-muted transition-colors">
+              <button 
+                onClick={() => navigate('/add/document')}
+                className="flex items-center gap-1.5 text-xs font-semibold text-background bg-text px-3 py-1.5 rounded-sm hover:bg-text-muted transition-colors"
+              >
                 <Upload size={14} />
                 Importer
               </button>
             </div>
 
-            <Card className="group flex items-center justify-between p-4">
+            <Card onClick={() => navigate('/viewer/doc-1')} className="group flex items-center justify-between p-4">
               <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-info/10 text-info rounded flex items-center justify-center">
+                <div className="w-10 h-10 bg-info/10 text-info rounded flex items-center justify-center shrink-0">
                   <FileText size={20} />
                 </div>
-                <div>
-                  <p className="font-medium text-sm group-hover:text-accent transition-colors">Plan du cours 2026.pdf</p>
+                <div className="min-w-0">
+                  <p className="font-medium text-sm group-hover:text-accent transition-colors truncate">Plan du cours 2026.pdf</p>
                   <p className="text-xs text-text-muted mt-0.5">Ajouté il y a 2 jours • 1.2 MB</p>
                 </div>
               </div>
-              <button className="text-text-muted hover:text-text p-2">
+              <button onClick={(e) => { e.stopPropagation(); }} className="text-text-muted hover:text-text p-2 shrink-0">
                 <MoreVertical size={16} />
               </button>
             </Card>
 
-            <Card className="group flex items-center justify-between p-4">
+            <Card onClick={() => navigate('/viewer/doc-2')} className="group flex items-center justify-between p-4">
               <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-surface-elevated text-text-muted rounded flex items-center justify-center">
+                <div className="w-10 h-10 bg-surface-elevated text-text-muted rounded flex items-center justify-center shrink-0">
                   <File size={20} />
                 </div>
-                <div>
-                  <p className="font-medium text-sm group-hover:text-accent transition-colors">Support_Seminaire_01.pdf</p>
+                <div className="min-w-0">
+                  <p className="font-medium text-sm group-hover:text-accent transition-colors truncate">Support_Seminaire_01.pptx</p>
                   <p className="text-xs text-text-muted mt-0.5">Ajouté aujourd'hui • 4.5 MB</p>
                 </div>
               </div>
-              <button className="text-text-muted hover:text-text p-2">
+              <button onClick={(e) => { e.stopPropagation(); }} className="text-text-muted hover:text-text p-2 shrink-0">
                 <MoreVertical size={16} />
               </button>
             </Card>
             
-            {/* Zone d'import drag & drop vide/incitative */}
-            <div className="mt-4 border-2 border-dashed border-border rounded-lg p-8 flex flex-col items-center justify-center text-center cursor-pointer hover:border-accent/50 hover:bg-surface-elevated/30 transition-all">
+            <div 
+              onClick={() => navigate('/add/document')}
+              className="mt-4 border-2 border-dashed border-border rounded-lg p-8 flex flex-col items-center justify-center text-center cursor-pointer hover:border-accent/50 hover:bg-surface-elevated/30 transition-all"
+            >
               <div className="w-12 h-12 bg-surface-elevated rounded-full flex items-center justify-center text-text-muted mb-3">
                 <Plus size={24} />
               </div>
               <p className="font-medium text-sm mb-1">Ajouter un document</p>
               <p className="text-xs text-text-muted max-w-[200px]">
-                PDF, JPG, PNG ou CSV. L'extraction des données requiert une validation manuelle.
+                PDF, JPG, PNG ou Word.
               </p>
             </div>
           </div>
