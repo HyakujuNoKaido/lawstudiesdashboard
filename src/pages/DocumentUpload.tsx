@@ -8,7 +8,7 @@ export function DocumentUpload() {
   const [courses, setCourses] = useState<any[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [courseId, setCourseId] = useState('');
-  const [docType, setDocType] = useState('support');
+  const [docCategory, setDocCategory] = useState('Support de cours');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -30,7 +30,7 @@ export function DocumentUpload() {
 
     setLoading(true);
     try {
-      await uploadCourseDocument(selectedFile, courseId, docType);
+      await uploadCourseDocument(selectedFile, courseId, docCategory);
       navigate(courseId ? `/courses/${courseId}` : '/courses');
     } catch (error) {
       console.error("Erreur lors de l'upload du document :", error);
@@ -54,7 +54,7 @@ export function DocumentUpload() {
 
         <div>
           <h1 className="font-serif text-3xl mb-1">Ajouter un document</h1>
-          <p className="text-text-muted text-sm">Importez un support de cours (PDF, Word, PowerPoint).</p>
+          <p className="text-text-muted text-sm">Importez et classifiez un support juridique (PDF, Word, PowerPoint).</p>
         </div>
       </header>
 
@@ -103,16 +103,16 @@ export function DocumentUpload() {
           </div>
           
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium text-text-muted">Type de document</label>
+            <label className="text-sm font-medium text-text-muted">Catégorie / Type de document</label>
             <select 
-              value={docType}
-              onChange={(e) => setDocType(e.target.value)}
+              value={docCategory}
+              onChange={(e) => setDocCategory(e.target.value)}
               className="w-full bg-surface border border-border rounded-md py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
             >
-              <option value="support">Support de cours / Slides</option>
-              <option value="consignes">Consignes / Cas pratique</option>
-              <option value="resume">Résumé personnel</option>
-              <option value="autre">Autre</option>
+              <option value="Support de cours">Support de cours / Slides</option>
+              <option value="Cas pratique">Cas pratique / Jurisprudence</option>
+              <option value="Résumé personnel">Résumé / Fiche de révision</option>
+              <option value="Autre">Autre document</option>
             </select>
           </div>
         </div>
@@ -123,7 +123,7 @@ export function DocumentUpload() {
           className="mt-4 w-full bg-accent text-background rounded-md py-3.5 px-4 flex items-center justify-center gap-2 font-medium hover:bg-accent-strong transition-colors disabled:opacity-50"
         >
           <Save size={18} />
-          <span>{loading ? 'Envoi en cours...' : 'Envoyer et stocker le document'}</span>
+          <span>{loading ? 'Envoi en cours...' : 'Envoyer et classifier le document'}</span>
         </button>
 
       </form>
