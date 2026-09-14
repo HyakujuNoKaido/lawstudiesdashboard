@@ -12,8 +12,8 @@ export function StudySession() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchFlashcards().then(data => {
-      setCards(data);
+    fetchFlashcards().then((data: any[]) => {
+      setCards(data || []);
     }).finally(() => setLoading(false));
   }, []);
 
