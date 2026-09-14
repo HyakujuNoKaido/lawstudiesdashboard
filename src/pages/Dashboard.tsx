@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, BrainCircuit, CalendarDays, Award, ChevronRight, Clock, Scale, FileText } from 'lucide-react';
+import { BookOpen, BrainCircuit, Award, ChevronRight, Clock, Scale, FileText, Timer } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { fetchCourses, fetchFlashcards, fetchEvents } from '../services/supabaseService';
 import { supabase } from '../lib/supabase';
-
-const SOLO_USER_ID = '00000000-0000-0000-0000-000000000000';
+import { SOLO_USER_ID } from '../lib/constants';
 
 export function Dashboard() {
   const navigate = useNavigate();
@@ -38,7 +37,6 @@ export function Dashboard() {
   const totalECTS = courses.reduce((acc, c) => acc + (c.status === 'Validé' ? Number(c.ects || 0) : 0), 0);
   const dueCards = flashcards.filter(f => new Date(f.due_at) <= new Date()).length;
   
-  // Filtrer les prochains cours et deadlines (catégorie 'Cours' ou 'Rendu' / 'Séminaire')
   const upcomingCourses = events.filter(e => e.category === 'Cours' && new Date(e.event_date) >= new Date()).slice(0, 2);
   const upcomingDeadlines = events.filter(e => (e.category === 'Rendu' || e.category === 'Séminaire') && new Date(e.event_date) >= new Date()).slice(0, 2);
 
@@ -53,7 +51,7 @@ export function Dashboard() {
           </div>
           <div>
             <h1 className="font-serif text-2xl font-bold tracking-tight text-text">Bonjour, {userName}</h1>
-            <p className="text-text-muted text-xs">Ton espace personnel de droit suisse.</p>
+            <p className="text-text-muted text-xs">Espace académique de droit suisse.</p>
           </div>
         </div>
         <button 
@@ -64,7 +62,52 @@ export function Dashboard() {
         </button>
       </header>
 
-      {/* 1. Progression ECTS */}
+      {/* 1. Accès rapides aux outils juridiques phares */}
+      <section className="flex flex-col gap-3">
+        <h2 className="font-serif text-lg font-semibold px-1">Outils juridiques avancés</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <Card 
+            onClick={() => navigate('/cases/law')}
+            className="cursor-pointer bg-surface border-border hover:border-accent/50 p-4 flex items-center gap-3 transition-all group"
+          >
+            <div className="w-10 h-10 rounded-xl bg-warning/10 text-warning flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <FileText size={20} />
+            </div>
+            <div>
+              <h3 className="font-medium text-sm text-text">Fiche d'Arrêt (ATF)</h3>
+              <p className="text-[11px] text-text-muted">Synthèse de jurisprudence</p>
+            </div>
+          </Card>
+
+          <Card 
+            onClick={() => navigate('/cases/study')}
+            className="cursor-pointer bg-surface border-border hover:border-accent/50 p-4 flex items-center gap-3 transition-all group"
+          >
+            <div className="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <Scale size={20} />
+            </div>
+            <div>
+              <h3 className="font-medium text-sm text-text">Assistant Subsumption</h3>
+              <p className="text-[11px] text-text-muted">Résolution de cas pratique</p>
+            </div>
+          </Card>
+
+          <Card 
+            onClick={() => navigate('/exams/simulator')}
+            className="cursor-pointer bg-surface border-border hover:border-accent/50 p-4 flex items-center gap-3 transition-all group"
+          >
+            <div className="w-10 h-10 rounded-xl bg-info/10 text-info flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <Timer size={20} />
+            </div>
+            <div>
+              <h3 className="font-medium text-sm text-text">Examen Blanc</h3>
+              <p className="text-[11px] text-text-muted">Simulateur chronométré</p>
+            </div>
+          </Card>
+        </div>
+      </section>
+
+      {/* 2. Progression ECTS */}
       <Card 
         onClick={() => navigate('/courses')}
         className="cursor-pointer bg-surface border-border hover:border-accent/40 transition-all p-5 flex flex-col gap-3 shadow-lg"
@@ -84,7 +127,7 @@ export function Dashboard() {
         </div>
       </Card>
 
-      {/* 2. Prochains cours planifiés */}
+      {/* 3. Prochains cours planifiés */}
       <section className="flex flex-col gap-3">
         <div className="flex justify-between items-center px-1">
           <h2 className="font-serif text-lg font-semibold">Prochains cours</h2>
@@ -95,7 +138,7 @@ export function Dashboard() {
 
         {upcomingCourses.length === 0 ? (
           <Card className="bg-surface border-border p-4 text-center text-text-muted text-xs">
-            Aucun cours planifié prochainement. Ajoute des événements dans ton planning.
+            Aucun cours planifié prochainement. Ajoute des cours avec horaires récurrents.
           </Card>
         ) : (
           upcomingCourses.map(ev => (
@@ -110,37 +153,6 @@ export function Dashboard() {
                 </div>
               </div>
               <Badge variant="outline">Cours</Badge>
-            </Card>
-          ))
-        )}
-      </section>
-
-      {/* 3. Deadlines & Rendus */}
-      <section className="flex flex-col gap-3">
-        <div className="flex justify-between items-center px-1">
-          <h2 className="font-serif text-lg font-semibold">Deadlines & Rendus</h2>
-          <button onClick={() => navigate('/schedule')} className="text-xs text-accent font-medium hover:underline cursor-pointer">
-            Voir tout
-          </button>
-        </div>
-
-        {upcomingDeadlines.length === 0 ? (
-          <Card className="bg-surface border-border p-4 text-center text-text-muted text-xs">
-            Aucune deadline de travail ou rendu en cours.
-          </Card>
-        ) : (
-          upcomingDeadlines.map(ev => (
-            <Card key={ev.id} className="bg-surface border-border p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-warning/10 text-warning flex items-center justify-center">
-                  <FileText size={18} />
-                </div>
-                <div>
-                  <p className="font-medium text-sm text-text">{ev.title}</p>
-                  <p className="text-xs text-warning font-medium">Échéance le {new Date(ev.event_date).toLocaleDateString()}</p>
-                </div>
-              </div>
-              <Badge variant="danger">Rendu</Badge>
             </Card>
           ))
         )}
