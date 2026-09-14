@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft, MoreVertical, FileText, Upload, Plus, Clock, File, Filter } from 'lucide-react';
+import { ChevronLeft, MoreVertical, FileText, Upload, Plus, Clock, Award } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
 import { Card } from '../components/ui/Card';
-import { fetchCourseById, fetchCourseDocuments } from '../services/supabaseService';
+import { fetchCourseById, fetchCourseDocuments, fetchCourseGrades } from '../services/supabaseService';
 
-const TABS = ['Aperçu', 'Documents', 'Fiches', 'Flashcards', 'Évaluations', 'Planning'];
+const TABS = ['Aperçu', 'Documents', 'Évaluations'];
 const DOC_FILTERS = ['Tous', 'Support de cours', 'Cas pratique', 'Résumé personnel', 'Autre'];
 
 export function CourseDetail() {
@@ -15,6 +15,7 @@ export function CourseDetail() {
   const [selectedDocFilter, setSelectedDocFilter] = useState('Tous');
   const [course, setCourse] = useState<any>(null);
   const [documents, setDocuments] = useState<any[]>([]);
+  const [grades, setGrades] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,11 +23,13 @@ export function CourseDetail() {
     
     Promise.all([
       fetchCourseById(courseId),
-      fetchCourseDocuments(courseId)
+      fetchCourseDocuments(courseId),
+      fetchCourseGrades(courseId)
     ])
-      .then(([courseData, docsData]) => {
+      .then(([courseData, docsData, gradesData]) => {
         setCourse(courseData);
         setDocuments(docsData);
+        setGrades(gradesData);
       })
       .catch(err => console.error("Erreur chargement détail cours:", err))
       .finally(() => setLoading(false));
@@ -82,7 +85,7 @@ export function CourseDetail() {
         )}
       </div>
 
-      <div className="flex gap-4 overflow-x-auto border-b border-border scrollbar-hide">
+      <div className="flex gap-6 overflow-x-auto border-b border-border scrollbar-hide">
         {TABS.map(tab => (
           <button
             key={tab}
@@ -112,7 +115,6 @@ export function CourseDetail() {
               </button>
             </div>
 
-            {/* Sous-filtres par catégorie de document */}
             <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
               {DOC_FILTERS.map(filter => (
                 <button
@@ -145,10 +147,8 @@ export function CourseDetail() {
                       <FileText size={20} />
                     </div>
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <p className="font-medium text-sm group-hover:text-accent transition-colors truncate">{doc.original_name}</p>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-text-muted">
+                      <p className="font-medium text-sm group-hover:text-accent transition-colors truncate">{doc.original_name}</p>
+                      <div className="flex items-center gap-2 text-xs text-text-muted mt-0.5">
                         <span className="text-accent font-medium">{doc.document_type || 'Document'}</span>
                         <span>•</span>
                         <span>{new Date(doc.created_at).toLocaleDateString()}</span>
@@ -172,10 +172,46 @@ export function CourseDetail() {
                 <Plus size={24} />
               </div>
               <p className="font-medium text-sm mb-1">Ajouter un document</p>
-              <p className="text-xs text-text-muted max-w-[200px]">
-                PDF, PPTX ou Word.
-              </p>
+              <p className="text-xs text-text-muted max-w-[200px]">PDF, PPTX ou Word.</p>
             </div>
+          </div>
+        )}
+
+        {activeTab === 'Évaluations' && (
+          <div className="flex flex-col gap-4 animate-in fade-in duration-200">
+            <div className="flex justify-between items-center mb-1">
+              <h2 className="font-medium">Notes et résultats</h2>
+              <button 
+                onClick={() => navigate('/add/grade')}
+                className="flex items-center gap-1.5 text-xs font-semibold text-background bg-text px-3 py-1.5 rounded-sm hover:bg-text-muted transition-colors"
+              >
+                <Plus size={14} />
+                Saisir une note
+              </button>
+            </div>
+
+            {grades.length === 0 ? (
+              <div className="text-center py-10 border border-dashed border-border rounded-lg text-text-muted text-sm">
+                Aucune note enregistrée pour ce cours.
+              </div>
+            ) : (
+              grades.map(g => (
+                <Card key={g.id} className="flex items-center justify-between p-4">
+                  <div className="flex items-center gap-4">
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-serif text-xl font-bold ${g.grade >= 4.0 ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
+                      {g.grade.toFixed(2)}
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">{g.eval_type}</p>
+                      <p className="text-xs text-text-muted mt-0.5">Poids : {g.weight}% • Ajouté le {new Date(g.created_at).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                  <Badge variant={g.grade >= 4.0 ? 'success' : 'danger'}>
+                    {g.grade >= 4.0 ? 'Validé' : 'Insuffisant'}
+                  </Badge>
+                </Card>
+              ))
+            )}
           </div>
         )}
 
@@ -186,12 +222,6 @@ export function CourseDetail() {
               <span className="text-text font-medium">Crédits ECTS attribués : {course.ects}</span>
               <span className="text-text font-medium">Statut actuel : {course.status}</span>
             </div>
-          </div>
-        )}
-
-        {activeTab !== 'Documents' && activeTab !== 'Aperçu' && (
-          <div className="py-12 text-center text-text-muted text-sm border border-dashed border-border rounded-lg">
-            Le module {activeTab.toLowerCase()} est en cours de configuration.
           </div>
         )}
       </main>
