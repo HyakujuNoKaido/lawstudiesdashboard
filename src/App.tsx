@@ -1,16 +1,31 @@
 import React from 'react';
-import { BookOpen } from 'lucide-react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { AppLayout } from './components/layout/AppLayout';
+
+// Vues temporaires en attendant leur implémentation complète
+const Dashboard = () => (
+  <div className="mt-4">
+    <h1 className="font-serif text-2xl mb-2">Tableau de bord</h1>
+    <p className="text-text-muted text-sm">Bonjour. Voici ta journée.</p>
+  </div>
+);
+const Courses = () => <div className="mt-4"><h1 className="font-serif text-2xl">Cours</h1></div>;
+const Study = () => <div className="mt-4"><h1 className="font-serif text-2xl">Réviser</h1></div>;
+const Schedule = () => <div className="mt-4"><h1 className="font-serif text-2xl">Planning</h1></div>;
+const Profile = () => <div className="mt-4"><h1 className="font-serif text-2xl">Profil</h1></div>;
 
 export default function App() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
-      <div className="w-16 h-16 bg-surface-elevated rounded-md flex items-center justify-center mb-6 border border-border">
-        <BookOpen className="text-accent" size={32} />
-      </div>
-      <h1 className="font-serif text-3xl mb-3">Lexi Suisse</h1>
-      <p className="text-text-muted max-w-sm">
-        Le carnet académique premium pour les étudiant·e·s en droit.
-      </p>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<AppLayout />}>
+          <Route index element={<Dashboard />} />
+          <Route path="courses" element={<Courses />} />
+          <Route path="study" element={<Study />} />
+          <Route path="schedule" element={<Schedule />} />
+          <Route path="profile" element={<Profile />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
   );
 }
