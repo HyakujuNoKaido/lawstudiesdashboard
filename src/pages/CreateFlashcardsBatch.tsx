@@ -1,7 +1,6 @@
-// src/pages/CreateFlashcardsBatch.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Save, Plus, Trash2, BrainCircuit } from 'lucide-react';
+import { ChevronLeft, Save, Plus, Trash2, BrainCircuit, ClipboardPaste, X } from 'lucide-react';
 import { fetchCourses, fetchCourseChapters, createFlashcardsBatch } from '../services/supabaseService';
 
 export function CreateFlashcardsBatch() {
@@ -16,6 +15,10 @@ export function CreateFlashcardsBatch() {
   
   // Tableau dynamique de flashcards
   const [cards, setCards] = useState([{ id: Date.now().toString(), front: '', back: '' }]);
+  
+  // État pour l'import rapide (Texte brut)
+  const [showBulkImport, setShowBulkImport] = useState(false);
+  const [bulkText, setBulkText] = useState('');
 
   useEffect(() => {
     fetchCourses().then(data => {
@@ -31,7 +34,7 @@ export function CreateFlashcardsBatch() {
   const loadChapters = async (cId: string) => {
     const data = await fetchCourseChapters(cId);
     setChapters(data);
-    setChapterId(''); // Reset chapter when course changes
+    setChapterId(''); 
   };
 
   const handleCourseChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -54,10 +57,42 @@ export function CreateFlashcardsBatch() {
     setCards(cards.map(c => c.id === id ? { ...c, [field]: value } : c));
   };
 
+  // NOUVEAU : Analyse du texte brut pour générer les cartes
+  const handleBulkImportProcess = () => {
+    if (!bulkText.trim()) return;
+
+    const lines = bulkText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    const newCards: any[] = [];
+
+    lines.forEach((line, i) => {
+      // Détecte automatiquement la tabulation (Excel/Notion) ou un tiret comme séparateur
+      let separator = '\t';
+      if (!line.includes('\t') && line.includes(' - ')) separator = ' - ';
+      if (!line.includes('\t') && !line.includes(' - ') && line.includes(';')) separator = ';';
+
+      const parts = line.split(separator);
+      if (parts.length >= 2) {
+        newCards.push({
+          id: `${Date.now()}_${i}`,
+          front: parts[0].trim(),
+          back: parts.slice(1).join(separator).trim() // Rejoint le reste au cas où il y aurait plusieurs séparateurs dans la définition
+        });
+      }
+    });
+
+    if (newCards.length > 0) {
+      // Si la première carte manuelle est vide, on la remplace. Sinon on ajoute à la suite.
+      const currentCards = (cards.length === 1 && !cards[0].front && !cards[0].back) ? [] : cards;
+      setCards([...currentCards, ...newCards]);
+      setBulkText('');
+      setShowBulkImport(false);
+    } else {
+      alert("Aucune carte n'a pu être extraite. Vérifiez que vous utilisez bien un séparateur (Tabulation, ' - ' ou ';').");
+    }
+  };
+
   const handleSubmit = async () => {
-    // Filtrer les cartes vides
     const validCards = cards.filter(c => c.front.trim() !== '' && c.back.trim() !== '');
-    
     if (validCards.length === 0) {
       alert("Ajoutez au moins une carte valide (avec question et réponse).");
       return;
@@ -98,14 +133,24 @@ export function CreateFlashcardsBatch() {
           <span className="text-sm font-medium">Retour</span>
         </button>
 
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-info/10 text-info flex items-center justify-center">
-            <BrainCircuit size={20} />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-info/10 text-info flex items-center justify-center">
+              <BrainCircuit size={20} />
+            </div>
+            <div>
+              <h1 className="font-serif text-2xl font-bold">Créer un lot de Flashcards</h1>
+              <p className="text-text-muted text-xs">Créez plusieurs cartes rapidement pour un cours.</p>
+            </div>
           </div>
-          <div>
-            <h1 className="font-serif text-2xl font-bold">Créer un lot de Flashcards</h1>
-            <p className="text-text-muted text-xs">Créez plusieurs cartes rapidement pour un cours.</p>
-          </div>
+          
+          <button 
+            onClick={() => setShowBulkImport(true)}
+            className="flex items-center gap-2 bg-surface-elevated border border-border px-3.5 py-2 rounded-xl text-xs font-semibold hover:border-accent/50 transition-colors cursor-pointer text-text"
+          >
+            <ClipboardPaste size={16} className="text-accent" />
+            <span className="hidden sm:inline">Import Rapide</span>
+          </button>
         </div>
       </header>
 
@@ -180,6 +225,36 @@ export function CreateFlashcardsBatch() {
           </button>
         </div>
       </div>
+
+      {/* Modale Import Rapide */}
+      {showBulkImport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-2xl bg-surface-elevated border border-border rounded-3xl p-6 shadow-2xl flex flex-col gap-4">
+            <div className="flex justify-between items-center pb-2 border-b border-border">
+              <h3 className="font-serif text-xl font-bold">Import Rapide (Copier-Coller)</h3>
+              <button onClick={() => setShowBulkImport(false)} className="p-1.5 hover:bg-surface rounded-xl text-text-muted"><X size={20} /></button>
+            </div>
+            
+            <p className="text-xs text-text-muted leading-relaxed">
+              Copiez-collez un texte depuis Word, Excel ou Notion. <br/>
+              Assurez-vous d'avoir une carte par ligne. La question et la réponse doivent être séparées par une <b>Tabulation</b>, un tiret (<b> - </b>) ou un point-virgule (<b>;</b>).
+            </p>
+
+            <textarea
+              autoFocus
+              value={bulkText}
+              onChange={(e) => setBulkText(e.target.value)}
+              placeholder="Exemple :&#10;Erga omnes [TAB] À l'égard de tous&#10;Art. 41 CO [TAB] Responsabilité civile extracontractuelle"
+              className="w-full h-64 bg-surface border border-border rounded-xl p-4 text-sm font-mono focus:border-accent resize-none whitespace-pre"
+            />
+
+            <div className="flex gap-2 mt-2">
+              <button onClick={() => setShowBulkImport(false)} className="flex-1 bg-surface border border-border py-3 rounded-xl text-sm font-medium hover:bg-surface/80">Annuler</button>
+              <button onClick={handleBulkImportProcess} className="flex-1 bg-accent text-background py-3 rounded-xl text-sm font-bold glow-gold hover:bg-accent-strong">Générer les cartes</button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
