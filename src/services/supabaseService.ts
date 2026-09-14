@@ -69,13 +69,13 @@ export async function parseAndCreateChaptersFromSyllabus(courseId: string, sylla
   return createdChapters;
 }
 
-export async function createMultipleCourses(coursesList: Array<{ title: string; course_code?: string; ects: number; status: string; semester?: string }>) {
+export async function createMultipleCourses(coursesList: Array<{ title: string; course_code?: string; ects: number; status?: string; semester?: string }>) {
   const formatted = coursesList.map(c => ({
     user_id: SOLO_USER_ID,
     title: c.title,
     course_code: c.course_code || 'DROIT',
     ects: Number(c.ects) || 6,
-    status: c.status || 'En cours',
+    status: 'En cours',
     semester: c.semester || 'Automne 2026'
   }));
 
@@ -208,7 +208,7 @@ export async function createCourse(course: {
         title: course.title,
         course_code: course.course_code || null,
         ects: Number(course.ects),
-        status: course.status,
+        status: course.status || 'En cours',
         teacher_name: course.teacher_name || null,
         semester: course.semester || 'Automne 2026'
       }
