@@ -15,6 +15,31 @@ export async function fetchCourses() {
   return data || [];
 }
 
+export async function fetchCourseById(courseId: string) {
+  const { data, error } = await supabase
+    .from('courses')
+    .select('*')
+    .eq('id', courseId)
+    .single();
+  
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchCourseDocuments(courseId: string) {
+  const { data, error } = await supabase
+    .from('documents')
+    .select('*')
+    .eq('course_id', courseId)
+    .order('created_at', { ascending: false });
+  
+  if (error) {
+    console.error("Erreur fetchCourseDocuments:", error.message);
+    return [];
+  }
+  return data || [];
+}
+
 export async function createCourse(course: {
   title: string;
   course_code?: string;
