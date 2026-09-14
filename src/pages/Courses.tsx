@@ -1,66 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { ProgressBar } from '../components/ui/ProgressBar';
-import { Search, SlidersHorizontal, BookOpen, Clock, CheckCircle2, AlertCircle, Calendar } from 'lucide-react';
-
-// Données de démonstration typiques d'une faculté de droit suisse
-const MOCK_COURSES = [
-  {
-    id: '1',
-    title: 'Droit des obligations (Partie générale)',
-    code: 'DO-PG',
-    ects: 12,
-    semester: 'Automne',
-    status: 'en_cours',
-    progress: 35,
-    nextEvent: { type: 'Séminaire', date: 'Demain, 14:15' }
-  },
-  {
-    id: '2',
-    title: 'Droit pénal général',
-    code: 'DPG',
-    ects: 9,
-    semester: 'Automne',
-    status: 'en_cours',
-    progress: 60,
-    nextEvent: { type: 'Cours', date: 'Mercredi, 08:15' }
-  },
-  {
-    id: '3',
-    title: 'Droit constitutionnel',
-    code: 'DCONST',
-    ects: 12,
-    semester: 'Printemps',
-    status: 'valide',
-    progress: 100,
-    grade: 5.25
-  },
-  {
-    id: '4',
-    title: 'Introduction à l\'économie',
-    code: 'ECON',
-    ects: 6,
-    semester: 'Automne',
-    status: 'a_reprendre',
-    progress: 10,
-    nextEvent: { type: 'Rendu', date: 'Dans 3 jours' }
-  }
-];
-
-const FILTERS = ['Tous', 'En cours', 'Automne', 'Printemps', 'Validés', 'À reprendre'];
+import { Search, SlidersHorizontal, Clock, CheckCircle2, AlertCircle, Calendar } from 'lucide-react';
+import { fetchCourses } from '../services/supabaseService';
 
 export function Courses() {
-  const [activeFilter, setActiveFilter] = useState('En cours');
+  const [activeFilter, setActiveFilter] = useState('Tous');
+  const [courses, setCourses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchCourses()
+      .then(data => setCourses(data))
+      .catch(err => console.error("Erreur fetch courses:", err))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filteredCourses = courses.filter(course => {
+    if (activeFilter === 'Tous') return true;
+    if (activeFilter === 'En cours' && course.status === 'En cours') return true;
+    if (activeFilter === 'Validés' && course.status === 'Validé') return true;
+    if (activeFilter === 'À reprendre' && course.status === 'À reprendre') return true;
+    return true;
+  });
 
   return (
     <div className="flex flex-col gap-6 pt-2 pb-6 animate-in fade-in duration-300">
       
-      {/* En-tête et Recherche */}
       <header className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <h1 className="font-serif text-3xl mb-1">Cours</h1>
-        </div>
+        <h1 className="font-serif text-3xl mb-1">Cours</h1>
         
         <div className="flex gap-2">
           <div className="relative flex-1">
@@ -77,9 +48,8 @@ export function Courses() {
         </div>
       </header>
 
-      {/* Filtres défilants (Scroll horizontal caché) */}
       <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide">
-        {FILTERS.map(filter => (
+        {['Tous', 'En cours', 'Validés', 'À reprendre'].map(filter => (
           <button
             key={filter}
             onClick={() => setActiveFilter(filter)}
@@ -94,56 +64,48 @@ export function Courses() {
         ))}
       </div>
 
-      {/* Liste des cours */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {MOCK_COURSES.map(course => (
-          <Card key={course.id} onClick={() => console.log(`Ouvrir ${course.id}`)} className="group">
-            
-            <div className="flex justify-between items-start mb-3">
-              <Badge variant="outline">{course.code}</Badge>
+      {loading ? (
+        <div className="text-center py-12 text-text-muted text-sm">Chargement de vos cours...</div>
+      ) : filteredCourses.length === 0 ? (
+        <div className="text-center py-12 border border-dashed border-border rounded-lg text-text-muted text-sm">
+          Aucun cours trouvé. Utilisez le bouton d'ajout "+" pour commencer.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {filteredCourses.map(course => (
+            <Card key={course.id} onClick={() => navigate(`/courses/${course.id}`)} className="group">
               
-              {course.status === 'en_cours' && <Badge variant="accent" icon={<Clock size={12}/>}>En cours</Badge>}
-              {course.status === 'valide' && <Badge variant="success" icon={<CheckCircle2 size={12}/>}>Validé</Badge>}
-              {course.status === 'a_reprendre' && <Badge variant="danger" icon={<AlertCircle size={12}/>}>À reprendre</Badge>}
-            </div>
-
-            <h3 className="font-medium text-lg leading-tight mb-4 group-hover:text-accent transition-colors">
-              {course.title}
-            </h3>
-
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-2">
-                <Badge>{course.ects} ECTS</Badge>
-                <Badge variant="default" icon={<Calendar size={12}/>}>{course.semester}</Badge>
-                {course.grade && (
-                  <Badge variant="success">Note: {course.grade.toFixed(2)}</Badge>
-                )}
+              <div className="flex justify-between items-start mb-3">
+                <Badge variant="outline">{course.course_code || 'COURS'}</Badge>
+                
+                {course.status === 'En cours' && <Badge variant="accent" icon={<Clock size={12}/>}>En cours</Badge>}
+                {course.status === 'Validé' && <Badge variant="success" icon={<CheckCircle2 size={12}/>}>Validé</Badge>}
+                {course.status === 'À reprendre' && <Badge variant="danger" icon={<AlertCircle size={12}/>}>À reprendre</Badge>}
               </div>
 
-              {course.status !== 'valide' && (
+              <h3 className="font-medium text-lg leading-tight mb-4 group-hover:text-accent transition-colors">
+                {course.title}
+              </h3>
+
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-2">
+                  <Badge>{course.ects} ECTS</Badge>
+                  {course.teacher_name && <Badge variant="default">{course.teacher_name}</Badge>}
+                </div>
+
                 <div className="space-y-1.5 mt-2">
                   <div className="flex justify-between text-xs text-text-muted">
-                    <span>Préparation</span>
-                    <span>{course.progress}%</span>
+                    <span>Progression</span>
+                    <span>{course.status === 'Validé' ? '100%' : '35%'}</span>
                   </div>
-                  <ProgressBar value={course.progress} max={100} colorClass="bg-info" />
+                  <ProgressBar value={course.status === 'Validé' ? 100 : 35} max={100} colorClass="bg-info" />
                 </div>
-              )}
-
-              {course.nextEvent && (
-                <div className="mt-2 pt-3 border-t border-border/50 flex items-center justify-between text-sm">
-                  <span className="text-text-muted flex items-center gap-1.5">
-                    <BookOpen size={14} />
-                    {course.nextEvent.type}
-                  </span>
-                  <span className="font-medium text-text">{course.nextEvent.date}</span>
-                </div>
-              )}
-            </div>
-            
-          </Card>
-        ))}
-      </div>
+              </div>
+              
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
