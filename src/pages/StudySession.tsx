@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft, BrainCircuit, Check, RotateCcw } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ChevronLeft, BrainCircuit, RotateCcw } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { fetchFlashcards, updateFlashcardProgress } from '../services/supabaseService';
 
 export function StudySession() {
   const navigate = useNavigate();
-  const { deckId } = useParams();
   const [cards, setCards] = useState<any[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
