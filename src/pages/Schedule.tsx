@@ -12,8 +12,6 @@ export function Schedule() {
   const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
   
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   
@@ -46,6 +44,7 @@ export function Schedule() {
     }
   }
 
+  // Navigation (< et >) adaptée selon la vue active
   const handlePrev = () => {
     const newDate = new Date(currentDate.getTime());
     if (viewMode === 'month') {
@@ -125,14 +124,35 @@ export function Schedule() {
     setIsModalOpen(true);
   };
 
+  // --- Calculs pour la vue Mois ---
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const monthNames = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
+  const dayNames = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 
   const firstDayIndex = new Date(year, month, 1).getDay();
   const adjustedFirstDay = (firstDayIndex === 0 ? 6 : firstDayIndex - 1);
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
+  // --- Calculs pour la vue Semaine (Lundi à Dimanche) ---
+  const getWeekDays = (date: Date) => {
+    const d = new Date(date.getTime());
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Ajuster pour commencer un Lundi
+    const monday = new Date(d.setDate(diff));
+    
+    const week = [];
+    for (let i = 0; i < 7; i++) {
+      const nextDay = new Date(monday.getTime());
+      nextDay.setDate(monday.getDate() + i);
+      week.push(nextDay);
+    }
+    return week;
+  };
+
+  const weekDays = getWeekDays(currentDate);
+
+  // --- Filtrage des événements selon la vue active ---
   const filteredEvents = events.filter(evt => {
     const evtDate = new Date(evt.event_date);
     if (viewMode === 'month') {
@@ -140,24 +160,25 @@ export function Schedule() {
     } else if (viewMode === 'day') {
       return evtDate.toDateString() === currentDate.toDateString();
     } else {
-      const startOfWeek = new Date(currentDate.getTime());
-      startOfWeek.setHours(0,0,0,0);
-      const endOfWeek = new Date(startOfWeek.getTime());
-      endOfWeek.setDate(endOfWeek.getDate() + 7);
-      return evtDate >= startOfWeek && evtDate < endOfWeek;
+      const startOfWeek = weekDays[0];
+      const endOfWeek = new Date(weekDays[6].getTime());
+      endOfWeek.setHours(23, 59, 59, 999);
+      return evtDate >= startOfWeek && evtDate <= endOfWeek;
     }
   });
 
   return (
     <div className="flex flex-col gap-6 pt-2 pb-16 animate-in fade-in duration-300 text-text">
       
+      {/* En-tête */}
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-1">
         <div>
           <h1 className="font-serif text-3xl font-bold">Mon planning</h1>
-          <p className="text-text-muted text-xs">Calendrier et gestion de vos échéances juridiques.</p>
+          <p className="text-text-muted text-xs">Calendrier interactif et gestion de vos échéances juridiques.</p>
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Sélecteur de vue */}
           <div className="flex bg-surface border border-border rounded-xl p-1">
             {(['month', 'week', 'day'] as const).map(mode => (
               <button
@@ -182,23 +203,29 @@ export function Schedule() {
         </div>
       </header>
 
-      {/* --- WIDGET CALENDRIER VISUEL --- */}
+      {/* --- TITRE DE NAVIGATION ET FLÈCHES --- */}
       <Card className="bg-surface border-border p-4 flex flex-col gap-4">
         
         <div className="flex justify-between items-center px-2">
           <h3 className="font-serif text-lg font-bold">
-            {monthNames[month]} {year}
+            {viewMode === 'month' && `${monthNames[month]} ${year}`}
+            {viewMode === 'week' && `Semaine du ${weekDays[0].toLocaleDateString()} au ${weekDays[6].toLocaleDateString()}`}
+            {viewMode === 'day' && currentDate.toLocaleDateString('fr-CH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </h3>
           <div className="flex items-center gap-1">
-            <button onClick={handlePrev} className="p-2 text-text-muted hover:text-text rounded-lg hover:bg-surface-elevated transition-colors cursor-pointer">
+            <button onClick={handlePrev} className="p-2 text-text-muted hover:text-text rounded-lg hover:bg-surface-elevated transition-colors cursor-pointer" title="Précédent">
               <ChevronLeft size={18} />
             </button>
-            <button onClick={handleNext} className="p-2 text-text-muted hover:text-text rounded-lg hover:bg-surface-elevated transition-colors cursor-pointer">
+            <button onClick={() => setCurrentDate(new Date())} className="px-3 py-1 text-xs bg-surface-elevated rounded-lg text-text hover:text-accent transition-colors">
+              Aujourd'hui
+            </button>
+            <button onClick={handleNext} className="p-2 text-text-muted hover:text-text rounded-lg hover:bg-surface-elevated transition-colors cursor-pointer" title="Suivant">
               <ChevronRight size={18} />
             </button>
           </div>
         </div>
 
+        {/* 1. VUE MENSUELLE */}
         {viewMode === 'month' && (
           <div className="flex flex-col gap-2">
             <div className="grid grid-cols-7 text-center text-[10px] font-semibold text-text-muted uppercase tracking-wider">
@@ -207,27 +234,31 @@ export function Schedule() {
 
             <div className="grid grid-cols-7 gap-1 text-center">
               {Array.from({ length: adjustedFirstDay }).map((_, i) => (
-                <div key={`empty-${i}`} className="h-10" />
+                <div key={`empty-${i}`} className="h-12" />
               ))}
 
               {Array.from({ length: daysInMonth }).map((_, i) => {
                 const dayNum = i + 1;
+                const targetDate = new Date(year, month, dayNum);
                 const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
                 
                 const dayEvents = events.filter(e => e.event_date && e.event_date.startsWith(dateStr));
-                const isToday = new Date().toDateString() === new Date(year, month, dayNum).toDateString();
+                const isToday = new Date().toDateString() === targetDate.toDateString();
 
                 return (
                   <div 
                     key={dayNum}
-                    onClick={() => setSelectedDate(dateStr)}
-                    className={`h-10 rounded-xl flex flex-col items-center justify-center relative cursor-pointer transition-all ${
-                      isToday ? 'bg-accent/20 border border-accent text-accent font-bold' : 'hover:bg-surface-elevated text-text'
+                    onClick={() => {
+                      setCurrentDate(targetDate);
+                      setViewMode('day'); // Clic sur un jour -> bascule en vue journalière de ce jour
+                    }}
+                    className={`h-12 rounded-xl flex flex-col items-center justify-center relative cursor-pointer transition-all p-1 ${
+                      isToday ? 'bg-accent/20 border border-accent text-accent font-bold' : 'hover:bg-surface-elevated text-text border border-transparent'
                     }`}
                   >
                     <span className="text-xs">{dayNum}</span>
                     {dayEvents.length > 0 && (
-                      <div className="flex gap-0.5 mt-0.5">
+                      <div className="flex gap-0.5 mt-1">
                         {dayEvents.slice(0, 3).map((ev, idx) => (
                           <span 
                             key={idx} 
@@ -245,30 +276,121 @@ export function Schedule() {
           </div>
         )}
 
+        {/* 2. VUE HEBDOMADAIRE (7 jours de la semaine) */}
         {viewMode === 'week' && (
-          <div className="text-xs text-text-muted py-4 text-center">
-            Affichage hebdomadaire actif — {events.length} événement(s) pour cette période.
+          <div className="grid grid-cols-1 md:grid-cols-7 gap-2">
+            {weekDays.map((day, idx) => {
+              const dateStr = day.toISOString().split('T')[0];
+              const dayEvents = events.filter(e => e.event_date && e.event_date.startsWith(dateStr));
+              const isToday = new Date().toDateString() === day.toDateString();
+
+              return (
+                <div 
+                  key={idx} 
+                  className={`bg-surface-elevated rounded-xl p-3 flex flex-col gap-2 min-h-[140px] border ${
+                    isToday ? 'border-accent' : 'border-border'
+                  }`}
+                >
+                  <div className="flex justify-between items-center border-b border-border pb-1">
+                    <span className="text-xs font-bold text-text">{dayNames[idx]}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${isToday ? 'bg-accent text-background font-bold' : 'text-text-muted'}`}>
+                      {day.getDate()}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5 overflow-y-auto max-h-[180px]">
+                    {dayEvents.length === 0 ? (
+                      <span className="text-[10px] text-text-muted italic text-center py-4">Rien de prévu</span>
+                    ) : (
+                      dayEvents.map(ev => (
+                        <div 
+                          key={ev.id} 
+                          onClick={(e) => handleEdit(ev, e)}
+                          className="bg-surface p-2 rounded-lg border border-border text-[11px] hover:border-accent/50 cursor-pointer"
+                        >
+                          <p className="font-semibold text-text truncate">{ev.title}</p>
+                          <span className="text-[9px] text-text-muted">
+                            {new Date(ev.event_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 
+        {/* 3. VUE JOURNALIÈRE (Créneaux horaires 08:00 à 20:00) */}
         {viewMode === 'day' && (
-          <div className="text-xs text-text-muted py-4 text-center">
-            Affichage journalier — Date ciblée : {currentDate.toLocaleDateString()}
+          <div className="flex flex-col gap-2 max-h-[500px] overflow-y-auto pr-2">
+            {Array.from({ length: 13 }).map((_, hourIdx) => {
+              const hour = hourIdx + 8; // de 08:00 à 20:00
+              const hourStr = `${String(hour).padStart(2, '0')}:00`;
+              
+              // Événements à cette heure exacte
+              const hourEvents = filteredEvents.filter(e => {
+                const evDate = new Date(e.event_date);
+                return evDate.getHours() === hour;
+              });
+
+              return (
+                <div key={hour} className="flex gap-4 items-start border-b border-border/60 py-3">
+                  <span className="w-12 text-xs font-mono text-text-muted pt-1">{hourStr}</span>
+                  
+                  <div className="flex-1 flex flex-col gap-2 min-h-[35px]">
+                    {hourEvents.length > 0 ? (
+                      hourEvents.map(ev => (
+                        <div 
+                          key={ev.id} 
+                          onClick={(e) => handleEdit(ev, e)}
+                          className="bg-surface-elevated p-3 rounded-xl border border-border hover:border-accent flex justify-between items-center cursor-pointer shadow-sm"
+                        >
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-sm text-text">{ev.title}</p>
+                              <Badge variant={ev.category === 'Examen' ? 'danger' : 'outline'}>{ev.category}</Badge>
+                            </div>
+                            <p className="text-xs text-text-muted mt-0.5">{ev.courses?.title || 'Matière générale'}</p>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button onClick={(e) => handleEdit(ev, e)} className="p-1 text-text-muted hover:text-accent">
+                              <Edit3 size={14} />
+                            </button>
+                            <button onClick={(e) => handleDelete(ev.id, e)} className="p-1 text-text-muted hover:text-danger">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="h-full border border-dashed border-border/30 rounded-lg flex items-center px-3 text-[11px] text-text-muted/40">
+                        Créneau libre
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
+
       </Card>
 
-      {/* --- LISTE DES ÉVÉNEMENTS --- */}
+      {/* --- LISTE DES ÉVÉNEMENTS DE LA PÉRIODE --- */}
       <div className="flex flex-col gap-3">
         <h2 className="font-serif text-lg font-semibold px-1">
-          {viewMode === 'month' ? 'Événements du mois' : 'Événements planifiés'}
+          {viewMode === 'month' && 'Événements du mois'}
+          {viewMode === 'week' && 'Événements de la semaine'}
+          {viewMode === 'day' && `Événements du ${currentDate.toLocaleDateString()}`}
         </h2>
 
         {loading ? (
           <div className="text-center py-12 text-text-muted text-sm">Chargement...</div>
         ) : filteredEvents.length === 0 ? (
           <div className="text-center py-10 border border-dashed border-border rounded-xl text-text-muted text-sm">
-            Aucun événement pour cette vue. Cliquez sur "Ajouter" pour planifier une échéance.
+            Aucun événement planifié pour cette période.
           </div>
         ) : (
           filteredEvents.map(evt => (
@@ -324,7 +446,7 @@ export function Schedule() {
                   required
                   value={form.title}
                   onChange={(e) => setForm({ ...form, title: e.target.value })}
-                  placeholder="ex: Examen de droit des obligations"
+                  placeholder="ex: Séminaire de droit civil"
                   className="w-full bg-surface border border-border rounded-xl py-3 px-3 text-sm focus:outline-none focus:border-accent"
                 />
               </div>
