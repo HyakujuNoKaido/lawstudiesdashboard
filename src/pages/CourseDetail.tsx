@@ -1,22 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft, MoreVertical, FileText, Upload, Plus, Clock } from 'lucide-react';
+import { ChevronLeft, MoreVertical, FileText, Upload, Plus, Clock, BookMarked, Sparkles } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
 import { Card } from '../components/ui/Card';
-import { fetchCourseById, fetchCourseDocuments, fetchCourseGrades } from '../services/supabaseService';
+import { fetchCourseById, fetchCourseDocuments, fetchCourseGrades, fetchCourseChapters, createChapter, parseAndCreateChaptersFromSyllabus } from '../services/supabaseService';
 
-const TABS = ['Aperçu', 'Documents', 'Évaluations'];
-const DOC_FILTERS = ['Tous', 'Support de cours', 'Cas pratique', 'Résumé personnel', 'Autre'];
+const TABS = ['Aperçu', 'Programme & Chapitres', 'Documents', 'Évaluations'];
 
 export function CourseDetail() {
   const navigate = useNavigate();
   const { courseId } = useParams();
-  const [activeTab, setActiveTab] = useState('Documents');
-  const [selectedDocFilter, setSelectedDocFilter] = useState('Tous');
+  const [activeTab, setActiveTab] = useState('Programme & Chapitres');
   const [course, setCourse] = useState<any>(null);
   const [documents, setDocuments] = useState<any[]>([]);
   const [grades, setGrades] = useState<any[]>([]);
+  const [chapters, setChapters] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Formulaire d'ajout de chapitre ou syllabus
+  const [newChapterTitle, setNewChapterTitle] = useState('');
+  const [syllabusText, setSyllabusText] = useState('');
+  const [showSyllabusModal, setShowSyllabusModal] = useState(false);
 
   useEffect(() => {
     if (!courseId) return;
@@ -24,21 +28,45 @@ export function CourseDetail() {
     Promise.all([
       fetchCourseById(courseId),
       fetchCourseDocuments(courseId),
-      fetchCourseGrades(courseId)
+      fetchCourseGrades(courseId),
+      fetchCourseChapters(courseId)
     ])
-      .then(([courseData, docsData, gradesData]) => {
+      .then(([courseData, docsData, gradesData, chaptersData]) => {
         setCourse(courseData);
         setDocuments(docsData);
         setGrades(gradesData);
+        setChapters(chaptersData);
       })
-      .catch(err => console.error("Erreur chargement détail cours:", err))
       .finally(() => setLoading(false));
   }, [courseId]);
 
-  const filteredDocuments = documents.filter(doc => {
-    if (selectedDocFilter === 'Tous') return true;
-    return doc.document_type === selectedDocFilter;
-  });
+  const handleAddChapter = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newChapterTitle.trim() || !courseId) return;
+    try {
+      await createChapter({ course_id: courseId, title: newChapterTitle, order_index: chapters.length + 1 });
+      setNewChapterTitle('');
+      const updated = await fetchCourseChapters(courseId);
+      setChapters(updated);
+    } catch (err) {
+      console.error("Erreur ajout chapitre:", err);
+    }
+  };
+
+  const handleImportSyllabus = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!syllabusText.trim() || !courseId) return;
+    try {
+      await parseAndCreateChaptersFromSyllabus(courseId, syllabusText);
+      setSyllabusText('');
+      setShowSyllabusModal(false);
+      const updated = await fetchCourseChapters(courseId);
+      setChapters(updated);
+      alert("Syllabus analysé et chapitres créés avec succès !");
+    } catch (err) {
+      console.error("Erreur import syllabus:", err);
+    }
+  };
 
   if (loading) {
     return <div className="text-center py-12 text-text-muted text-sm">Chargement du cours...</div>;
@@ -102,6 +130,71 @@ export function CourseDetail() {
       </div>
 
       <main>
+        {activeTab === 'Programme & Chapitres' && (
+          <div className="flex flex-col gap-6 animate-in fade-in duration-200">
+            <div className="flex justify-between items-center">
+              <h2 className="font-medium text-lg">Structure du cours & Syllabus</h2>
+              <button 
+                onClick={() => setShowSyllabusModal(true)}
+                className="flex items-center gap-1.5 text-xs font-semibold text-accent bg-accent/10 px-3 py-2 rounded-md hover:bg-accent/20 transition-colors"
+              >
+                <Sparkles size={14} />
+                Importer un Syllabus
+              </button>
+            </div>
+
+            {/* Formulaire ajout manuel de chapitre */}
+            <form onSubmit={handleAddChapter} className="flex gap-2">
+              <input 
+                type="text"
+                placeholder="Ajouter un chapitre (ex: Chapitre 1: Introduction au CO)..."
+                value={newChapterTitle}
+                onChange={(e) => setNewChapterTitle(e.target.value)}
+                className="flex-1 bg-surface border border-border rounded-md py-2.5 px-3 text-sm focus:outline-none focus:border-accent"
+              />
+              <button type="submit" className="bg-text text-background px-4 py-2 rounded-md text-xs font-semibold hover:bg-text-muted">
+                Ajouter
+              </button>
+            </form>
+
+            {chapters.length === 0 ? (
+              <div className="text-center py-12 border border-dashed border-border rounded-lg text-text-muted text-sm">
+                Aucun chapitre défini. Ajoutez-en un ou importez votre syllabus pour structurer automatiquement votre matière.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {chapters.map((chap, idx) => {
+                  const chapDocs = documents.filter(d => d.chapter_id === chap.id);
+                  return (
+                    <Card key={chap.id} className="p-4 flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className="w-6 h-6 rounded-full bg-surface-elevated flex items-center justify-center text-xs font-bold text-accent">
+                            {idx + 1}
+                          </span>
+                          <h3 className="font-medium text-sm">{chap.title}</h3>
+                        </div>
+                        <Badge variant="outline">{chapDocs.length} document(s)</Badge>
+                      </div>
+
+                      {chapDocs.length > 0 && (
+                        <div className="pl-9 mt-1 flex flex-col gap-1">
+                          {chapDocs.map(d => (
+                            <div key={d.id} onClick={() => navigate(`/viewer/${d.id}`)} className="text-xs text-text-muted hover:text-accent cursor-pointer flex items-center gap-1.5">
+                              <FileText size={12} />
+                              <span>{d.original_name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {activeTab === 'Documents' && (
           <div className="flex flex-col gap-4 animate-in fade-in duration-200">
             <div className="flex justify-between items-center mb-1">
@@ -115,28 +208,12 @@ export function CourseDetail() {
               </button>
             </div>
 
-            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-              {DOC_FILTERS.map(filter => (
-                <button
-                  key={filter}
-                  onClick={() => setSelectedDocFilter(filter)}
-                  className={`whitespace-nowrap px-3 py-1 rounded text-xs font-medium transition-colors border ${
-                    selectedDocFilter === filter 
-                      ? 'bg-accent/10 text-accent border-accent/30' 
-                      : 'bg-surface text-text-muted border-border hover:border-text-muted/50'
-                  }`}
-                >
-                  {filter}
-                </button>
-              ))}
-            </div>
-
-            {filteredDocuments.length === 0 ? (
+            {documents.length === 0 ? (
               <div className="text-center py-10 border border-dashed border-border rounded-lg text-text-muted text-sm">
-                Aucun document ne correspond à ce filtre.
+                Aucun document importé pour ce cours.
               </div>
             ) : (
-              filteredDocuments.map(doc => (
+              documents.map(doc => (
                 <Card 
                   key={doc.id} 
                   onClick={() => navigate(`/viewer/${doc.id}`)} 
@@ -150,10 +227,18 @@ export function CourseDetail() {
                       <p className="font-medium text-sm group-hover:text-accent transition-colors truncate">{doc.original_name}</p>
                       <div className="flex items-center gap-2 text-xs text-text-muted mt-0.5">
                         <span className="text-accent font-medium">{doc.document_type || 'Document'}</span>
-                        <span>•</span>
-                        <span>{new Date(doc.created_at).toLocaleDateString()}</span>
-                        <span>•</span>
-                        <span>{(doc.size_bytes / (1024 * 1024)).toFixed(2)} MB</span>
+                        {doc.chapters?.title && (
+                          <>
+                            <span>•</span>
+                            <span className="text-info">{doc.chapters.title}</span>
+                          </>
+                        )}
+                        {doc.atf_ref && (
+                          <>
+                            <span>•</span>
+                            <span className="text-warning font-semibold">{doc.atf_ref}</span>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -163,17 +248,6 @@ export function CourseDetail() {
                 </Card>
               ))
             )}
-            
-            <div 
-              onClick={() => navigate('/add/document')}
-              className="mt-4 border-2 border-dashed border-border rounded-lg p-8 flex flex-col items-center justify-center text-center cursor-pointer hover:border-accent/50 hover:bg-surface-elevated/30 transition-all"
-            >
-              <div className="w-12 h-12 bg-surface-elevated rounded-full flex items-center justify-center text-text-muted mb-3">
-                <Plus size={24} />
-              </div>
-              <p className="font-medium text-sm mb-1">Ajouter un document</p>
-              <p className="text-xs text-text-muted max-w-[200px]">PDF, PPTX ou Word.</p>
-            </div>
           </div>
         )}
 
@@ -225,6 +299,44 @@ export function CourseDetail() {
           </div>
         )}
       </main>
+
+      {/* Modal d'importation de Syllabus */}
+      {showSyllabusModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-lg bg-surface-elevated border border-border rounded-xl p-6 shadow-2xl">
+            <h2 className="font-serif text-2xl mb-2">Importer un Syllabus</h2>
+            <p className="text-xs text-text-muted mb-4">Collez le texte brut de votre syllabus ou plan de cours. Lexi détectera et créera automatiquement les chapitres correspondants.</p>
+            
+            <form onSubmit={handleImportSyllabus} className="flex flex-col gap-4">
+              <textarea 
+                rows={8}
+                required
+                value={syllabusText}
+                onChange={(e) => setSyllabusText(e.target.value)}
+                placeholder="Exemple:&#10;Chapitre 1: Introduction au droit des obligations&#10;Chapitre 2: La formation du contrat&#10;Semaine 3: Les vices du consentement..."
+                className="w-full bg-surface border border-border rounded-md p-3 text-sm focus:outline-none focus:border-accent font-mono text-xs"
+              />
+
+              <div className="flex gap-2">
+                <button 
+                  type="button" 
+                  onClick={() => setShowSyllabusModal(false)}
+                  className="flex-1 bg-surface border border-border text-text py-2.5 rounded-md text-sm font-medium hover:bg-surface/80"
+                >
+                  Annuler
+                </button>
+                <button 
+                  type="submit" 
+                  className="flex-1 bg-accent text-background py-2.5 rounded-md text-sm font-medium hover:bg-accent-strong flex items-center justify-center gap-1.5"
+                >
+                  <Sparkles size={16} />
+                  <span>Générer les chapitres</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );
