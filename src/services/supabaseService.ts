@@ -33,10 +33,18 @@ export async function fetchCourseDocuments(courseId: string) {
     .eq('course_id', courseId)
     .order('created_at', { ascending: false });
   
-  if (error) {
-    console.error("Erreur fetchCourseDocuments:", error.message);
-    return [];
-  }
+  if (error) return [];
+  return data || [];
+}
+
+export async function fetchCourseGrades(courseId: string) {
+  const { data, error } = await supabase
+    .from('grades')
+    .select('*')
+    .eq('course_id', courseId)
+    .order('created_at', { ascending: false });
+  
+  if (error) return [];
   return data || [];
 }
 
@@ -57,6 +65,62 @@ export async function createCourse(course: {
         ects: Number(course.ects),
         status: course.status,
         teacher_name: course.teacher_name || null
+      }
+    ])
+    .select();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function createGrade(gradeData: {
+  course_id: string;
+  grade: number;
+  weight: number;
+  eval_type: string;
+}) {
+  const { data, error } = await supabase
+    .from('grades')
+    .insert([
+      {
+        user_id: SOLO_USER_ID,
+        course_id: gradeData.course_id,
+        grade: Number(gradeData.grade),
+        weight: Number(gradeData.weight),
+        eval_type: gradeData.eval_type
+      }
+    ])
+    .select();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchEvents() {
+  const { data, error } = await supabase
+    .from('events')
+    .select('*, courses(title)')
+    .order('event_date', { ascending: true });
+
+  if (error) return [];
+  return data || [];
+}
+
+export async function createEvent(eventData: {
+  title: string;
+  event_date: string;
+  category: string;
+  course_id?: string;
+}) {
+  const { data, error } = await supabase
+    .from('events')
+    .insert([
+      {
+        user_id: SOLO_USER_ID,
+        title: eventData.title,
+        event_date: eventData.event_date,
+        category: eventData.category,
+        course_id: eventData.course_id || null
       }
     ])
     .select();
