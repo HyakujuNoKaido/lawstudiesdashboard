@@ -1,147 +1,170 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, CloudFog, Scale, AlertTriangle, Book, Check, MoreVertical } from 'lucide-react';
-
-type BlockType = 'text' | 'rule' | 'jurisprudence' | 'exception';
-
-interface EditorBlock {
-  id: string;
-  type: BlockType;
-  content: string;
-}
-
-const INITIAL_BLOCKS: EditorBlock[] = [
-  { id: '1', type: 'rule', content: 'Art. 41 al. 1 CO\nCelui qui cause, d\'une manière illicite, un dommage à autrui, soit de dessein, soit par négligence, est tenu de le réparer.' },
-  { id: '2', type: 'text', content: 'Les quatre conditions cumulatives sont donc le préjudice, l\'acte illicite, le lien de causalité et la faute.' },
-  { id: '3', type: 'jurisprudence', content: 'ATF 132 III 122 (Arrêt de principe)\nLe Tribunal fédéral précise que la causalité adéquate sert de limite à l\'imputation du dommage.' }
-];
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { ChevronLeft, Save, FileEdit } from 'lucide-react';
+import { fetchCourses, fetchNotes, saveNote } from '../services/supabaseService';
 
 export function StudyNoteEditor() {
+  const { noteId } = useParams<{ noteId: string }>();
   const navigate = useNavigate();
-  const [title, setTitle] = useState('Responsabilité civile extracontractuelle');
-  const [blocks, setBlocks] = useState<EditorBlock[]>(INITIAL_BLOCKS);
-  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved');
+  
+  const [courses, setCourses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  
+  const [form, setForm] = useState({
+    title: '',
+    content: '',
+    course_id: ''
+  });
 
-  // Simulation d'une sauvegarde automatique
-  const handleBlockChange = (id: string, newContent: string) => {
-    setSaveStatus('saving');
-    setBlocks(blocks.map(b => b.id === id ? { ...b, content: newContent } : b));
-    setTimeout(() => setSaveStatus('saved'), 1000);
+  useEffect(() => {
+    loadData();
+  }, [noteId]);
+
+  async function loadData() {
+    try {
+      setLoading(true);
+      const coursesData = await fetchCourses();
+      setCourses(coursesData);
+      
+      let defaultCourseId = coursesData.length > 0 ? coursesData[0].id : '';
+
+      if (noteId) {
+        // Mode Édition
+        const notesData = await fetchNotes();
+        const existingNote = notesData.find(n => n.id === noteId);
+        if (existingNote) {
+          setForm({
+            title: existingNote.title || '',
+            content: existingNote.content || '',
+            course_id: existingNote.course_id || defaultCourseId
+          });
+        } else {
+          alert("Note introuvable.");
+          navigate('/notes');
+        }
+      } else {
+        // Mode Création
+        setForm(prev => ({ ...prev, course_id: defaultCourseId }));
+      }
+    } catch (err) {
+      console.error("Erreur lors du chargement de l'éditeur de notes:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.title || !form.course_id) {
+      alert("Veuillez remplir le titre et sélectionner un cours.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await saveNote({
+        id: noteId,
+        title: form.title,
+        content: form.content,
+        course_id: form.course_id
+      });
+      navigate(-1); // Retour à la page précédente
+    } catch (err) {
+      console.error("Erreur sauvegarde note:", err);
+      alert("Échec de l'enregistrement de la note.");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const addBlock = (type: BlockType) => {
-    setBlocks([...blocks, { id: Math.random().toString(36).substr(2, 9), type, content: '' }]);
-  };
+  if (loading) {
+    return <div className="p-8 text-center text-text-muted">Chargement de l'éditeur...</div>;
+  }
+
+  if (courses.length === 0) {
+    return (
+      <div className="p-8 text-center flex flex-col items-center gap-4 text-text-muted">
+        <p>Vous devez d'abord créer un cours avant de pouvoir prendre des notes.</p>
+        <button onClick={() => navigate('/add/course')} className="text-accent underline">Créer un cours</button>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col animate-in fade-in duration-300">
+    <div className="flex flex-col gap-6 pt-2 pb-16 animate-in fade-in duration-300 max-w-3xl mx-auto w-full text-text">
       
-      {/* Barre d'outils supérieure */}
-      <header className="sticky top-0 z-10 bg-surface/80 backdrop-blur-md border-b border-border px-4 py-3 flex items-center justify-between">
+      <header className="flex flex-col gap-4">
+        <button 
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-1 text-text-muted hover:text-text transition-colors -ml-2 p-2 w-fit cursor-pointer"
+        >
+          <ChevronLeft size={20} />
+          <span className="text-sm font-medium">Retour</span>
+        </button>
+
         <div className="flex items-center gap-3">
-          <button 
-            onClick={() => navigate(-1)}
-            className="p-2 -ml-2 text-text-muted hover:text-text transition-colors rounded-md"
-            aria-label="Retour"
-          >
-            <ChevronLeft size={20} />
-          </button>
-          
-          <div className="flex items-center gap-1.5 text-xs font-medium text-text-muted">
-            {saveStatus === 'saving' ? (
-              <><CloudFog size={14} className="animate-pulse" /> Enregistrement...</>
-            ) : (
-              <><Check size={14} className="text-success" /> Enregistré</>
-            )}
+          <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center text-accent">
+            <FileEdit size={20} />
+          </div>
+          <div>
+            <h1 className="font-serif text-2xl font-bold">{noteId ? 'Modifier la note' : 'Nouvelle Note'}</h1>
+            <p className="text-text-muted text-xs">Synthétisez vos cours et arrêts.</p>
+          </div>
+        </div>
+      </header>
+
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-text-muted">Titre de la note *</label>
+            <input 
+              type="text"
+              required
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              placeholder="ex: Résumé Chapitre 1 - Formation du contrat"
+              className="w-full bg-surface border border-border rounded-xl py-3 px-3 text-sm focus:outline-none focus:border-accent"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-text-muted">Cours associé *</label>
+            <select 
+              required
+              value={form.course_id}
+              onChange={(e) => setForm({ ...form, course_id: e.target.value })}
+              className="w-full bg-surface border border-border rounded-xl py-3 px-3 text-sm focus:outline-none focus:border-accent appearance-none"
+            >
+              {courses.map(c => (
+                <option key={c.id} value={c.id}>{c.title}</option>
+              ))}
+            </select>
           </div>
         </div>
 
-        <button className="p-2 text-text-muted hover:text-text transition-colors">
-          <MoreVertical size={20} />
+        <div className="flex flex-col gap-1.5 flex-1 min-h-[400px]">
+          <label className="text-xs font-medium text-text-muted">Contenu (Markdown supporté)</label>
+          <textarea 
+            required
+            value={form.content}
+            onChange={(e) => setForm({ ...form, content: e.target.value })}
+            placeholder="Saisissez vos notes ici... Utilisez des tirets pour les listes, etc."
+            className="w-full h-full min-h-[400px] bg-surface-elevated border border-border rounded-xl p-4 text-sm focus:outline-none focus:border-accent font-serif leading-relaxed resize-y"
+          />
+        </div>
+
+        <button 
+          type="submit"
+          disabled={saving}
+          className="w-full bg-accent text-background rounded-xl py-3.5 px-4 flex items-center justify-center gap-2 font-semibold glow-gold hover:bg-accent-strong transition-colors cursor-pointer"
+        >
+          <Save size={18} />
+          <span>{saving ? 'Enregistrement...' : 'Enregistrer la note'}</span>
         </button>
-      </header>
 
-      {/* Zone d'édition */}
-      <main className="flex-1 max-w-3xl w-full mx-auto p-4 md:p-8 md:pt-12 pb-32">
-        <input 
-          type="text" 
-          value={title}
-          onChange={(e) => { setTitle(e.target.value); setSaveStatus('saving'); setTimeout(() => setSaveStatus('saved'), 1000); }}
-          className="w-full bg-transparent text-3xl md:text-4xl font-serif text-text placeholder:text-text-muted/50 border-none outline-none mb-8 resize-none"
-          placeholder="Titre de la fiche..."
-        />
-
-        <div className="flex flex-col gap-4">
-          {blocks.map((block) => (
-            <div key={block.id} className="relative group">
-              {block.type === 'rule' && (
-                <div className="flex gap-3 bg-surface border border-border p-4 rounded-md">
-                  <Book size={18} className="text-accent shrink-0 mt-0.5" />
-                  <textarea
-                    value={block.content}
-                    onChange={(e) => handleBlockChange(block.id, e.target.value)}
-                    className="w-full bg-transparent text-sm leading-relaxed outline-none resize-none min-h-[60px]"
-                    placeholder="Saisissez la règle de droit..."
-                  />
-                </div>
-              )}
-
-              {block.type === 'jurisprudence' && (
-                <div className="flex gap-3 bg-info/5 border border-info/20 p-4 rounded-md">
-                  <Scale size={18} className="text-info shrink-0 mt-0.5" />
-                  <textarea
-                    value={block.content}
-                    onChange={(e) => handleBlockChange(block.id, e.target.value)}
-                    className="w-full bg-transparent text-sm leading-relaxed outline-none resize-none min-h-[60px]"
-                    placeholder="Saisissez la jurisprudence (ex: ATF 123 III 456)..."
-                  />
-                </div>
-              )}
-
-              {block.type === 'exception' && (
-                <div className="flex gap-3 bg-warning/5 border border-warning/20 p-4 rounded-md">
-                  <AlertTriangle size={18} className="text-warning shrink-0 mt-0.5" />
-                  <textarea
-                    value={block.content}
-                    onChange={(e) => handleBlockChange(block.id, e.target.value)}
-                    className="w-full bg-transparent text-sm leading-relaxed outline-none resize-none min-h-[60px]"
-                    placeholder="Saisissez l'exception à la règle..."
-                  />
-                </div>
-              )}
-
-              {block.type === 'text' && (
-                <textarea
-                  value={block.content}
-                  onChange={(e) => handleBlockChange(block.id, e.target.value)}
-                  className="w-full bg-transparent text-text text-base leading-relaxed outline-none resize-none min-h-[40px] px-1"
-                  placeholder="Appuyez pour écrire..."
-                />
-              )}
-            </div>
-          ))}
-        </div>
-      </main>
-
-      {/* Barre d'ajout de blocs (Fixe en bas) */}
-      <footer className="fixed bottom-0 left-0 right-0 bg-surface-elevated border-t border-border p-3 pb-safe z-10">
-        <div className="max-w-3xl mx-auto flex items-center justify-center gap-2 md:gap-4 overflow-x-auto scrollbar-hide px-2">
-          <button onClick={() => addBlock('text')} className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-surface text-sm font-medium text-text-muted hover:text-text transition-colors whitespace-nowrap">
-            <span className="text-lg leading-none font-serif">T</span> Texte
-          </button>
-          <div className="w-px h-6 bg-border mx-1 shrink-0" />
-          <button onClick={() => addBlock('rule')} className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-surface text-sm font-medium text-text-muted hover:text-accent transition-colors whitespace-nowrap">
-            <Book size={16} /> Règle
-          </button>
-          <button onClick={() => addBlock('jurisprudence')} className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-surface text-sm font-medium text-text-muted hover:text-info transition-colors whitespace-nowrap">
-            <Scale size={16} /> Jurisprudence
-          </button>
-          <button onClick={() => addBlock('exception')} className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-surface text-sm font-medium text-text-muted hover:text-warning transition-colors whitespace-nowrap">
-            <AlertTriangle size={16} /> Exception
-          </button>
-        </div>
-      </footer>
-
+      </form>
     </div>
   );
 }
