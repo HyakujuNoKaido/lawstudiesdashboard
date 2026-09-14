@@ -27,6 +27,75 @@ export async function fetchCourseById(courseId: string) {
   return data;
 }
 
+export async function deleteCourse(courseId: string) {
+  const { error } = await supabase
+    .from('courses')
+    .delete()
+    .eq('id', courseId);
+  if (error) throw error;
+}
+
+export async function createCourseWithSchedule(
+  courseData: { title: string; course_code?: string; ects: number; status: string; teacher_name?: string; semester?: string },
+  schedules: Array<{ day_of_week: string; start_time: string; end_time: string }>
+) {
+  const { data: courseRes, error: courseErr } = await supabase
+    .from('courses')
+    .insert([{
+      user_id: SOLO_USER_ID,
+      title: courseData.title,
+      course_code: courseData.course_code || 'DROIT',
+      ects: Number(courseData.ects) || 6,
+      status: courseData.status || 'En cours',
+      teacher_name: courseData.teacher_name || null,
+      semester: courseData.semester || 'Automne 2026'
+    }])
+    .select();
+
+  if (courseErr) throw courseErr;
+  const courseId = courseRes[0].id;
+
+  if (schedules.length > 0) {
+    const formattedSchedules = schedules.map(s => ({
+      course_id: courseId,
+      day_of_week: s.day_of_week,
+      start_time: s.start_time,
+      end_time: s.end_time
+    }));
+
+    await supabase.from('course_schedules').insert(formattedSchedules);
+
+    const dayMap: Record<string, number> = { 'Lundi': 1, 'Mardi': 2, 'Mercredi': 3, 'Jeudi': 4, 'Vendredi': 5, 'Samedi': 6, 'Dimanche': 0 };
+    const generatedEvents = [];
+    const startDate = new Date();
+
+    for (let week = 0; week < 14; week++) {
+      for (const sched of schedules) {
+        const targetDayNum = dayMap[sched.day_of_week];
+        const eventDate = new Date(startDate);
+        const currentDayNum = eventDate.getDay();
+        const distance = (targetDayNum + 7 - currentDayNum) % 7;
+        eventDate.setDate(eventDate.getDate() + distance + (week * 7));
+
+        const dateStr = eventDate.toISOString().split('T')[0];
+        generatedEvents.push({
+          user_id: SOLO_USER_ID,
+          course_id: courseId,
+          title: `Cours: ${courseData.title}`,
+          event_date: `${dateStr}T${sched.start_time}:00`,
+          category: 'Cours'
+        });
+      }
+    }
+
+    if (generatedEvents.length > 0) {
+      await supabase.from('events').insert(generatedEvents);
+    }
+  }
+
+  return courseRes[0];
+}
+
 export async function fetchCourseChapters(courseId: string) {
   const { data, error } = await supabase
     .from('chapters')
