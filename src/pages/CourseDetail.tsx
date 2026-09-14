@@ -1,267 +1,196 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, BookOpen, FileText, Upload, Plus, Award, Scale, Layers, Trash2 } from 'lucide-react';
-import { Card } from '../components/ui/Card';
+import { ChevronLeft, FileText, ChevronDown, CheckCircle2, AlertCircle, Edit3, Trash2 } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
-import { ProgressBar } from '../components/ui/ProgressBar';
-import { fetchCourseById, fetchCourseChapters, fetchCourseDocuments, fetchCourseGrades, createChapter, uploadCourseDocument } from '../services/supabaseService';
+import { Card } from '../components/ui/Card';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
+import { fetchCourseById, fetchCourseChapters, fetchCourseDocuments, deleteDocument } from '../services/supabaseService';
 
 export function CourseDetail() {
   const { courseId } = useParams<{ courseId: string }>();
   const navigate = useNavigate();
-
+  
   const [course, setCourse] = useState<any>(null);
   const [chapters, setChapters] = useState<any[]>([]);
   const [documents, setDocuments] = useState<any[]>([]);
-  const [grades, setGrades] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Modal Chapitre / Document
-  const [isChapterModalOpen, setIsChapterModalOpen] = useState(false);
-  const [newChapterTitle, setNewChapterTitle] = useState('');
-  const [isDocModalOpen, setIsDocModalOpen] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [docType, setDocType] = useState('Support de cours');
+  // État pour la suppression d'un document
+  const [docToDelete, setDocToDelete] = useState<{id: string, path: string} | null>(null);
 
   useEffect(() => {
     if (courseId) {
-      loadCourseData(courseId);
+      loadData();
     }
   }, [courseId]);
 
-  async function loadCourseData(id: string) {
+  async function loadData() {
+    setLoading(true);
     try {
-      const [courseRes, chaptersRes, docsRes, gradesRes] = await Promise.all([
-        fetchCourseById(id),
-        fetchCourseChapters(id),
-        fetchCourseDocuments(id),
-        fetchCourseGrades(id)
+      const [courseData, chaptersData, docsData] = await Promise.all([
+        fetchCourseById(courseId!),
+        fetchCourseChapters(courseId!),
+        fetchCourseDocuments(courseId!)
       ]);
-      setCourse(courseRes);
-      setChapters(chaptersRes);
-      setDocuments(docsRes);
-      setGrades(gradesRes);
+      setCourse(courseData);
+      setChapters(chaptersData);
+      setDocuments(docsData);
     } catch (err) {
-      console.error("Erreur chargement détails du cours:", err);
+      console.error("Erreur chargement:", err);
     } finally {
       setLoading(false);
     }
   }
 
-  const handleCreateChapter = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newChapterTitle || !courseId) return;
+  const handleDeleteDocument = async () => {
+    if (!docToDelete) return;
     try {
-      await createChapter({
-        course_id: courseId,
-        title: newChapterTitle,
-        order_index: chapters.length + 1
-      });
-      setNewChapterTitle('');
-      setIsChapterModalOpen(false);
-      loadCourseData(courseId);
+      await deleteDocument(docToDelete.id, docToDelete.path);
+      setDocToDelete(null);
+      loadData(); // Recharger les docs
     } catch (err) {
-      console.error("Erreur création chapitre:", err);
+      console.error("Erreur suppression:", err);
+      alert("Impossible de supprimer ce document.");
     }
   };
 
-  const handleUploadDoc = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedFile || !courseId) return;
-    try {
-      await uploadCourseDocument(selectedFile, courseId, docType);
-      setSelectedFile(null);
-      setIsDocModalOpen(false);
-      loadCourseData(courseId);
-    } catch (err) {
-      console.error("Erreur upload document:", err);
-      alert("Échec du téléchargement du fichier.");
-    }
-  };
-
-  // Icône dynamique sans emoji selon le type de document
-  const getDocumentIcon = (type: string) => {
-    switch (type) {
-      case 'Arrêt ATF':
-      case 'Jurisprudence':
-        return <Scale size={16} className="text-warning" />;
-      case 'Doctrine':
-      case 'Manuel':
-        return <BookOpen size={16} className="text-accent" />;
-      case 'Support de cours':
-      case 'Slides':
-        return <FileText size={16} className="text-info" />;
-      default:
-        return <Layers size={16} className="text-text-muted" />;
-    }
-  };
-
-  if (loading) {
-    return <div className="text-center py-20 text-text-muted text-sm">Chargement du cours...</div>;
-  }
-
-  if (!course) {
-    return (
-      <div className="text-center py-20 flex flex-col items-center gap-4">
-        <p className="text-text-muted text-sm">Cours introuvable.</p>
-        <button onClick={() => navigate('/courses')} className="px-4 py-2 bg-accent text-background rounded-xl text-xs font-semibold">
-          Retour aux cours
-        </button>
-      </div>
-    );
-  }
-
-  const courseAverage = grades.length > 0 
-    ? (grades.reduce((acc, g) => acc + Number(g.grade) * Number(g.weight), 0) / grades.reduce((acc, g) => acc + Number(g.weight), 0)).toFixed(2)
-    : 'N/A';
+  if (loading) return <div className="text-center p-8 text-text-muted">Chargement...</div>;
+  if (!course) return <div className="text-center p-8 text-text-muted">Cours introuvable</div>;
 
   return (
-    <div className="flex flex-col gap-6 pt-2 pb-16 animate-in fade-in duration-300 text-text">
+    <div className="flex flex-col gap-6 pt-2 pb-16 animate-in fade-in duration-300">
       
-      {/* En-tête */}
-      <header className="flex flex-col gap-4 px-1">
-        <button 
-          onClick={() => navigate('/courses')}
-          className="flex items-center gap-1 text-text-muted hover:text-text transition-colors -ml-2 p-2 w-fit cursor-pointer"
-        >
-          <ChevronLeft size={20} />
-          <span className="text-sm font-medium">Retour aux cours</span>
-        </button>
+      {/* HEADER */}
+      <header className="flex flex-col gap-4 text-text">
+        <div className="flex items-center justify-between">
+          <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-text-muted hover:text-text transition-colors -ml-2 p-2 cursor-pointer">
+            <ChevronLeft size={20} />
+            <span className="text-sm font-medium">Retour</span>
+          </button>
+          
+          {/* NOUVEAU: Bouton d'édition */}
+          <button 
+            onClick={() => navigate(`/edit/course/${course.id}`)}
+            className="flex items-center gap-1.5 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-medium text-text-muted hover:text-accent hover:border-accent transition-colors cursor-pointer"
+          >
+            <Edit3 size={14} />
+            <span>Modifier</span>
+          </button>
+        </div>
 
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-surface p-6 rounded-2xl border border-border">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent shrink-0">
-              <BookOpen size={24} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <Badge variant="outline">{course.course_code || 'DROIT'}</Badge>
-                <Badge variant="success">{course.status}</Badge>
-              </div>
-              <h1 className="font-serif text-2xl md:text-3xl font-bold">{course.title}</h1>
-              <p className="text-xs text-text-muted mt-1">{course.teacher_name ? `Enseignant: ${course.teacher_name} • ` : ''}{course.ects} ECTS • Semestre : {course.semester || 'Automne 2026'}</p>
-            </div>
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <Badge variant="outline" className="text-accent border-accent/30">{course.course_code}</Badge>
+            <Badge variant={course.status === 'Validé' ? 'success' : 'default'}>{course.status}</Badge>
           </div>
-
-          <div className="flex items-center gap-3">
-            <div className="bg-surface-elevated px-4 py-3 rounded-xl border border-border flex flex-col items-center">
-              <span className="text-[10px] uppercase text-text-muted font-semibold">Moyenne</span>
-              <span className="font-serif text-lg font-bold text-accent">{courseAverage}</span>
-            </div>
+          <h1 className="font-serif text-3xl md:text-4xl font-bold mb-2 leading-tight">{course.title}</h1>
+          <div className="flex items-center gap-4 text-xs font-medium text-text-muted">
+            <span>{course.ects} Crédits ECTS</span>
+            <span>•</span>
+            <span>{course.semester}</span>
+            {course.teacher_name && (
+              <>
+                <span>•</span>
+                <span>{course.teacher_name}</span>
+              </>
+            )}
           </div>
         </div>
       </header>
 
-      {/* Actions rapides */}
-      <div className="grid grid-cols-2 gap-3 px-1">
-        <button 
-          onClick={() => setIsChapterModalOpen(true)}
-          className="bg-surface border border-border py-3 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 hover:border-accent/50 transition-colors cursor-pointer"
-        >
-          <Plus size={16} className="text-accent" />
-          <span>Ajouter un chapitre</span>
-        </button>
-        <button 
-          onClick={() => setIsDocModalOpen(true)}
-          className="bg-accent text-background py-3 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 glow-gold hover:bg-accent-strong transition-colors cursor-pointer"
-        >
-          <Upload size={16} />
-          <span>Importer un document</span>
-        </button>
-      </div>
+      {/* CHAPITRES ET DOCUMENTS */}
+      <section className="flex flex-col gap-4 mt-4 text-text">
+        <div className="flex items-center justify-between border-b border-border pb-2">
+          <h2 className="font-serif text-xl font-bold">Ressources du cours</h2>
+        </div>
 
-      {/* Chapitres du cours */}
-      <section className="flex flex-col gap-3">
-        <h2 className="font-serif text-lg font-semibold px-1">Plan et chapitres</h2>
-        {chapters.length === 0 ? (
-          <Card className="bg-surface border-border p-6 text-center text-text-muted text-xs">
-            Aucun chapitre enregistré pour l'instant. Utilisez le bouton ci-dessus pour en ajouter.
-          </Card>
+        {chapters.length === 0 && documents.length === 0 ? (
+          <div className="text-center py-10 border border-dashed border-border rounded-xl text-text-muted text-sm">
+            Aucun chapitre ou document pour le moment.
+          </div>
         ) : (
-          chapters.map((chap, idx) => (
-            <Card key={chap.id} className="bg-surface border-border p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="w-7 h-7 rounded-lg bg-surface-elevated text-accent font-mono text-xs flex items-center justify-center font-bold">
-                  {idx + 1}
-                </span>
-                <span className="font-medium text-sm text-text">{chap.title}</span>
-              </div>
-            </Card>
-          ))
+          <div className="flex flex-col gap-3">
+            {chapters.map((chapter) => {
+              const chapterDocs = documents.filter(d => d.chapter_id === chapter.id);
+              
+              return (
+                <div key={chapter.id} className="bg-surface border border-border rounded-2xl overflow-hidden shadow-sm">
+                  <div className="p-4 flex items-center justify-between cursor-pointer hover:bg-surface-elevated transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-accent/10 text-accent flex items-center justify-center font-bold text-xs shrink-0">
+                        {chapter.order_index}
+                      </div>
+                      <h3 className="font-medium text-sm text-text">{chapter.title}</h3>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-text-muted font-medium px-2 py-0.5 bg-background rounded-full">
+                        {chapterDocs.length} doc{chapterDocs.length !== 1 && 's'}
+                      </span>
+                      <ChevronDown size={18} className="text-text-muted" />
+                    </div>
+                  </div>
+
+                  {chapterDocs.length > 0 && (
+                    <div className="border-t border-border bg-background/50 p-2 flex flex-col gap-1.5">
+                      {chapterDocs.map(doc => (
+                        <Card 
+                          key={doc.id}
+                          className="bg-surface p-3 flex items-center justify-between cursor-pointer hover:border-accent/40 transition-colors group"
+                        >
+                          {/* Clique sur le reste pour ouvrir le doc */}
+                          <div className="flex items-center gap-3 min-w-0 flex-1" onClick={() => navigate(`/viewer/${doc.id}`)}>
+                            <div className="text-accent bg-accent/10 p-2 rounded-lg shrink-0">
+                              <FileText size={16} />
+                            </div>
+                            <div className="min-w-0 pr-2">
+                              <p className="text-sm font-medium text-text truncate group-hover:text-accent transition-colors">{doc.original_name}</p>
+                              <div className="flex items-center gap-2 mt-0.5 text-[10px] text-text-muted">
+                                <span className="uppercase">{doc.document_type}</span>
+                                {doc.atf_ref && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="text-warning font-mono">{doc.atf_ref}</span>
+                                  </>
+                                )}
+                                <span>•</span>
+                                <span className="flex items-center gap-1 text-success">
+                                  <CheckCircle2 size={10} />
+                                  Analysé
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* NOUVEAU: Bouton de suppression du document */}
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); setDocToDelete({ id: doc.id, path: doc.bucket_path }); }}
+                            className="p-2 text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors"
+                            title="Supprimer ce document"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
       </section>
 
-      {/* Documents et Fiches associés */}
-      <section className="flex flex-col gap-3">
-        <h2 className="font-serif text-lg font-semibold px-1">Documents et Fiches (Arrêts ATF, Doctrine)</h2>
-        {documents.length === 0 ? (
-          <Card className="bg-surface border-border p-6 text-center text-text-muted text-xs">
-            Aucun document importé pour ce cours.
-          </Card>
-        ) : (
-          documents.map(doc => (
-            <Card key={doc.id} className="bg-surface border-border p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-surface-elevated flex items-center justify-center">
-                  {getDocumentIcon(doc.document_type)}
-                </div>
-                <div>
-                  <p className="font-medium text-sm text-text">{doc.original_name}</p>
-                  <p className="text-xs text-text-muted">{doc.document_type} • {(doc.size_bytes / (1024 * 1024)).toFixed(2)} MB</p>
-                </div>
-              </div>
-              <Badge variant="outline">{doc.document_type}</Badge>
-            </Card>
-          ))
-        )}
-      </section>
-
-      {/* Modal Ajout Chapitre */}
-      {isChapterModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-surface-elevated border border-border rounded-2xl p-6 shadow-2xl">
-            <h2 className="font-serif text-xl font-bold mb-4">Nouveau chapitre</h2>
-            <form onSubmit={handleCreateChapter} className="flex flex-col gap-4">
-              <input 
-                type="text" required value={newChapterTitle} onChange={(e) => setNewChapterTitle(e.target.value)}
-                placeholder="ex: Chapitre 3 - Les vices du consentement"
-                className="w-full bg-surface border border-border rounded-xl py-3 px-3 text-sm focus:outline-none focus:border-accent"
-              />
-              <div className="flex gap-2 mt-2">
-                <button type="button" onClick={() => setIsChapterModalOpen(false)} className="flex-1 bg-surface border border-border py-3 rounded-xl text-sm">Annuler</button>
-                <button type="submit" className="flex-1 bg-accent text-background py-3 rounded-xl text-sm font-semibold glow-gold">Enregistrer</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Import Document */}
-      {isDocModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-surface-elevated border border-border rounded-2xl p-6 shadow-2xl">
-            <h2 className="font-serif text-xl font-bold mb-4">Importer un document</h2>
-            <form onSubmit={handleUploadDoc} className="flex flex-col gap-4">
-              <select 
-                value={docType} onChange={(e) => setDocType(e.target.value)}
-                className="w-full bg-surface border border-border rounded-xl py-3 px-3 text-sm appearance-none"
-              >
-                <option value="Support de cours">Support de cours / Slides</option>
-                <option value="Arrêt ATF">Arrêt ATF / Jurisprudence</option>
-                <option value="Doctrine">Doctrine / Manuel</option>
-              </select>
-              <input 
-                type="file" required onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-                className="w-full bg-surface border border-border rounded-xl p-3 text-sm text-text-muted"
-              />
-              <div className="flex gap-2 mt-2">
-                <button type="button" onClick={() => setIsDocModalOpen(false)} className="flex-1 bg-surface border border-border py-3 rounded-xl text-sm">Annuler</button>
-                <button type="submit" className="flex-1 bg-accent text-background py-3 rounded-xl text-sm font-semibold glow-gold">Télécharger</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Modale de suppression de document */}
+      <ConfirmModal 
+        isOpen={!!docToDelete}
+        title="Supprimer le document ?"
+        message="Ce document sera définitivement effacé de vos ressources. Cette action est irréversible."
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        isDanger={true}
+        onConfirm={handleDeleteDocument}
+        onClose={() => setDocToDelete(null)}
+      />
 
     </div>
   );
