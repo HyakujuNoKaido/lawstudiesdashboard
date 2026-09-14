@@ -16,8 +16,8 @@ export function AppLayout() {
       {/* Navigation Desktop (Sidebar) */}
       <aside className="hidden md:flex w-64 flex-col bg-surface-elevated border-r border-border p-4">
         <div className="mb-8 px-4 flex items-center gap-3">
-          <div className="w-8 h-8 bg-surface rounded-md flex items-center justify-center border border-border">
-            <BookOpen className="text-accent" size={18} />
+          <div className="w-8 h-8 bg-surface rounded-md flex items-center justify-center border border-border overflow-hidden p-1">
+            <img src="/pwa-192x192.png" alt="Lexi Logo" className="w-full h-full object-contain" />
           </div>
           <span className="font-serif text-xl tracking-wide">Lexi</span>
         </div>
