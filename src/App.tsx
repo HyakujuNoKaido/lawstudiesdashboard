@@ -8,9 +8,10 @@ import { DocumentImport } from './pages/DocumentImport';
 import { StudySession } from './pages/StudySession';
 import { StudyNoteEditor } from './pages/StudyNoteEditor';
 import { Profile } from './pages/Profile';
+import { AddCourse } from './pages/AddCourse';
+import { Schedule } from './pages/Schedule';
 import { BrainCircuit } from 'lucide-react';
 
-// Vue temporaire pour "Réviser" permettant de lancer la session (Flashcards)
 const Study = () => (
   <div className="mt-4 flex flex-col gap-6 animate-in fade-in duration-300">
     <header>
@@ -37,25 +38,21 @@ const Study = () => (
   </div>
 );
 
-// Vue temporaire pour le Planning
-const Schedule = () => <div className="mt-4"><h1 className="font-serif text-2xl">Planning</h1><p className="text-text-muted text-sm">Module calendrier en construction.</p></div>;
-
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Routes avec navigation (Layout principal) */}
         <Route path="/" element={<AppLayout />}>
           <Route index element={<Dashboard />} />
           <Route path="courses" element={<Courses />} />
           <Route path="courses/:courseId" element={<CourseDetail />} />
+          <Route path="add/course" element={<AddCourse />} />
           <Route path="import" element={<DocumentImport />} />
           <Route path="study" element={<Study />} />
           <Route path="schedule" element={<Schedule />} />
           <Route path="profile" element={<Profile />} />
         </Route>
         
-        {/* Routes plein écran (sans navigation globale) */}
         <Route path="/session/:deckId" element={<StudySession />} />
         <Route path="/editor/:noteId" element={<StudyNoteEditor />} />
       </Routes>
