@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CalendarDays, Plus, Trash2, Edit3, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
+import { CalendarDays, Plus, Trash2, Edit3, ChevronLeft, ChevronRight, Clock, Download, Upload } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { fetchEvents, createEvent, fetchCourses } from '../services/supabaseService';
@@ -44,28 +44,78 @@ export function Schedule() {
     }
   }
 
-  // Navigation (< et >) adaptée selon la vue active
+  // Export ICS
+  const handleExportICS = () => {
+    let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//SwissLaw Study//Calendar//FR\n";
+    events.forEach(ev => {
+      const dtStart = new Date(ev.event_date).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+      icsContent += "BEGIN:VEVENT\n";
+      icsContent += `SUMMARY:${ev.title}\n`;
+      icsContent += `DTSTART:${dtStart}\n`;
+      icsContent += `DESCRIPTION:Catégorie: ${ev.category}\n`;
+      icsContent += "END:VEVENT\n";
+    });
+    icsContent += "END:VCALENDAR";
+
+    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'swisslaw_schedule.ics');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Import ICS
+  const handleImportICS = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const text = event.target?.result as string;
+      if (!text) return;
+
+      const summaryMatch = text.match(/SUMMARY:(.*)/g);
+      const dtstartMatch = text.match(/DTSTART:(.*)/g);
+
+      if (summaryMatch && dtstartMatch) {
+        try {
+          for (let i = 0; i < summaryMatch.length; i++) {
+            const title = summaryMatch[i].replace('SUMMARY:', '').trim();
+            let rawDate = dtstartMatch[i]?.replace('DTSTART:', '').trim();
+            if (rawDate && rawDate.length >= 15) {
+              const formattedDate = `${rawDate.substring(0,4)}-${rawDate.substring(4,6)}-${rawDate.substring(6,8)}T${rawDate.substring(9,11)}:${rawDate.substring(11,13)}`;
+              await createEvent({ title, event_date: formattedDate, category: 'Cours' });
+            }
+          }
+          alert("Calendrier ICS importé avec succès !");
+          loadData();
+        } catch (err) {
+          console.error("Erreur parsing ICS:", err);
+          alert("Erreur lors de l'importation du fichier ICS.");
+        }
+      } else {
+        alert("Format ICS non reconnu ou fichier vide.");
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const handlePrev = () => {
     const newDate = new Date(currentDate.getTime());
-    if (viewMode === 'month') {
-      newDate.setMonth(newDate.getMonth() - 1);
-    } else if (viewMode === 'week') {
-      newDate.setDate(newDate.getDate() - 7);
-    } else {
-      newDate.setDate(newDate.getDate() - 1);
-    }
+    if (viewMode === 'month') newDate.setMonth(newDate.getMonth() - 1);
+    else if (viewMode === 'week') newDate.setDate(newDate.getDate() - 7);
+    else newDate.setDate(newDate.getDate() - 1);
     setCurrentDate(newDate);
   };
 
   const handleNext = () => {
     const newDate = new Date(currentDate.getTime());
-    if (viewMode === 'month') {
-      newDate.setMonth(newDate.getMonth() + 1);
-    } else if (viewMode === 'week') {
-      newDate.setDate(newDate.getDate() + 7);
-    } else {
-      newDate.setDate(newDate.getDate() + 1);
-    }
+    if (viewMode === 'month') newDate.setMonth(newDate.getMonth() + 1);
+    else if (viewMode === 'week') newDate.setDate(newDate.getDate() + 7);
+    else newDate.setDate(newDate.getDate() + 1);
     setCurrentDate(newDate);
   };
 
@@ -124,7 +174,6 @@ export function Schedule() {
     setIsModalOpen(true);
   };
 
-  // --- Calculs pour la vue Mois ---
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const monthNames = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
@@ -134,13 +183,11 @@ export function Schedule() {
   const adjustedFirstDay = (firstDayIndex === 0 ? 6 : firstDayIndex - 1);
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  // --- Calculs pour la vue Semaine (Lundi à Dimanche) ---
   const getWeekDays = (date: Date) => {
     const d = new Date(date.getTime());
     const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Ajuster pour commencer un Lundi
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
     const monday = new Date(d.setDate(diff));
-    
     const week = [];
     for (let i = 0; i < 7; i++) {
       const nextDay = new Date(monday.getTime());
@@ -152,33 +199,38 @@ export function Schedule() {
 
   const weekDays = getWeekDays(currentDate);
 
-  // --- Filtrage des événements selon la vue active ---
   const filteredEvents = events.filter(evt => {
     const evtDate = new Date(evt.event_date);
-    if (viewMode === 'month') {
-      return evtDate.getMonth() === month && evtDate.getFullYear() === year;
-    } else if (viewMode === 'day') {
-      return evtDate.toDateString() === currentDate.toDateString();
-    } else {
-      const startOfWeek = weekDays[0];
-      const endOfWeek = new Date(weekDays[6].getTime());
-      endOfWeek.setHours(23, 59, 59, 999);
-      return evtDate >= startOfWeek && evtDate <= endOfWeek;
-    }
+    if (viewMode === 'month') return evtDate.getMonth() === month && evtDate.getFullYear() === year;
+    if (viewMode === 'day') return evtDate.toDateString() === currentDate.toDateString();
+    return evtDate >= weekDays[0] && evtDate <= weekDays[6];
   });
 
   return (
     <div className="flex flex-col gap-6 pt-2 pb-16 animate-in fade-in duration-300 text-text">
       
-      {/* En-tête */}
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-1">
         <div>
           <h1 className="font-serif text-3xl font-bold">Mon planning</h1>
-          <p className="text-text-muted text-xs">Calendrier interactif et gestion de vos échéances juridiques.</p>
+          <p className="text-text-muted text-xs">Calendrier interactif et synchronisation iCalendar (ICS).</p>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Sélecteur de vue */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button 
+            onClick={handleExportICS}
+            className="bg-surface border border-border px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 hover:border-accent/50 transition-colors cursor-pointer"
+            title="Exporter en fichier .ics"
+          >
+            <Download size={15} className="text-accent" />
+            <span>Export ICS</span>
+          </button>
+
+          <label className="bg-surface border border-border px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 hover:border-accent/50 transition-colors cursor-pointer">
+            <Upload size={15} className="text-info" />
+            <span>Import ICS</span>
+            <input type="file" accept=".ics" onChange={handleImportICS} className="hidden" />
+          </label>
+
           <div className="flex bg-surface border border-border rounded-xl p-1">
             {(['month', 'week', 'day'] as const).map(mode => (
               <button
@@ -203,7 +255,7 @@ export function Schedule() {
         </div>
       </header>
 
-      {/* --- TITRE DE NAVIGATION ET FLÈCHES --- */}
+      {/* Calendrier Visuel Interactif */}
       <Card className="bg-surface border-border p-4 flex flex-col gap-4">
         
         <div className="flex justify-between items-center px-2">
@@ -250,7 +302,7 @@ export function Schedule() {
                     key={dayNum}
                     onClick={() => {
                       setCurrentDate(targetDate);
-                      setViewMode('day'); // Clic sur un jour -> bascule en vue journalière de ce jour
+                      setViewMode('day');
                     }}
                     className={`h-12 rounded-xl flex flex-col items-center justify-center relative cursor-pointer transition-all p-1 ${
                       isToday ? 'bg-accent/20 border border-accent text-accent font-bold' : 'hover:bg-surface-elevated text-text border border-transparent'
@@ -276,7 +328,7 @@ export function Schedule() {
           </div>
         )}
 
-        {/* 2. VUE HEBDOMADAIRE (7 jours de la semaine) */}
+        {/* 2. VUE HEBDOMADAIRE */}
         {viewMode === 'week' && (
           <div className="grid grid-cols-1 md:grid-cols-7 gap-2">
             {weekDays.map((day, idx) => {
@@ -322,14 +374,13 @@ export function Schedule() {
           </div>
         )}
 
-        {/* 3. VUE JOURNALIÈRE (Créneaux horaires 08:00 à 20:00) */}
+        {/* 3. VUE JOURNALIÈRE */}
         {viewMode === 'day' && (
           <div className="flex flex-col gap-2 max-h-[500px] overflow-y-auto pr-2">
             {Array.from({ length: 13 }).map((_, hourIdx) => {
-              const hour = hourIdx + 8; // de 08:00 à 20:00
+              const hour = hourIdx + 8;
               const hourStr = `${String(hour).padStart(2, '0')}:00`;
               
-              // Événements à cette heure exacte
               const hourEvents = filteredEvents.filter(e => {
                 const evDate = new Date(e.event_date);
                 return evDate.getHours() === hour;
@@ -355,10 +406,10 @@ export function Schedule() {
                             <p className="text-xs text-text-muted mt-0.5">{ev.courses?.title || 'Matière générale'}</p>
                           </div>
                           <div className="flex items-center gap-1">
-                            <button onClick={(e) => handleEdit(ev, e)} className="p-1 text-text-muted hover:text-accent">
+                            <button onClick={(e) => handleEdit(ev, e)} className="p-1 text-text-muted hover:text-accent cursor-pointer">
                               <Edit3 size={14} />
                             </button>
-                            <button onClick={(e) => handleDelete(ev.id, e)} className="p-1 text-text-muted hover:text-danger">
+                            <button onClick={(e) => handleDelete(ev.id, e)} className="p-1 text-text-muted hover:text-danger cursor-pointer">
                               <Trash2 size={14} />
                             </button>
                           </div>
@@ -378,7 +429,7 @@ export function Schedule() {
 
       </Card>
 
-      {/* --- LISTE DES ÉVÉNEMENTS DE LA PÉRIODE --- */}
+      {/* --- LISTE DES ÉVÉNEMENTS --- */}
       <div className="flex flex-col gap-3">
         <h2 className="font-serif text-lg font-semibold px-1">
           {viewMode === 'month' && 'Événements du mois'}
