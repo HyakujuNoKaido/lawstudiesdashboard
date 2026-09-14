@@ -413,3 +413,24 @@ export async function fetchExamSimulations() {
   if (error) return [];
   return data || [];
 }
+
+export async function searchGlobal(keyword: string) {
+  if (!keyword || keyword.trim().length === 0) {
+    return { courses: [], notes: [], caseLaws: [], caseStudies: [] };
+  }
+  const term = `%${keyword}%`;
+  
+  const [coursesRes, notesRes, caseLawsRes, caseStudiesRes] = await Promise.all([
+    supabase.from('courses').select('id, title, course_code').ilike('title', term).limit(5),
+    supabase.from('notes').select('id, title, course_id').ilike('title', term).limit(5),
+    supabase.from('case_laws').select('id, title, atf_citation').ilike('title', term).limit(5),
+    supabase.from('case_studies').select('id, title').ilike('title', term).limit(5)
+  ]);
+
+  return {
+    courses: coursesRes.data || [],
+    notes: notesRes.data || [],
+    caseLaws: caseLawsRes.data || [],
+    caseStudies: caseStudiesRes.data || []
+  };
+}
