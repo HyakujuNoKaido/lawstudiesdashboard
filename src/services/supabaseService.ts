@@ -304,4 +304,21 @@ export async function saveCaseLaw(caseLaw: { id?: string; course_id: string; cha
     if (error) throw error;
     return data;
   }
+  export async function createMultipleCourses(coursesList: Array<{ title: string; course_code?: string; ects: number; status: string }>) {
+  const formatted = coursesList.map(c => ({
+    user_id: SOLO_USER_ID,
+    title: c.title,
+    course_code: c.course_code || 'DROIT',
+    ects: Number(c.ects) || 6,
+    status: c.status || 'En cours'
+  }));
+
+  const { data, error } = await supabase
+    .from('courses')
+    .insert(formatted)
+    .select();
+
+  if (error) throw error;
+  return data;
+}
 }
