@@ -1,41 +1,50 @@
-export type ReviewQuality = 'again' | 'hard' | 'good' | 'easy';
 
-export interface CardState {
+export interface SM2Result {
+  repetitions: number;
   intervalDays: number;
   easeFactor: number;
-  repetitions: number;
-  lapses: number;
 }
 
 /**
- * Calcule le prochain état d'une flashcard selon la qualité de la réponse.
- * Inspiré de SM-2 avec des intervalles ajustés pour un usage étudiant court/moyen terme.
+ * Calcule les nouveaux paramètres de répétition espacée selon l'algorithme SM-2.
+ * @param quality Note de 0 à 5 (0 = échec total, 3 = correct, 5 = parfait)
+ * @param repetitions Nombre de répétitions consécutives réussies
+ * @param interval Jours actuels avant la prochaine révision
+ * @param easeFactor Facteur de facilité actuel (minimum 1.3)
  */
-export function calculateNextReview(currentState: CardState, quality: ReviewQuality): CardState {
-  let { intervalDays, easeFactor, repetitions, lapses } = currentState;
-  
-  if (quality === 'again') {
-    repetitions = 0;
-    lapses += 1;
-    intervalDays = 0.001; // ~1 minute (à gérer via une file d'attente locale pour la session)
-    easeFactor = Math.max(1.3, easeFactor - 0.2);
-  } else {
-    if (quality === 'hard') {
-      easeFactor = Math.max(1.3, easeFactor - 0.15);
-      intervalDays = repetitions === 0 ? 0.01 : intervalDays * 1.2;
-    } else if (quality === 'good') {
-      intervalDays = repetitions === 0 ? 1 : intervalDays * easeFactor;
-    } else if (quality === 'easy') {
-      easeFactor += 0.15;
-      intervalDays = repetitions === 0 ? 4 : intervalDays * easeFactor * 1.3;
+export function calculateSM2(
+  quality: number,
+  repetitions: number,
+  interval: number,
+  easeFactor: number
+): SM2Result {
+  let nextRepetitions = repetitions;
+  let nextInterval = interval;
+  let nextEaseFactor = easeFactor;
+
+  if (quality >= 3) {
+    if (nextRepetitions === 0) {
+      nextInterval = 1;
+    } else if (nextRepetitions === 1) {
+      nextInterval = 6;
+    } else {
+      nextInterval = Math.round(interval * easeFactor);
     }
-    repetitions += 1;
+    nextRepetitions += 1;
+  } else {
+    nextRepetitions = 0;
+    nextInterval = 1;
+  }
+
+  // Formule standard SM-2 pour l'ajustement du facteur de facilité
+  nextEaseFactor = easeFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
+  if (nextEaseFactor < 1.3) {
+    nextEaseFactor = 1.3;
   }
 
   return {
-    intervalDays: Number(intervalDays.toFixed(3)),
-    easeFactor: Number(easeFactor.toFixed(3)),
-    repetitions,
-    lapses
+    repetitions: nextRepetitions,
+    intervalDays: nextInterval,
+    easeFactor: Number(nextEaseFactor.toFixed(2))
   };
 }
