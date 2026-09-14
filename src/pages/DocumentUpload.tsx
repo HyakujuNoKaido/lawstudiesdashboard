@@ -1,22 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, UploadCloud, FileType2, Save } from 'lucide-react';
-import { uploadCourseDocument, fetchCourses } from '../services/supabaseService';
+import { ChevronLeft, UploadCloud, FileType2, Save, Scale } from 'lucide-react';
+import { uploadCourseDocument, fetchCourses, fetchCourseChapters } from '../services/supabaseService';
 
 export function DocumentUpload() {
   const navigate = useNavigate();
   const [courses, setCourses] = useState<any[]>([]);
+  const [chapters, setChapters] = useState<any[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [courseId, setCourseId] = useState('');
+  const [chapterId, setChapterId] = useState('');
   const [docCategory, setDocCategory] = useState('Support de cours');
+  const [atfRef, setAtfRef] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     fetchCourses().then(data => {
       setCourses(data);
-      if (data.length > 0) setCourseId(data[0].id);
-    }).catch(err => console.error("Erreur chargement cours :", err));
+      if (data.length > 0) {
+        setCourseId(data[0].id);
+      }
+    });
   }, []);
+
+  useEffect(() => {
+    if (courseId) {
+      fetchCourseChapters(courseId).then(data => {
+        setChapters(data);
+        if (data.length > 0) setChapterId(data[0].id);
+        else setChapterId('');
+      });
+    }
+  }, [courseId]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -30,11 +45,11 @@ export function DocumentUpload() {
 
     setLoading(true);
     try {
-      await uploadCourseDocument(selectedFile, courseId, docCategory);
+      await uploadCourseDocument(selectedFile, courseId, docCategory, chapterId || undefined, atfRef || undefined);
       navigate(courseId ? `/courses/${courseId}` : '/courses');
     } catch (error) {
-      console.error("Erreur lors de l'upload du document :", error);
-      alert("Échec de l'envoi du fichier vers le stockage sécurisé.");
+      console.error("Erreur upload document:", error);
+      alert("Échec de l'envoi du fichier.");
     } finally {
       setLoading(false);
     }
@@ -54,7 +69,7 @@ export function DocumentUpload() {
 
         <div>
           <h1 className="font-serif text-3xl mb-1">Ajouter un document</h1>
-          <p className="text-text-muted text-sm">Importez et classifiez un support juridique (PDF, Word, PowerPoint).</p>
+          <p className="text-text-muted text-sm">Importez et reliez un support à un chapitre spécifique.</p>
         </div>
       </header>
 
@@ -101,9 +116,25 @@ export function DocumentUpload() {
               ))}
             </select>
           </div>
-          
+
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium text-text-muted">Catégorie / Type de document</label>
+            <label className="text-sm font-medium text-text-muted">Chapitre du cours</label>
+            <select 
+              value={chapterId}
+              onChange={(e) => setChapterId(e.target.value)}
+              className="w-full bg-surface border border-border rounded-md py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
+            >
+              <option value="">-- Aucun chapitre spécifique --</option>
+              {chapters.map(chap => (
+                <option key={chap.id} value={chap.id}>{chap.title}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium text-text-muted">Type de document</label>
             <select 
               value={docCategory}
               onChange={(e) => setDocCategory(e.target.value)}
@@ -111,10 +142,27 @@ export function DocumentUpload() {
             >
               <option value="Support de cours">Support de cours / Slides</option>
               <option value="Cas pratique">Cas pratique / Jurisprudence</option>
+              <option value="Arrêt ATF">Arrêt du Tribunal fédéral (ATF)</option>
               <option value="Résumé personnel">Résumé / Fiche de révision</option>
               <option value="Autre">Autre document</option>
             </select>
           </div>
+
+          {docCategory === 'Arrêt ATF' && (
+            <div className="flex flex-col gap-2 animate-in fade-in duration-200">
+              <label className="text-sm font-medium text-text-muted flex items-center gap-1.5">
+                <Scale size={14} className="text-warning" />
+                <span>Référence ATF</span>
+              </label>
+              <input 
+                type="text" 
+                value={atfRef}
+                onChange={(e) => setAtfRef(e.target.value)}
+                placeholder="ex: ATF 143 III 1"
+                className="w-full bg-surface border border-border rounded-md py-3 px-4 text-sm focus:outline-none focus:border-accent"
+              />
+            </div>
+          )}
         </div>
 
         <button 
@@ -123,7 +171,7 @@ export function DocumentUpload() {
           className="mt-4 w-full bg-accent text-background rounded-md py-3.5 px-4 flex items-center justify-center gap-2 font-medium hover:bg-accent-strong transition-colors disabled:opacity-50"
         >
           <Save size={18} />
-          <span>{loading ? 'Envoi en cours...' : 'Envoyer et classifier le document'}</span>
+          <span>{loading ? 'Envoi en cours...' : 'Envoyer et associer le document'}</span>
         </button>
 
       </form>
