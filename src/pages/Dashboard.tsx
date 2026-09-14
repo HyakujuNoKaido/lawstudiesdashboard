@@ -27,11 +27,10 @@ export function Dashboard() {
   return (
     <div className="flex flex-col gap-8 pt-2 pb-6 animate-in fade-in duration-300">
       
-      {/* En-tête de bienvenue */}
       <header className="flex justify-between items-center">
         <div>
-          <h1 className="font-serif text-3xl mb-1">Bonjour</h1>
-          <p className="text-text-muted text-sm">Votre espace de droit personnel est synchronisé.</p>
+          <h1 className="font-serif text-3xl mb-1">Lexi Suisse</h1>
+          <p className="text-text-muted text-sm">Tableau de bord académique et juridique.</p>
         </div>
         <button 
           onClick={() => navigate('/add/course')}
@@ -42,7 +41,7 @@ export function Dashboard() {
         </button>
       </header>
 
-      {/* Statistiques globales cliquables */}
+      {/* Statistiques cliquables */}
       <div className="grid grid-cols-2 gap-4">
         <Card onClick={() => navigate('/courses')} className="cursor-pointer hover:border-accent/50 transition-colors flex flex-col gap-2">
           <div className="flex items-center justify-between text-text-muted">
@@ -69,11 +68,11 @@ export function Dashboard() {
         </Card>
       </div>
 
-      {/* Raccourcis d'actions rapides */}
+      {/* Raccourcis rapides */}
       <div className="grid grid-cols-3 gap-3">
         <button 
           onClick={() => navigate('/import')}
-          className="p-4 bg-surface border border-border rounded-xl flex flex-col items-center text-center gap-2 hover:border-accent/50 transition-all group"
+          className="p-4 bg-surface border border-border rounded-xl flex flex-col items-center text-center gap-2 hover:border-accent/50 transition-all group cursor-pointer"
         >
           <div className="w-10 h-10 bg-info/10 text-info rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
             <Upload size={20} />
@@ -83,7 +82,7 @@ export function Dashboard() {
 
         <button 
           onClick={() => navigate('/schedule')}
-          className="p-4 bg-surface border border-border rounded-xl flex flex-col items-center text-center gap-2 hover:border-accent/50 transition-all group"
+          className="p-4 bg-surface border border-border rounded-xl flex flex-col items-center text-center gap-2 hover:border-accent/50 transition-all group cursor-pointer"
         >
           <div className="w-10 h-10 bg-warning/10 text-warning rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
             <CalendarDays size={20} />
@@ -93,7 +92,7 @@ export function Dashboard() {
 
         <button 
           onClick={() => navigate('/study')}
-          className="p-4 bg-surface border border-border rounded-xl flex flex-col items-center text-center gap-2 hover:border-accent/50 transition-all group"
+          className="p-4 bg-surface border border-border rounded-xl flex flex-col items-center text-center gap-2 hover:border-accent/50 transition-all group cursor-pointer"
         >
           <div className="w-10 h-10 bg-accent/10 text-accent rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
             <BrainCircuit size={20} />
@@ -106,7 +105,7 @@ export function Dashboard() {
       <section className="flex flex-col gap-4">
         <div className="flex justify-between items-center">
           <h2 className="font-serif text-xl">Vos cours récents</h2>
-          <button onClick={() => navigate('/courses')} className="text-xs text-accent font-medium flex items-center gap-1 hover:underline">
+          <button onClick={() => navigate('/courses')} className="text-xs text-accent font-medium flex items-center gap-1 hover:underline cursor-pointer">
             <span>Voir tout</span>
             <ChevronRight size={14} />
           </button>
@@ -114,7 +113,7 @@ export function Dashboard() {
 
         {loading ? (
           <div className="text-center py-8 text-text-muted text-sm">Chargement...</div>
-         маслом courses.length === 0 ? (
+        ) : courses.length === 0 ? (
           <div className="text-center py-10 border border-dashed border-border rounded-xl text-text-muted text-sm">
             Aucun cours enregistré. Cliquez sur "Nouveau cours" pour commencer.
           </div>
