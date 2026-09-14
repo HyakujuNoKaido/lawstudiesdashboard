@@ -1,14 +1,31 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Save } from 'lucide-react';
+import { createCourse } from '../services/supabaseService';
 
 export function AddCourse() {
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    title: '',
+    code: '',
+    ects: 6,
+    status: 'En cours',
+    teacher_name: ''
+  });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Simulation d'enregistrement
-    navigate('/courses');
+    setLoading(true);
+    try {
+      await createCourse(formData);
+      navigate('/courses');
+    } catch (error) {
+      console.error("Erreur lors de la création du cours :", error);
+      alert("Erreur lors de l'enregistrement. Vérifiez votre connexion.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -36,6 +53,8 @@ export function AddCourse() {
           <input 
             type="text" 
             required
+            value={formData.title}
+            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
             placeholder="ex: Droit des sociétés"
             className="w-full bg-surface border border-border rounded-md py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors"
           />
@@ -46,6 +65,8 @@ export function AddCourse() {
             <label className="text-sm font-medium text-text-muted">Code (Optionnel)</label>
             <input 
               type="text" 
+              value={formData.code}
+              onChange={(e) => setFormData({ ...formData, code: e.target.value })}
               placeholder="ex: DRO-304"
               className="w-full bg-surface border border-border rounded-md py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors"
             />
@@ -58,18 +79,23 @@ export function AddCourse() {
               required
               min="0"
               step="0.5"
-              placeholder="ex: 6"
+              value={formData.ects}
+              onChange={(e) => setFormData({ ...formData, ects: Number(e.target.value) })}
               className="w-full bg-surface border border-border rounded-md py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors"
             />
           </div>
         </div>
 
         <div className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-text-muted">Semestre</label>
-          <select className="w-full bg-surface border border-border rounded-md py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none">
-            <option value="automne">Semestre d'automne</option>
-            <option value="printemps">Semestre de printemps</option>
-            <option value="annuel">Annuel</option>
+          <label className="text-sm font-medium text-text-muted">Statut</label>
+          <select 
+            value={formData.status}
+            onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+            className="w-full bg-surface border border-border rounded-md py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
+          >
+            <option value="En cours">En cours</option>
+            <option value="Validé">Validé</option>
+            <option value="À reprendre">À reprendre</option>
           </select>
         </div>
 
@@ -77,6 +103,8 @@ export function AddCourse() {
           <label className="text-sm font-medium text-text-muted">Enseignant·e (Optionnel)</label>
           <input 
             type="text" 
+            value={formData.teacher_name}
+            onChange={(e) => setFormData({ ...formData, teacher_name: e.target.value })}
             placeholder="Nom du professeur"
             className="w-full bg-surface border border-border rounded-md py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors"
           />
@@ -84,10 +112,11 @@ export function AddCourse() {
 
         <button 
           type="submit"
-          className="mt-4 w-full bg-accent text-background rounded-md py-3.5 px-4 flex items-center justify-center gap-2 font-medium hover:bg-accent-strong transition-colors"
+          disabled={loading}
+          className="mt-4 w-full bg-accent text-background rounded-md py-3.5 px-4 flex items-center justify-center gap-2 font-medium hover:bg-accent-strong transition-colors disabled:opacity-50"
         >
           <Save size={18} />
-          <span>Enregistrer le cours</span>
+          <span>{loading ? 'Enregistrement...' : 'Enregistrer le cours'}</span>
         </button>
 
       </form>
