@@ -3,11 +3,14 @@ import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout';
 import { Dashboard } from './pages/Dashboard';
 import { Courses } from './pages/Courses';
+import { CourseDetail } from './pages/CourseDetail';
+import { DocumentImport } from './pages/DocumentImport';
 import { StudySession } from './pages/StudySession';
-import { CourseDetail } from './pages/CourseDetail'; // Le nouveau composant que nous allons créer
+import { StudyNoteEditor } from './pages/StudyNoteEditor';
+import { Profile } from './pages/Profile';
 import { BrainCircuit } from 'lucide-react';
 
-// Vue temporaire pour "Réviser" permettant de lancer la session
+// Vue temporaire pour "Réviser" permettant de lancer la session (Flashcards)
 const Study = () => (
   <div className="mt-4 flex flex-col gap-6 animate-in fade-in duration-300">
     <header>
@@ -34,9 +37,8 @@ const Study = () => (
   </div>
 );
 
-// Autres vues temporaires
-const Schedule = () => <div className="mt-4"><h1 className="font-serif text-2xl">Planning</h1></div>;
-const Profile = () => <div className="mt-4"><h1 className="font-serif text-2xl">Profil</h1></div>;
+// Vue temporaire pour le Planning
+const Schedule = () => <div className="mt-4"><h1 className="font-serif text-2xl">Planning</h1><p className="text-text-muted text-sm">Module calendrier en construction.</p></div>;
 
 export default function App() {
   return (
@@ -47,6 +49,7 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="courses" element={<Courses />} />
           <Route path="courses/:courseId" element={<CourseDetail />} />
+          <Route path="import" element={<DocumentImport />} />
           <Route path="study" element={<Study />} />
           <Route path="schedule" element={<Schedule />} />
           <Route path="profile" element={<Profile />} />
@@ -54,6 +57,7 @@ export default function App() {
         
         {/* Routes plein écran (sans navigation globale) */}
         <Route path="/session/:deckId" element={<StudySession />} />
+        <Route path="/editor/:noteId" element={<StudyNoteEditor />} />
       </Routes>
     </BrowserRouter>
   );
