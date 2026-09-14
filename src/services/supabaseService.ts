@@ -108,6 +108,24 @@ export async function createFlashcard(card: { course_id: string; chapter_id?: st
   return data;
 }
 
+export async function updateFlashcard(id: string, card: { front: string; back: string; course_id: string }) {
+  const { data, error } = await supabase
+    .from('flashcards')
+    .update({ front: card.front, back: card.back, course_id: card.course_id })
+    .eq('id', id)
+    .select();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteFlashcard(id: string) {
+  const { error } = await supabase
+    .from('flashcards')
+    .delete()
+    .eq('id', id);
+  if (error) throw error;
+}
+
 export async function updateFlashcardProgress(id: string, repetitions: number, intervalDays: number, easeFactor: number) {
   const nextDue = new Date();
   nextDue.setDate(nextDue.getDate() + intervalDays);
