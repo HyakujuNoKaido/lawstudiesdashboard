@@ -1,43 +1,43 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, UploadCloud, FileType2, Save } from 'lucide-react';
-import { Card } from '../components/ui/Card';
+import { uploadCourseDocument, fetchCourses } from '../services/supabaseService';
 
 export function DocumentUpload() {
   const navigate = useNavigate();
-  const [dragActive, setDragActive] = useState(false);
+  const [courses, setCourses] = useState<any[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [courseId, setCourseId] = useState('');
+  const [docType, setDocType] = useState('support');
+  const [loading, setLoading] = useState(false);
 
-  const handleDrag = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setDragActive(true);
-    } else if (e.type === "dragleave") {
-      setDragActive(false);
-    }
-  };
+  useEffect(() => {
+    fetchCourses().then(data => {
+      setCourses(data);
+      if (data.length > 0) setCourseId(data[0].id);
+    }).catch(err => console.error("Erreur chargement cours :", err));
+  }, []);
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setSelectedFile(e.dataTransfer.files[0]);
-    }
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    e.preventDefault();
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setSelectedFile(e.target.files[0]);
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Simulation : Retourne au cours après l'upload
-    navigate('/courses/1'); 
+    if (!selectedFile) return;
+
+    setLoading(true);
+    try {
+      await uploadCourseDocument(selectedFile, courseId, docType);
+      navigate(courseId ? `/courses/${courseId}` : '/courses');
+    } catch (error) {
+      console.error("Erreur lors de l'upload du document :", error);
+      alert("Échec de l'envoi du fichier vers le stockage sécurisé.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -60,20 +60,12 @@ export function DocumentUpload() {
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         
-        {/* Zone de Drag & Drop */}
-        <div 
-          className={`relative border-2 border-dashed rounded-lg p-8 flex flex-col items-center justify-center text-center transition-colors ${
-            dragActive ? 'border-accent bg-accent/5' : 'border-border hover:border-text-muted/50 hover:bg-surface'
-          }`}
-          onDragEnter={handleDrag}
-          onDragLeave={handleDrag}
-          onDragOver={handleDrag}
-          onDrop={handleDrop}
-        >
+        <div className="relative border-2 border-dashed border-border rounded-lg p-8 flex flex-col items-center justify-center text-center hover:border-accent/50 hover:bg-surface transition-colors">
           <input 
             type="file" 
+            required
             accept=".pdf,.doc,.docx,.ppt,.pptx"
-            onChange={handleChange}
+            onChange={handleFileChange}
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
           />
           
@@ -91,35 +83,32 @@ export function DocumentUpload() {
                 <UploadCloud size={24} />
               </div>
               <p className="font-medium text-sm text-text">Appuyez pour choisir un fichier</p>
-              <p className="text-xs text-text-muted">ou glissez-déposez le document ici</p>
+              <p className="text-xs text-text-muted">PDF, PPTX, DOCX pris en charge</p>
             </div>
           )}
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-text-muted">Titre du document</label>
-          <input 
-            type="text" 
-            required
-            defaultValue={selectedFile ? selectedFile.name.split('.')[0] : ''}
-            placeholder="ex: Support Séminaire 01"
-            className="w-full bg-surface border border-border rounded-md py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors"
-          />
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium text-text-muted">Cours associé</label>
-            <select className="w-full bg-surface border border-border rounded-md py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none">
-              <option value="1">Droit des obligations (CO)</option>
-              <option value="2">Droit pénal général</option>
-              <option value="3">Introduction à l'économie</option>
+            <select 
+              value={courseId}
+              onChange={(e) => setCourseId(e.target.value)}
+              className="w-full bg-surface border border-border rounded-md py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
+            >
+              {courses.map(c => (
+                <option key={c.id} value={c.id}>{c.title}</option>
+              ))}
             </select>
           </div>
           
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium text-text-muted">Type de document</label>
-            <select className="w-full bg-surface border border-border rounded-md py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none">
+            <select 
+              value={docType}
+              onChange={(e) => setDocType(e.target.value)}
+              className="w-full bg-surface border border-border rounded-md py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
+            >
               <option value="support">Support de cours / Slides</option>
               <option value="consignes">Consignes / Cas pratique</option>
               <option value="resume">Résumé personnel</option>
@@ -130,11 +119,11 @@ export function DocumentUpload() {
 
         <button 
           type="submit"
-          disabled={!selectedFile}
-          className="mt-4 w-full bg-accent text-background rounded-md py-3.5 px-4 flex items-center justify-center gap-2 font-medium hover:bg-accent-strong transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={!selectedFile || loading}
+          className="mt-4 w-full bg-accent text-background rounded-md py-3.5 px-4 flex items-center justify-center gap-2 font-medium hover:bg-accent-strong transition-colors disabled:opacity-50"
         >
           <Save size={18} />
-          <span>Enregistrer le document</span>
+          <span>{loading ? 'Envoi en cours...' : 'Envoyer et stocker le document'}</span>
         </button>
 
       </form>
