@@ -10,7 +10,7 @@
     --border: #2A2A38;
     --text: #F3F3F6;
     --text-muted: #9E9EAE;
-    --accent: #FFB800; /* Or / Jaune SuisseLaw */
+    --accent: #FFB800;
     --accent-strong: #E5A600;
   }
 
@@ -22,33 +22,34 @@
   }
 }
 
-/* Effets de lueur et ombres personnalisées (Glow effects) */
-.glow-gold {
-  box-shadow: 0 0 20px rgba(255, 184, 0, 0.25);
+@layer utilities {
+  .glow-gold {
+    box-shadow: 0 0 20px rgba(255, 184, 0, 0.25);
+  }
+
+  .glow-gold-subtle {
+    box-shadow: 0 0 12px rgba(255, 184, 0, 0.12);
+  }
+
+  .glow-green {
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 }
 
-.glow-gold-subtle {
-  box-shadow: 0 0 12px rgba(255, 184, 0, 0.12);
-}
+@layer components {
+  button, .card-interactive {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
 
-.glow-green {
-  box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
-}
-
-/* Transitions fluides pour tous les boutons et cartes */
-button, .card-interactive {
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-button:active {
-  transform: scale(0.97);
-}
-
-/* Scrollbar discrète */
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;
-}
-.scrollbar-hide {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+  button:active {
+    transform: scale(0.97);
+  }
 }
