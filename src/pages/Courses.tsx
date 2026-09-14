@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { ProgressBar } from '../components/ui/ProgressBar';
-import { Search, SlidersHorizontal, Clock, CheckCircle2, AlertCircle, Calendar } from 'lucide-react';
+import { Search, SlidersHorizontal, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
 import { fetchCourses } from '../services/supabaseService';
 
 export function Courses() {
@@ -72,38 +72,41 @@ export function Courses() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredCourses.map(course => (
-            <Card key={course.id} onClick={() => navigate(`/courses/${course.id}`)} className="group">
-              
-              <div className="flex justify-between items-start mb-3">
-                <Badge variant="outline">{course.course_code || 'COURS'}</Badge>
+          {filteredCourses.map(course => {
+            const realProgress = course.status === 'Validé' ? 100 : 0;
+            return (
+              <Card key={course.id} onClick={() => navigate(`/courses/${course.id}`)} className="group cursor-pointer">
                 
-                {course.status === 'En cours' && <Badge variant="accent" icon={<Clock size={12}/>}>En cours</Badge>}
-                {course.status === 'Validé' && <Badge variant="success" icon={<CheckCircle2 size={12}/>}>Validé</Badge>}
-                {course.status === 'À reprendre' && <Badge variant="danger" icon={<AlertCircle size={12}/>}>À reprendre</Badge>}
-              </div>
-
-              <h3 className="font-medium text-lg leading-tight mb-4 group-hover:text-accent transition-colors">
-                {course.title}
-              </h3>
-
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center gap-2">
-                  <Badge>{course.ects} ECTS</Badge>
-                  {course.teacher_name && <Badge variant="default">{course.teacher_name}</Badge>}
+                <div className="flex justify-between items-start mb-3">
+                  <Badge variant="outline">{course.course_code || 'COURS'}</Badge>
+                  
+                  {course.status === 'En cours' && <Badge variant="accent" icon={<Clock size={12}/>}>En cours</Badge>}
+                  {course.status === 'Validé' && <Badge variant="success" icon={<CheckCircle2 size={12}/>}>Validé</Badge>}
+                  {course.status === 'À reprendre' && <Badge variant="danger" icon={<AlertCircle size={12}/>}>À reprendre</Badge>}
                 </div>
 
-                <div className="space-y-1.5 mt-2">
-                  <div className="flex justify-between text-xs text-text-muted">
-                    <span>Progression</span>
-                    <span>{course.status === 'Validé' ? '100%' : '35%'}</span>
+                <h3 className="font-medium text-lg leading-tight mb-4 group-hover:text-accent transition-colors">
+                  {course.title}
+                </h3>
+
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2">
+                    <Badge>{course.ects} ECTS</Badge>
+                    {course.teacher_name && <Badge variant="default">{course.teacher_name}</Badge>}
                   </div>
-                  <ProgressBar value={course.status === 'Validé' ? 100 : 35} max={100} colorClass="bg-info" />
+
+                  <div className="space-y-1.5 mt-2">
+                    <div className="flex justify-between text-xs text-text-muted">
+                      <span>Progression</span>
+                      <span>{realProgress}%</span>
+                    </div>
+                    <ProgressBar value={realProgress} max={100} colorClass="bg-info" />
+                  </div>
                 </div>
-              </div>
-              
-            </Card>
-          ))}
+                
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>
