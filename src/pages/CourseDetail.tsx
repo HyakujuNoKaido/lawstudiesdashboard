@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft, MoreVertical, FileText, Upload, Plus, Clock, File } from 'lucide-react';
+import { ChevronLeft, MoreVertical, FileText, Upload, Plus, Clock, File, Filter } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
 import { Card } from '../components/ui/Card';
 import { fetchCourseById, fetchCourseDocuments } from '../services/supabaseService';
 
 const TABS = ['Aperçu', 'Documents', 'Fiches', 'Flashcards', 'Évaluations', 'Planning'];
+const DOC_FILTERS = ['Tous', 'Support de cours', 'Cas pratique', 'Résumé personnel', 'Autre'];
 
 export function CourseDetail() {
   const navigate = useNavigate();
   const { courseId } = useParams();
   const [activeTab, setActiveTab] = useState('Documents');
+  const [selectedDocFilter, setSelectedDocFilter] = useState('Tous');
   const [course, setCourse] = useState<any>(null);
   const [documents, setDocuments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,6 +31,11 @@ export function CourseDetail() {
       .catch(err => console.error("Erreur chargement détail cours:", err))
       .finally(() => setLoading(false));
   }, [courseId]);
+
+  const filteredDocuments = documents.filter(doc => {
+    if (selectedDocFilter === 'Tous') return true;
+    return doc.document_type === selectedDocFilter;
+  });
 
   if (loading) {
     return <div className="text-center py-12 text-text-muted text-sm">Chargement du cours...</div>;
@@ -94,8 +101,8 @@ export function CourseDetail() {
       <main>
         {activeTab === 'Documents' && (
           <div className="flex flex-col gap-4 animate-in fade-in duration-200">
-            <div className="flex justify-between items-center mb-2">
-              <h2 className="font-medium">Fichiers du cours</h2>
+            <div className="flex justify-between items-center mb-1">
+              <h2 className="font-medium">Fichiers et supports</h2>
               <button 
                 onClick={() => navigate('/add/document')}
                 className="flex items-center gap-1.5 text-xs font-semibold text-background bg-text px-3 py-1.5 rounded-sm hover:bg-text-muted transition-colors"
@@ -105,26 +112,49 @@ export function CourseDetail() {
               </button>
             </div>
 
-            {documents.length === 0 ? (
-              <div className="text-center py-8 border border-dashed border-border rounded-lg text-text-muted text-sm">
-                Aucun document importé pour ce cours.
+            {/* Sous-filtres par catégorie de document */}
+            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+              {DOC_FILTERS.map(filter => (
+                <button
+                  key={filter}
+                  onClick={() => setSelectedDocFilter(filter)}
+                  className={`whitespace-nowrap px-3 py-1 rounded text-xs font-medium transition-colors border ${
+                    selectedDocFilter === filter 
+                      ? 'bg-accent/10 text-accent border-accent/30' 
+                      : 'bg-surface text-text-muted border-border hover:border-text-muted/50'
+                  }`}
+                >
+                  {filter}
+                </button>
+              ))}
+            </div>
+
+            {filteredDocuments.length === 0 ? (
+              <div className="text-center py-10 border border-dashed border-border rounded-lg text-text-muted text-sm">
+                Aucun document ne correspond à ce filtre.
               </div>
             ) : (
-              documents.map(doc => (
+              filteredDocuments.map(doc => (
                 <Card 
                   key={doc.id} 
                   onClick={() => navigate(`/viewer/${doc.id}`)} 
                   className="group flex items-center justify-between p-4 cursor-pointer hover:border-accent/50"
                 >
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 min-w-0">
                     <div className="w-10 h-10 bg-info/10 text-info rounded flex items-center justify-center shrink-0">
                       <FileText size={20} />
                     </div>
                     <div className="min-w-0">
-                      <p className="font-medium text-sm group-hover:text-accent transition-colors truncate">{doc.original_name}</p>
-                      <p className="text-xs text-text-muted mt-0.5">
-                        {new Date(doc.created_at).toLocaleDateString()} • {(doc.size_bytes / (1024 * 1024)).toFixed(2)} MB
-                      </p>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <p className="font-medium text-sm group-hover:text-accent transition-colors truncate">{doc.original_name}</p>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-text-muted">
+                        <span className="text-accent font-medium">{doc.document_type || 'Document'}</span>
+                        <span>•</span>
+                        <span>{new Date(doc.created_at).toLocaleDateString()}</span>
+                        <span>•</span>
+                        <span>{(doc.size_bytes / (1024 * 1024)).toFixed(2)} MB</span>
+                      </div>
                     </div>
                   </div>
                   <button onClick={(e) => { e.stopPropagation(); }} className="text-text-muted hover:text-text p-2 shrink-0">
