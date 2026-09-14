@@ -1,19 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Save, Calculator, AlertCircle } from 'lucide-react';
 import { Card } from '../components/ui/Card';
+import { fetchCourses, createGrade } from '../services/supabaseService';
 
 export function AddGrade() {
   const navigate = useNavigate();
-  const [simulatedGrade, setSimulatedGrade] = useState<string>('');
-  
-  // Constantes suisses de démonstration
-  const CREDITS = 12;
-  const CURRENT_AVERAGE = 4.2;
+  const [courses, setCourses] = useState<any[]>([]);
+  const [courseId, setCourseId] = useState('');
+  const [grade, setGrade] = useState('');
+  const [weight, setWeight] = useState(100);
+  const [evalType, setEvalType] = useState('Examen final (1ère tentative)');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    fetchCourses().then(data => {
+      setCourses(data);
+      if (data.length > 0) setCourseId(data[0].id);
+    });
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    navigate('/courses/1');
+    if (!courseId || !grade) return;
+
+    setLoading(true);
+    try {
+      await createGrade({
+        course_id: courseId,
+        grade: parseFloat(grade),
+        weight: Number(weight),
+        eval_type: evalType
+      });
+      navigate(`/courses/${courseId}`);
+    } catch (error) {
+      console.error("Erreur enregistrement note:", error);
+      alert("Échec de l'enregistrement de la note.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -38,9 +63,14 @@ export function AddGrade() {
         
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium text-text-muted">Cours / Matière</label>
-          <select className="w-full bg-surface border border-border rounded-md py-3 px-4 text-sm focus:outline-none focus:border-accent appearance-none">
-            <option value="1">Droit des obligations (12 ECTS)</option>
-            <option value="2">Droit pénal général (9 ECTS)</option>
+          <select 
+            value={courseId}
+            onChange={(e) => setCourseId(e.target.value)}
+            className="w-full bg-surface border border-border rounded-md py-3 px-4 text-sm focus:outline-none focus:border-accent appearance-none"
+          >
+            {courses.map(c => (
+              <option key={c.id} value={c.id}>{c.title} ({c.ects} ECTS)</option>
+            ))}
           </select>
         </div>
 
@@ -54,8 +84,9 @@ export function AddGrade() {
               max="6.0"
               placeholder="ex: 4.5"
               required
+              value={grade}
+              onChange={(e) => setGrade(e.target.value)}
               className="w-full bg-surface border border-border rounded-md py-3 px-4 text-sm focus:outline-none focus:border-accent"
-              onChange={(e) => setSimulatedGrade(e.target.value)}
             />
           </div>
           
@@ -63,7 +94,8 @@ export function AddGrade() {
             <label className="text-sm font-medium text-text-muted">Poids (%)</label>
             <input 
               type="number" 
-              defaultValue={100}
+              value={weight}
+              onChange={(e) => setWeight(Number(e.target.value))}
               min="0"
               max="100"
               className="w-full bg-surface border border-border rounded-md py-3 px-4 text-sm focus:outline-none focus:border-accent"
@@ -73,15 +105,18 @@ export function AddGrade() {
 
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium text-text-muted">Type d'évaluation</label>
-          <select className="w-full bg-surface border border-border rounded-md py-3 px-4 text-sm focus:outline-none focus:border-accent appearance-none">
-            <option value="exam">Examen final (1ère tentative)</option>
-            <option value="exam_retake">Examen final (Rattrapage)</option>
-            <option value="continuous">Contrôle continu</option>
-            <option value="paper">Travail écrit / Séminaire</option>
+          <select 
+            value={evalType}
+            onChange={(e) => setEvalType(e.target.value)}
+            className="w-full bg-surface border border-border rounded-md py-3 px-4 text-sm focus:outline-none focus:border-accent appearance-none"
+          >
+            <option value="Examen final (1ère tentative)">Examen final (1ère tentative)</option>
+            <option value="Examen final (Rattrapage)">Examen final (Rattrapage)</option>
+            <option value="Contrôle continu">Contrôle continu</option>
+            <option value="Travail écrit / Séminaire">Travail écrit / Séminaire</option>
           </select>
         </div>
 
-        {/* Simulateur */}
         <Card className="mt-2 border-info/20 bg-info/5">
           <div className="flex items-center gap-2 text-info mb-3">
             <Calculator size={18} />
@@ -90,34 +125,26 @@ export function AddGrade() {
           
           <div className="flex items-center justify-between">
             <div className="flex flex-col">
-              <span className="text-xs text-text-muted">Moyenne actuelle</span>
-              <span className="font-medium">{CURRENT_AVERAGE.toFixed(2)}</span>
+              <span className="text-xs text-text-muted">Note saisie</span>
+              <span className="font-medium">{grade || '--'}</span>
             </div>
-            
             <div className="text-text-muted">→</div>
-            
             <div className="flex flex-col text-right">
-              <span className="text-xs text-text-muted">Moyenne projetée</span>
-              <span className={`font-medium ${simulatedGrade && parseFloat(simulatedGrade) >= 4.0 ? 'text-success' : simulatedGrade ? 'text-warning' : 'text-text'}`}>
-                {simulatedGrade 
-                  ? ((CURRENT_AVERAGE * 168 + parseFloat(simulatedGrade) * CREDITS) / 180).toFixed(2)
-                  : '--'}
+              <span className="text-xs text-text-muted">Validation (Seuil : 4.0)</span>
+              <span className={`font-medium ${grade && parseFloat(grade) >= 4.0 ? 'text-success' : grade ? 'text-danger' : 'text-text'}`}>
+                {grade ? (parseFloat(grade) >= 4.0 ? 'Validé' : 'Non validé') : '--'}
               </span>
             </div>
-          </div>
-          
-          <div className="mt-3 flex items-start gap-2 text-[10px] text-text-muted">
-            <AlertCircle size={12} className="shrink-0 mt-0.5" />
-            <p>Il s'agit d'une estimation. Les règlements stricts de votre université prévalent toujours sur ce calcul.</p>
           </div>
         </Card>
 
         <button 
           type="submit"
-          className="mt-4 w-full bg-accent text-background rounded-md py-3.5 px-4 flex items-center justify-center gap-2 font-medium hover:bg-accent-strong transition-colors"
+          disabled={loading}
+          className="mt-4 w-full bg-accent text-background rounded-md py-3.5 px-4 flex items-center justify-center gap-2 font-medium hover:bg-accent-strong transition-colors disabled:opacity-50"
         >
           <Save size={18} />
-          <span>Enregistrer la note</span>
+          <span>{loading ? 'Enregistrement...' : 'Enregistrer la note'}</span>
         </button>
 
       </form>
