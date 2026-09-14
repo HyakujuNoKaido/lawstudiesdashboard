@@ -2,7 +2,9 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout';
 import { Dashboard } from './pages/Dashboard';
+import { Courses } from './pages/Courses';
 import { StudySession } from './pages/StudySession';
+import { CourseDetail } from './pages/CourseDetail'; // Le nouveau composant que nous allons créer
 import { BrainCircuit } from 'lucide-react';
 
 // Vue temporaire pour "Réviser" permettant de lancer la session
@@ -33,7 +35,6 @@ const Study = () => (
 );
 
 // Autres vues temporaires
-const Courses = () => <div className="mt-4"><h1 className="font-serif text-2xl">Cours</h1></div>;
 const Schedule = () => <div className="mt-4"><h1 className="font-serif text-2xl">Planning</h1></div>;
 const Profile = () => <div className="mt-4"><h1 className="font-serif text-2xl">Profil</h1></div>;
 
@@ -41,16 +42,17 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Routes avec navigation */}
+        {/* Routes avec navigation (Layout principal) */}
         <Route path="/" element={<AppLayout />}>
           <Route index element={<Dashboard />} />
           <Route path="courses" element={<Courses />} />
+          <Route path="courses/:courseId" element={<CourseDetail />} />
           <Route path="study" element={<Study />} />
           <Route path="schedule" element={<Schedule />} />
           <Route path="profile" element={<Profile />} />
         </Route>
         
-        {/* Routes plein écran (sans navigation) */}
+        {/* Routes plein écran (sans navigation globale) */}
         <Route path="/session/:deckId" element={<StudySession />} />
       </Routes>
     </BrowserRouter>
