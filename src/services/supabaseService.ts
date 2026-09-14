@@ -1,6 +1,5 @@
 import { supabase } from '../lib/supabase';
-
-const SOLO_USER_ID = '00000000-0000-0000-0000-000000000000';
+import { SOLO_USER_ID } from '../lib/constants';
 
 export async function fetchCourses(semester?: string) {
   let query = supabase.from('courses').select('*');
