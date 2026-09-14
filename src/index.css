@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-background: #090a0e;
+    --color-surface: #161822;
+    --color-surface-elevated: #202331;
+    --color-border: #2e3241;
+    --color-text: #f8f7f2;
+    --color-text-muted: #9398a7;
+    --color-accent: #f2c96b;
+    --color-accent-strong: #b88727;
+    --color-success: #57d39c;
+    --color-warning: #f3aa55;
+    --color-danger: #ff727b;
+    --color-info: #78a9ff;
+    
+    --radius-sm: 12px;
+    --radius-md: 16px;
+    --radius-lg: 23px;
+  }
+}
