@@ -1,24 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, BrainCircuit, CalendarDays, Award, ChevronRight, AlertTriangle, Clock, Scale } from 'lucide-react';
+import { BookOpen, BrainCircuit, CalendarDays, Upload, Plus, Award, ChevronRight, AlertTriangle, Clock, Scale } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { ProgressBar } from '../components/ui/ProgressBar';
-import { fetchCourses, fetchFlashcards, fetchEvents } from '../services/supabaseService';
+import { fetchCourses, fetchFlashcards, fetchEvents, supabase } from '../services/supabaseService';
+
+const SOLO_USER_ID = '00000000-0000-0000-0000-000000000000';
 
 export function Dashboard() {
   const navigate = useNavigate();
   const [courses, setCourses] = useState<any[]>([]);
   const [flashcards, setFlashcards] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
+  const [userName, setUserName] = useState('Étudiant');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([fetchCourses(), fetchFlashcards(), fetchEvents()])
-      .then(([coursesData, cardsData, eventsData]) => {
+    Promise.all([
+      fetchCourses(), 
+      fetchFlashcards(), 
+      fetchEvents(),
+      supabase.from('profiles').select('full_name').eq('id', SOLO_USER_ID).single()
+    ])
+      .then(([coursesData, cardsData, eventsData, profileRes]) => {
         setCourses(coursesData);
         setFlashcards(cardsData);
         setEvents(eventsData);
+        if (profileRes.data?.full_name) {
+          // Récupère le prénom ou le nom complet
+          const firstName = profileRes.data.full_name.split(' ')[0];
+          setUserName(firstName);
+        }
       })
       .finally(() => setLoading(false));
   }, []);
@@ -26,10 +39,7 @@ export function Dashboard() {
   const totalECTS = courses.reduce((acc, c) => acc + (c.status === 'Validé' ? Number(c.ects || 0) : 0), 0);
   const dueCards = flashcards.filter(f => new Date(f.due_at) <= new Date()).length;
   
-  // Prochain examen basé sur les événements ou le planning
   const nextExam = events.find(e => e.category === 'Examen' && new Date(e.event_date) >= new Date());
-  
-  // Calcul du nombre de jours avant le prochain examen
   const daysBeforeExam = nextExam 
     ? Math.ceil((new Date(nextExam.event_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
     : null;
@@ -37,33 +47,33 @@ export function Dashboard() {
   return (
     <div className="flex flex-col gap-6 pt-2 pb-12 animate-in fade-in duration-300 text-text">
       
-      {/* En-tête SuisseLaw Study */}
+      {/* En-tête avec prénom dynamique */}
       <header className="flex justify-between items-center px-1">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent">
             <Scale size={22} />
           </div>
           <div>
-            <h1 className="font-serif text-2xl font-bold tracking-tight text-text">Bonjour, Étudiant</h1>
+            <h1 className="font-serif text-2xl font-bold tracking-tight text-text">Bonjour, {userName}</h1>
             <p className="text-text-muted text-xs">Tu construis ton avenir, un cours à la fois.</p>
           </div>
         </div>
         <button 
           onClick={() => navigate('/profile')}
-          className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center text-accent hover:border-accent/50 transition-colors"
+          className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center text-accent hover:border-accent/50 transition-colors cursor-pointer"
         >
           <Award size={20} />
         </button>
       </header>
 
-      {/* 1. Progression ECTS (inspiré du design visuel) */}
+      {/* Progression ECTS */}
       <Card 
         onClick={() => navigate('/courses')}
         className="cursor-pointer bg-surface border-border hover:border-accent/40 transition-all p-5 flex flex-col gap-3 shadow-lg"
       >
         <div className="flex justify-between items-center">
           <span className="text-[11px] font-semibold tracking-wider text-text-muted uppercase">Progression ECTS</span>
-          <span className="text-xs text-text-muted font-medium">Encore {180 - totalECTS} ECTS pour ton diplôme</span>
+          <span className="text-xs text-text-muted font-medium">Encore {Math.max(0, 180 - totalECTS)} ECTS pour ton diplôme</span>
         </div>
         <div className="flex items-baseline justify-between">
           <span className="font-serif text-3xl font-bold text-text">{totalECTS}<span className="text-lg text-text-muted font-normal">/180 ECTS</span></span>
@@ -76,7 +86,7 @@ export function Dashboard() {
         </div>
       </Card>
 
-      {/* 2. Widget Prochain Examen */}
+      {/* Widgets rapides */}
       <Card 
         onClick={() => navigate('/schedule')}
         className="cursor-pointer bg-surface border-border hover:border-accent/40 transition-all p-4 flex items-center justify-between group"
@@ -98,7 +108,6 @@ export function Dashboard() {
         <ChevronRight size={18} className="text-text-muted group-hover:text-accent transition-colors" />
       </Card>
 
-      {/* 3. Widget Flashcards à réviser */}
       <Card 
         onClick={() => navigate('/study')}
         className="cursor-pointer bg-surface border-border hover:border-accent/40 transition-all p-4 flex items-center justify-between group"
@@ -118,29 +127,11 @@ export function Dashboard() {
         <ChevronRight size={18} className="text-text-muted group-hover:text-accent transition-colors" />
       </Card>
 
-      {/* 4. Widget Matière en risque (basé sur les notes < 4.0) */}
-      <Card 
-        onClick={() => navigate('/courses')}
-        className="cursor-pointer bg-surface border-border hover:border-danger/40 transition-all p-4 flex items-center justify-between group"
-      >
-        <div className="flex items-center gap-4">
-          <div className="w-11 h-11 rounded-xl bg-danger/10 text-danger flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-            <AlertTriangle size={22} />
-          </div>
-          <div>
-            <span className="text-[10px] font-semibold tracking-wider text-text-muted uppercase">Matière en attention / risque</span>
-            <h3 className="font-medium text-base text-text mt-0.5">Suivi des notes</h3>
-            <p className="text-xs text-text-muted mt-0.5">Consulte tes moyennes par matière</p>
-          </div>
-        </div>
-        <ChevronRight size={18} className="text-text-muted group-hover:text-accent transition-colors" />
-      </Card>
-
       {/* Raccourci vers les cours récents */}
       <section className="flex flex-col gap-3 mt-2">
         <div className="flex justify-between items-center px-1">
           <h2 className="font-serif text-lg font-semibold">Accès direct aux cours</h2>
-          <button onClick={() => navigate('/courses')} className="text-xs text-accent font-medium hover:underline">
+          <button onClick={() => navigate('/courses')} className="text-xs text-accent font-medium hover:underline cursor-pointer">
             Voir tout
           </button>
         </div>
