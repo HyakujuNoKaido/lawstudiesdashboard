@@ -1,158 +1,182 @@
 import React, { useState } from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { Home, BookOpen, BrainCircuit, CalendarDays, UserRound, Plus, X, Upload, CalendarPlus } from 'lucide-react';
-
-const navItems = [
-  { icon: Home, label: 'Accueil', path: '/' },
-  { icon: BookOpen, label: 'Cours', path: '/courses' },
-  { icon: BrainCircuit, label: 'Réviser', path: '/study' },
-  { icon: CalendarDays, label: 'Planning', path: '/schedule' },
-  { icon: UserRound, label: 'Profil', path: '/profile' },
-];
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { Home, BookOpen, Calendar, BrainCircuit, User, Plus, X, Scale, FileText, Timer, Upload, FileEdit } from 'lucide-react';
 
 export function AppLayout() {
-  const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
 
-  const handleAction = (path: string) => {
-    setIsActionMenuOpen(false);
-    navigate(path);
-  };
+  const isActive = (path: string) => location.pathname === path;
 
   return (
-    <div className="min-h-screen bg-background flex flex-col md:flex-row relative">
+    <div className="min-h-screen bg-background text-text flex flex-col antialiased selection:bg-accent/30 selection:text-accent">
       
-      {/* Navigation Desktop (Sidebar) */}
-      <aside className="hidden md:flex w-64 flex-col bg-surface-elevated border-r border-border p-4 z-10">
-        <div className="mb-8 px-4 flex items-center gap-3">
-          <div className="w-8 h-8 bg-surface rounded-md flex items-center justify-center border border-border overflow-hidden p-1">
-            <img src="/pwa-192x192.png" alt="Lexi Logo" className="w-full h-full object-contain" />
-          </div>
-          <span className="font-serif text-xl tracking-wide">Lexi</span>
-        </div>
-        
-        <button 
-          onClick={() => setIsActionMenuOpen(true)}
-          className="mb-8 w-full bg-accent text-background rounded-md py-2.5 px-4 flex items-center justify-center gap-2 font-medium hover:bg-accent-strong transition-colors"
-        >
-          <Plus size={20} />
-          <span>Ajouter</span>
-        </button>
-
-        <nav className="flex flex-col gap-2">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                className={({ isActive }) => 
-                  `flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${
-                    isActive ? 'bg-surface text-accent' : 'text-text-muted hover:text-text hover:bg-surface/50'
-                  }`
-                }
-              >
-                <Icon size={20} />
-                <span className="font-medium">{item.label}</span>
-              </NavLink>
-            );
-          })}
-        </nav>
-      </aside>
-
-      {/* Zone de contenu principale */}
-      <main className="flex-1 pb-20 md:pb-0 overflow-y-auto z-0">
-        <div className="w-full max-w-[430px] md:max-w-3xl mx-auto p-4 md:p-8">
-          <Outlet />
-        </div>
+      {/* Contenu principal */}
+      <main className="flex-1 max-w-4xl w-full mx-auto p-4 md:p-6 pb-28">
+        <Outlet />
       </main>
 
-      {/* Navigation Mobile (Bottom Bar) */}
-      <nav className="md:hidden fixed bottom-0 w-full bg-surface-elevated border-t border-border pb-safe flex justify-around items-center h-16 px-2 z-40">
-        {navItems.map((item, index) => {
-          const Icon = item.icon;
-          
-          if (index === 2) {
-            return (
-              <React.Fragment key="fab">
-                <button 
-                  onClick={() => setIsActionMenuOpen(true)}
-                  className="w-12 h-12 bg-accent text-background rounded-full flex justify-center items-center -mt-6 shadow-lg active:scale-95 transition-transform"
-                  aria-label="Ajouter"
-                >
-                  <Plus size={24} strokeWidth={2.5} />
-                </button>
-                <NavLink to={item.path} className={({ isActive }) => `flex flex-col items-center gap-1 ${isActive ? 'text-accent' : 'text-text-muted'}`}>
-                  <Icon size={22} strokeWidth={2} />
-                  <span className="text-[10px] font-medium">{item.label}</span>
-                </NavLink>
-              </React.Fragment>
-            );
-          }
-          
-          return (
-            <NavLink 
-              key={item.path} 
-              to={item.path} 
-              className={({ isActive }) => `flex flex-col items-center gap-1 ${isActive ? 'text-accent' : 'text-text-muted'}`}
-            >
-              <Icon size={22} strokeWidth={2} />
-              <span className="text-[10px] font-medium">{item.label}</span>
-            </NavLink>
-          );
-        })}
-      </nav>
-
-      {/* Menu d'actions (Bottom Sheet sur Mobile / Modal sur Desktop) */}
+      {/* Menu d'actions rapides (Modal / Action Sheet) */}
       {isActionMenuOpen && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-background/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div 
-            className="w-full max-w-[430px] bg-surface-elevated border border-border rounded-t-2xl md:rounded-2xl p-6 pb-12 md:pb-6 animate-in slide-in-from-bottom-8 md:slide-in-from-bottom-4 duration-300 shadow-2xl"
-          >
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="font-serif text-2xl">Créer</h2>
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-background/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-surface-elevated border border-border rounded-3xl p-6 shadow-2xl flex flex-col gap-4 animate-in slide-in-from-bottom-5 duration-300">
+            
+            <div className="flex justify-between items-center pb-2 border-b border-border">
+              <div>
+                <h3 className="font-serif text-lg font-bold">Actions rapides</h3>
+                <p className="text-xs text-text-muted">Créez vos livrables juridiques en un clic</p>
+              </div>
               <button 
                 onClick={() => setIsActionMenuOpen(false)}
-                className="w-8 h-8 flex items-center justify-center rounded-full bg-surface text-text-muted hover:text-text transition-colors"
+                className="w-8 h-8 rounded-full bg-surface border border-border flex items-center justify-center text-text-muted hover:text-text cursor-pointer"
               >
-                <X size={20} />
+                <X size={18} />
               </button>
             </div>
 
-            <div className="flex flex-col gap-3">
-              <button onClick={() => handleAction('/add/course')} className="flex items-center gap-4 p-4 rounded-xl bg-surface border border-border hover:border-text-muted/50 transition-colors text-left group">
-                <div className="w-10 h-10 bg-accent/10 text-accent rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+            <div className="grid grid-cols-1 gap-2.5">
+              <button 
+                onClick={() => { setIsActionMenuOpen(false); navigate('/cases/law'); }}
+                className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-surface border border-border hover:border-accent/50 transition-all text-left group cursor-pointer"
+              >
+                <div className="w-10 h-10 rounded-xl bg-warning/10 text-warning flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <FileText size={20} />
+                </div>
+                <div>
+                  <p className="font-medium text-sm text-text">Nouvelle Fiche d'Arrêt (ATF)</p>
+                  <p className="text-xs text-text-muted">Synthèse structurée de jurisprudence</p>
+                </div>
+              </button>
+
+              <button 
+                onClick={() => { setIsActionMenuOpen(false); navigate('/cases/study'); }}
+                className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-surface border border-border hover:border-accent/50 transition-all text-left group cursor-pointer"
+              >
+                <div className="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <Scale size={20} />
+                </div>
+                <div>
+                  <p className="font-medium text-sm text-text">Assistant de Subsumption</p>
+                  <p className="text-xs text-text-muted">Résolution guidée de cas pratique</p>
+                </div>
+              </button>
+
+              <button 
+                onClick={() => { setIsActionMenuOpen(false); navigate('/exams/simulator'); }}
+                className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-surface border border-border hover:border-accent/50 transition-all text-left group cursor-pointer"
+              >
+                <div className="w-10 h-10 rounded-xl bg-info/10 text-info flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <Timer size={20} />
+                </div>
+                <div>
+                  <p className="font-medium text-sm text-text">Examen Blanc Chronométré</p>
+                  <p className="text-xs text-text-muted">Simulation d'épreuve avec compteur de mots</p>
+                </div>
+              </button>
+
+              <button 
+                onClick={() => { setIsActionMenuOpen(false); navigate('/add/course'); }}
+                className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-surface border border-border hover:border-accent/50 transition-all text-left group cursor-pointer"
+              >
+                <div className="w-10 h-10 rounded-xl bg-success/10 text-success flex items-center justify-center group-hover:scale-105 transition-transform">
                   <BookOpen size={20} />
                 </div>
                 <div>
-                  <p className="font-medium">Nouveau cours</p>
-                  <p className="text-xs text-text-muted">Ajouter une matière manuellement</p>
+                  <p className="font-medium text-sm text-text">Nouveau Cours</p>
+                  <p className="text-xs text-text-muted">Ajout de matière et horaires récurrents</p>
                 </div>
               </button>
 
-              <button onClick={() => handleAction('/import')} className="flex items-center gap-4 p-4 rounded-xl bg-surface border border-border hover:border-text-muted/50 transition-colors text-left group">
-                <div className="w-10 h-10 bg-info/10 text-info rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+              <button 
+                onClick={() => { setIsActionMenuOpen(false); navigate('/notes'); }}
+                className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-surface border border-border hover:border-accent/50 transition-all text-left group cursor-pointer"
+              >
+                <div className="w-10 h-10 rounded-xl bg-surface-elevated text-accent flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <FileEdit size={20} />
+                </div>
+                <div>
+                  <p className="font-medium text-sm text-text">Nouvelle Note de Cours</p>
+                  <p className="text-xs text-text-muted">Prise de notes synthétique</p>
+                </div>
+              </button>
+
+              <button 
+                onClick={() => { setIsActionMenuOpen(false); navigate('/import'); }}
+                className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-surface border border-border hover:border-accent/50 transition-all text-left group cursor-pointer"
+              >
+                <div className="w-10 h-10 rounded-xl bg-surface-elevated text-text-muted flex items-center justify-center group-hover:scale-105 transition-transform">
                   <Upload size={20} />
                 </div>
                 <div>
-                  <p className="font-medium">Importer un document</p>
-                  <p className="text-xs text-text-muted">Plan d'études, horaire, relevé de notes</p>
-                </div>
-              </button>
-
-              <button onClick={() => handleAction('/add/grade')} className="flex items-center gap-4 p-4 rounded-xl bg-surface border border-border hover:border-text-muted/50 transition-colors text-left group">
-                <div className="w-10 h-10 bg-warning/10 text-warning rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <CalendarPlus size={20} />
-                </div>
-                <div>
-                  <p className="font-medium">Saisir une note</p>
-                  <p className="text-xs text-text-muted">Ajouter un résultat et ses crédits</p>
+                  <p className="font-medium text-sm text-text">Importation Document / Plan</p>
+                  <p className="text-xs text-text-muted">Génération automatique des cours</p>
                 </div>
               </button>
             </div>
+
           </div>
         </div>
       )}
+
+      {/* Barre de navigation inférieure (Bottom Nav) */}
+      <nav aria-label="Navigation principale" className="fixed bottom-0 left-0 right-0 z-40 bg-surface/90 backdrop-blur-xl border-t border-border px-4 py-2">
+        <div className="max-w-md mx-auto flex items-center justify-around relative">
+          
+          <button 
+            onClick={() => navigate('/')}
+            className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-colors cursor-pointer ${
+              isActive('/') ? 'text-accent font-semibold' : 'text-text-muted hover:text-text'
+            }`}
+          >
+            <Home size={20} />
+            <span className="text-[10px]">Accueil</span>
+          </button>
+
+          <button 
+            onClick={() => navigate('/courses')}
+            className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-colors cursor-pointer ${
+              isActive('/courses') ? 'text-accent font-semibold' : 'text-text-muted hover:text-text'
+            }`}
+          >
+            <BookOpen size={20} />
+            <span className="text-[10px]">Cours</span>
+          </button>
+
+          {/* Bouton FAB Central "+" */}
+          <div className="relative -top-5">
+            <button 
+              onClick={() => setIsActionMenuOpen(true)}
+              className="w-13 h-13 rounded-2xl bg-accent text-background flex items-center justify-center glow-gold hover:bg-accent-strong transition-transform active:scale-95 shadow-xl cursor-pointer"
+              title="Actions rapides"
+            >
+              <Plus size={26} strokeWidth={2.5} />
+            </button>
+          </div>
+
+          <button 
+            onClick={() => navigate('/schedule')}
+            className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-colors cursor-pointer ${
+              isActive('/schedule') ? 'text-accent font-semibold' : 'text-text-muted hover:text-text'
+            }`}
+          >
+            <Calendar size={20} />
+            <span className="text-[10px]">Planning</span>
+          </button>
+
+          <button 
+            onClick={() => navigate('/study')}
+            className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-colors cursor-pointer ${
+              isActive('/study') ? 'text-accent font-semibold' : 'text-text-muted hover:text-text'
+            }`}
+          >
+            <BrainCircuit size={20} />
+            <span className="text-[10px]">Révisions</span>
+          </button>
+
+        </div>
+      </nav>
+
     </div>
   );
 }
