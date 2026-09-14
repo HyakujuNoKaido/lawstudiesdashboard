@@ -1,6 +1,5 @@
 import { supabase } from '../lib/supabase';
 
-// ID par défaut pour l'usage personnel solo
 const SOLO_USER_ID = '00000000-0000-0000-0000-000000000000';
 
 export async function fetchCourses() {
@@ -29,7 +28,7 @@ export async function createCourse(course: {
       {
         user_id: SOLO_USER_ID,
         title: course.title,
-        course_code: course.code || null,
+        course_code: course.course_code || null,
         ects: Number(course.ects),
         status: course.status,
         teacher_name: course.teacher_name || null
@@ -46,14 +45,12 @@ export async function uploadCourseDocument(file: File, courseId: string, documen
   const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
   const filePath = `${SOLO_USER_ID}/${fileName}`;
 
-  // 1. Upload vers le stockage Supabase
   const { error: uploadError } = await supabase.storage
     .from('user-documents')
     .upload(filePath, file);
 
   if (uploadError) throw uploadError;
 
-  // 2. Enregistrement des métadonnées
   const { data, error: dbError } = await supabase
     .from('documents')
     .insert([
