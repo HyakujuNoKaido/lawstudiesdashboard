@@ -1,114 +1,119 @@
+// src/pages/Courses.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { BookOpen, Plus, Trash2, ChevronRight, Scale } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
-import { ProgressBar } from '../components/ui/ProgressBar';
-import { Search, SlidersHorizontal, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
-import { fetchCourses } from '../services/supabaseService';
+import { fetchCourses, deleteCourse } from '../services/supabaseService';
 
 export function Courses() {
-  const [activeFilter, setActiveFilter] = useState('Tous');
-  const [courses, setCourses] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const [courses, setCourses] = useState<any[]>([]);
+  const [semesterFilter, setSemesterFilter] = useState('Tous');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchCourses()
-      .then(data => setCourses(data))
-      .catch(err => console.error("Erreur fetch courses:", err))
-      .finally(() => setLoading(false));
-  }, []);
+    loadCourses();
+  }, [semesterFilter]);
 
-  const filteredCourses = courses.filter(course => {
-    if (activeFilter === 'Tous') return true;
-    if (activeFilter === 'En cours' && course.status === 'En cours') return true;
-    if (activeFilter === 'Validés' && course.status === 'Validé') return true;
-    if (activeFilter === 'À reprendre' && course.status === 'À reprendre') return true;
-    return true;
-  });
+  async function loadCourses() {
+    setLoading(true);
+    try {
+      const data = await fetchCourses(semesterFilter);
+      setCourses(data);
+    } catch (err) {
+      console.error("Erreur chargement cours:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm("Voulez-vous vraiment supprimer ce cours ? Toutes les données associées (flashcards, chapitres, documents, notes, événements) seront supprimées.")) return;
+    try {
+      await deleteCourse(id);
+      loadCourses();
+    } catch (err) {
+      console.error("Erreur suppression cours:", err);
+      alert("Échec de la suppression du cours.");
+    }
+  };
 
   return (
-    <div className="flex flex-col gap-6 pt-2 pb-6 animate-in fade-in duration-300">
+    <div className="flex flex-col gap-6 pt-2 pb-16 animate-in fade-in duration-300 text-text">
       
-      <header className="flex flex-col gap-4">
-        <h1 className="font-serif text-3xl mb-1">Cours</h1>
-        
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={18} />
-            <input 
-              type="text" 
-              placeholder="Rechercher une matière..." 
-              className="w-full bg-surface border border-border rounded-md py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:border-accent transition-colors placeholder:text-text-muted"
-            />
-          </div>
-          <button className="w-11 h-11 bg-surface border border-border rounded-md flex items-center justify-center text-text-muted hover:text-text transition-colors">
-            <SlidersHorizontal size={18} />
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-1">
+        <div>
+          <h1 className="font-serif text-3xl font-bold">Mes Cours & Fiches</h1>
+          <p className="text-text-muted text-xs">Gestion par semestre et suivi de vos crédits ECTS.</p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <select 
+            value={semesterFilter}
+            onChange={(e) => setSemesterFilter(e.target.value)}
+            className="bg-surface border border-border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-accent appearance-none cursor-pointer"
+          >
+            <option value="Tous">Tous les semestres</option>
+            <option value="Automne 2026">Automne 2026</option>
+            <option value="Printemps 2027">Printemps 2027</option>
+            <option value="Automne 2027">Automne 2027</option>
+          </select>
+
+          <button 
+            onClick={() => navigate('/add/course')}
+            className="bg-accent text-background px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 glow-gold hover:bg-accent-strong transition-colors cursor-pointer"
+          >
+            <Plus size={16} />
+            <span>Nouveau cours</span>
           </button>
         </div>
       </header>
 
-      <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide">
-        {['Tous', 'En cours', 'Validés', 'À reprendre'].map(filter => (
-          <button
-            key={filter}
-            onClick={() => setActiveFilter(filter)}
-            className={`whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium transition-colors border ${
-              activeFilter === filter 
-                ? 'bg-text text-background border-text' 
-                : 'bg-surface text-text-muted border-border hover:border-text-muted/50'
-            }`}
-          >
-            {filter}
-          </button>
-        ))}
-      </div>
-
       {loading ? (
-        <div className="text-center py-12 text-text-muted text-sm">Chargement de vos cours...</div>
-      ) : filteredCourses.length === 0 ? (
-        <div className="text-center py-12 border border-dashed border-border rounded-lg text-text-muted text-sm">
-          Aucun cours trouvé. Utilisez le bouton d'ajout "+" pour commencer.
+        <div className="text-center py-12 text-text-muted text-sm">Chargement des cours...</div>
+      ) : courses.length === 0 ? (
+        <div className="text-center py-12 border border-dashed border-border rounded-xl text-text-muted text-sm flex flex-col items-center gap-2">
+          <Scale size={32} className="text-text-muted opacity-40" />
+          <p>Aucun cours trouvé pour ce semestre.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredCourses.map(course => {
-            const realProgress = course.status === 'Validé' ? 100 : 0;
-            return (
-              <Card key={course.id} onClick={() => navigate(`/courses/${course.id}`)} className="group cursor-pointer">
-                
-                <div className="flex justify-between items-start mb-3">
-                  <Badge variant="outline">{course.course_code || 'COURS'}</Badge>
-                  
-                  {course.status === 'En cours' && <Badge variant="accent" icon={<Clock size={12}/>}>En cours</Badge>}
-                  {course.status === 'Validé' && <Badge variant="success" icon={<CheckCircle2 size={12}/>}>Validé</Badge>}
-                  {course.status === 'À reprendre' && <Badge variant="danger" icon={<AlertCircle size={12}/>}>À reprendre</Badge>}
+        <div className="flex flex-col gap-3">
+          {courses.map(course => (
+            <Card 
+              key={course.id}
+              onClick={() => navigate(`/courses/${course.id}`)}
+              className="bg-surface border-border p-4 flex items-center justify-between cursor-pointer hover:border-accent/40 transition-colors group"
+            >
+              <div className="flex items-center gap-4 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-surface-elevated text-accent flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <BookOpen size={20} />
                 </div>
-
-                <h3 className="font-medium text-lg leading-tight mb-4 group-hover:text-accent transition-colors">
-                  {course.title}
-                </h3>
-
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center gap-2">
-                    <Badge>{course.ects} ECTS</Badge>
-                    {course.teacher_name && <Badge variant="default">{course.teacher_name}</Badge>}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <p className="font-medium text-sm text-text truncate group-hover:text-accent transition-colors">{course.title}</p>
+                    <Badge variant="outline">{course.course_code || 'DROIT'}</Badge>
                   </div>
-
-                  <div className="space-y-1.5 mt-2">
-                    <div className="flex justify-between text-xs text-text-muted">
-                      <span>Progression</span>
-                      <span>{realProgress}%</span>
-                    </div>
-                    <ProgressBar value={realProgress} max={100} colorClass="bg-info" />
-                  </div>
+                  <p className="text-xs text-text-muted">{course.ects} ECTS • {course.semester || 'Automne 2026'} • <span className="text-accent">{course.status}</span></p>
                 </div>
-                
-              </Card>
-            );
-          })}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={(e) => handleDelete(course.id, e)}
+                  className="p-2 text-text-muted hover:text-danger transition-colors rounded-lg hover:bg-surface-elevated cursor-pointer"
+                  title="Supprimer le cours et ses données"
+                >
+                  <Trash2 size={16} />
+                </button>
+                <ChevronRight size={18} className="text-text-muted group-hover:text-accent transition-colors" />
+              </div>
+            </Card>
+          ))}
         </div>
       )}
+
     </div>
   );
 }
