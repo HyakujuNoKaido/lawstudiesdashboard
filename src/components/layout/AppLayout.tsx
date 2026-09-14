@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { Home, BookOpen, BrainCircuit, CalendarDays, UserRound, Plus, X, FileText, Upload, CalendarPlus } from 'lucide-react';
+import { Home, BookOpen, BrainCircuit, CalendarDays, UserRound, Plus, X, Upload, CalendarPlus } from 'lucide-react';
 
 const navItems = [
   { icon: Home, label: 'Accueil', path: '/' },
@@ -140,13 +140,13 @@ export function AppLayout() {
                 </div>
               </button>
 
-              <button onClick={() => setIsActionMenuOpen(false)} className="flex items-center gap-4 p-4 rounded-xl bg-surface border border-border hover:border-text-muted/50 transition-colors text-left group opacity-70">
+              <button onClick={() => handleAction('/add/grade')} className="flex items-center gap-4 p-4 rounded-xl bg-surface border border-border hover:border-text-muted/50 transition-colors text-left group">
                 <div className="w-10 h-10 bg-warning/10 text-warning rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
                   <CalendarPlus size={20} />
                 </div>
                 <div>
-                  <p className="font-medium">Événement ou échéance</p>
-                  <p className="text-xs text-text-muted">Ajouter un examen ou une tâche</p>
+                  <p className="font-medium">Saisir une note</p>
+                  <p className="text-xs text-text-muted">Ajouter un résultat et ses crédits</p>
                 </div>
               </button>
             </div>
