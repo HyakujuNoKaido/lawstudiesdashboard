@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { CalendarDays, Plus, Trash2, Edit3, ChevronLeft, ChevronRight, Clock, Download, Upload } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { fetchEvents, createEvent, fetchCourses } from '../services/supabaseService';
 import { supabase } from '../lib/supabase';
 
@@ -14,6 +15,9 @@ export function Schedule() {
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // État pour la modale de suppression
+  const [eventToDelete, setEventToDelete] = useState<string | null>(null);
   
   const [form, setForm] = useState({
     title: '',
@@ -44,7 +48,6 @@ export function Schedule() {
     }
   }
 
-  // Export ICS
   const handleExportICS = () => {
     let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//SwissLaw Study//Calendar//FR\n";
     events.forEach(ev => {
@@ -67,7 +70,6 @@ export function Schedule() {
     document.body.removeChild(link);
   };
 
-  // Import ICS
   const handleImportICS = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -149,13 +151,12 @@ export function Schedule() {
     }
   };
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!confirm("Voulez-vous vraiment supprimer cet événement ?")) return;
-
+  const confirmDeleteEvent = async () => {
+    if (!eventToDelete) return;
     try {
-      const { error } = await supabase.from('events').delete().eq('id', id);
+      const { error } = await supabase.from('events').delete().eq('id', eventToDelete);
       if (error) throw error;
+      setEventToDelete(null);
       loadData();
     } catch (err) {
       console.error("Erreur suppression événement:", err);
@@ -277,7 +278,6 @@ export function Schedule() {
           </div>
         </div>
 
-        {/* 1. VUE MENSUELLE */}
         {viewMode === 'month' && (
           <div className="flex flex-col gap-2">
             <div className="grid grid-cols-7 text-center text-[10px] font-semibold text-text-muted uppercase tracking-wider">
@@ -328,7 +328,6 @@ export function Schedule() {
           </div>
         )}
 
-        {/* 2. VUE HEBDOMADAIRE */}
         {viewMode === 'week' && (
           <div className="grid grid-cols-1 md:grid-cols-7 gap-2">
             {weekDays.map((day, idx) => {
@@ -374,7 +373,6 @@ export function Schedule() {
           </div>
         )}
 
-        {/* 3. VUE JOURNALIÈRE */}
         {viewMode === 'day' && (
           <div className="flex flex-col gap-2 max-h-[500px] overflow-y-auto pr-2">
             {Array.from({ length: 13 }).map((_, hourIdx) => {
@@ -409,7 +407,7 @@ export function Schedule() {
                             <button onClick={(e) => handleEdit(ev, e)} className="p-1 text-text-muted hover:text-accent cursor-pointer">
                               <Edit3 size={14} />
                             </button>
-                            <button onClick={(e) => handleDelete(ev.id, e)} className="p-1 text-text-muted hover:text-danger cursor-pointer">
+                            <button onClick={(e) => { e.stopPropagation(); setEventToDelete(ev.id); }} className="p-1 text-text-muted hover:text-danger cursor-pointer">
                               <Trash2 size={14} />
                             </button>
                           </div>
@@ -471,7 +469,7 @@ export function Schedule() {
                   <Edit3 size={16} />
                 </button>
                 <button 
-                  onClick={(e) => handleDelete(evt.id, e)}
+                  onClick={(e) => { e.stopPropagation(); setEventToDelete(evt.id); }}
                   className="p-2 text-text-muted hover:text-danger transition-colors cursor-pointer"
                   title="Supprimer"
                 >
@@ -562,6 +560,18 @@ export function Schedule() {
           </div>
         </div>
       )}
+
+      {/* Modale de confirmation de suppression d'événement */}
+      <ConfirmModal 
+        isOpen={!!eventToDelete}
+        title="Supprimer l'événement ?"
+        message="Voulez-vous vraiment supprimer cet événement de votre planning ?"
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        isDanger={true}
+        onConfirm={confirmDeleteEvent}
+        onClose={() => setEventToDelete(null)}
+      />
 
     </div>
   );
