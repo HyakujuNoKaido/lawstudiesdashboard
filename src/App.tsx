@@ -10,6 +10,8 @@ import { StudyNoteEditor } from './pages/StudyNoteEditor';
 import { Profile } from './pages/Profile';
 import { AddCourse } from './pages/AddCourse';
 import { Schedule } from './pages/Schedule';
+import { DocumentUpload } from './pages/DocumentUpload';
+import { DocumentViewer } from './pages/DocumentViewer';
 import { BrainCircuit } from 'lucide-react';
 
 const Study = () => (
@@ -47,6 +49,7 @@ export default function App() {
           <Route path="courses" element={<Courses />} />
           <Route path="courses/:courseId" element={<CourseDetail />} />
           <Route path="add/course" element={<AddCourse />} />
+          <Route path="add/document" element={<DocumentUpload />} />
           <Route path="import" element={<DocumentImport />} />
           <Route path="study" element={<Study />} />
           <Route path="schedule" element={<Schedule />} />
@@ -55,6 +58,7 @@ export default function App() {
         
         <Route path="/session/:deckId" element={<StudySession />} />
         <Route path="/editor/:noteId" element={<StudyNoteEditor />} />
+        <Route path="/viewer/:docId" element={<DocumentViewer />} />
       </Routes>
     </BrowserRouter>
   );
