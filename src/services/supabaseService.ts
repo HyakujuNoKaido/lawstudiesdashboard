@@ -8,154 +8,71 @@ export async function fetchCourses() {
     .select('*')
     .order('created_at', { ascending: false });
   
-  if (error) {
-    console.error("Erreur fetchCourses:", error.message);
-    return [];
-  }
-  return data || [];
-}
-
-export async function fetchCourseById(courseId: string) {
-  const { data, error } = await supabase
-    .from('courses')
-    .select('*')
-    .eq('id', courseId)
-    .single();
-  
-  if (error) throw error;
-  return data;
-}
-
-export async function fetchCourseDocuments(courseId: string) {
-  const { data, error } = await supabase
-    .from('documents')
-    .select('*')
-    .eq('course_id', courseId)
-    .order('created_at', { ascending: false });
-  
   if (error) return [];
   return data || [];
 }
 
-export async function fetchCourseGrades(courseId: string) {
+export async function fetchFlashcards() {
   const { data, error } = await supabase
-    .from('grades')
-    .select('*')
-    .eq('course_id', courseId)
-    .order('created_at', { ascending: false });
-  
-  if (error) return [];
-  return data || [];
-}
-
-export async function createCourse(course: {
-  title: string;
-  course_code?: string;
-  ects: number;
-  status: string;
-  teacher_name?: string;
-}) {
-  const { data, error } = await supabase
-    .from('courses')
-    .insert([
-      {
-        user_id: SOLO_USER_ID,
-        title: course.title,
-        course_code: course.course_code || null,
-        ects: Number(course.ects),
-        status: course.status,
-        teacher_name: course.teacher_name || null
-      }
-    ])
-    .select();
-
-  if (error) throw error;
-  return data;
-}
-
-export async function createGrade(gradeData: {
-  course_id: string;
-  grade: number;
-  weight: number;
-  eval_type: string;
-}) {
-  const { data, error } = await supabase
-    .from('grades')
-    .insert([
-      {
-        user_id: SOLO_USER_ID,
-        course_id: gradeData.course_id,
-        grade: Number(gradeData.grade),
-        weight: Number(gradeData.weight),
-        eval_type: gradeData.eval_type
-      }
-    ])
-    .select();
-
-  if (error) throw error;
-  return data;
-}
-
-export async function fetchEvents() {
-  const { data, error } = await supabase
-    .from('events')
+    .from('flashcards')
     .select('*, courses(title)')
-    .order('event_date', { ascending: true });
-
+    .order('due_at', { ascending: true });
+  
   if (error) return [];
   return data || [];
 }
 
-export async function createEvent(eventData: {
-  title: string;
-  event_date: string;
-  category: string;
-  course_id?: string;
-}) {
+export async function createFlashcard(card: { course_id: string; front: string; back: string }) {
   const { data, error } = await supabase
-    .from('events')
-    .insert([
-      {
-        user_id: SOLO_USER_ID,
-        title: eventData.title,
-        event_date: eventData.event_date,
-        category: eventData.category,
-        course_id: eventData.course_id || null
-      }
-    ])
+    .from('flashcards')
+    .insert([{ user_id: SOLO_USER_ID, ...card }])
     .select();
-
   if (error) throw error;
   return data;
 }
 
-export async function uploadCourseDocument(file: File, courseId: string, documentType: string) {
-  const fileExt = file.name.split('.').pop();
-  const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
-  const filePath = `${SOLO_USER_ID}/${fileName}`;
+export async function updateFlashcardProgress(id: string, repetitions: number, intervalDays: number, easeFactor: number) {
+  const nextDue = new Date();
+  nextDue.setDate(nextDue.getDate() + intervalDays);
 
-  const { error: uploadError } = await supabase.storage
-    .from('user-documents')
-    .upload(filePath, file);
+  const { error } = await supabase
+    .from('flashcards')
+    .update({
+      repetitions,
+      interval_days: intervalDays,
+      ease_factor: easeFactor,
+      due_at: nextDue.toISOString(),
+      last_reviewed_at: new Date().toISOString()
+    })
+    .eq('id', id);
 
-  if (uploadError) throw uploadError;
+  if (error) throw error;
+}
 
-  const { data, error: dbError } = await supabase
-    .from('documents')
-    .insert([
-      {
-        user_id: SOLO_USER_ID,
-        course_id: courseId ? courseId : null,
-        bucket_path: filePath,
-        original_name: file.name,
-        mime_type: file.type,
-        size_bytes: file.size,
-        document_type: documentType,
-        processing_status: 'completed'
-      }
-    ])
-    .select();
+export async function fetchNotes() {
+  const { data, error } = await supabase
+    .from('notes')
+    .select('*, courses(title)')
+    .order('updated_at', { ascending: false });
+  if (error) return [];
+  return data || [];
+}
 
-  if (dbError) throw dbError;
-  return data;
+export async function saveNote(note: { id?: string; course_id: string; title: string; content: string }) {
+  if (note.id) {
+    const { data, error } = await supabase
+      .from('notes')
+      .update({ title: note.title, content: note.content, updated_at: new Date().toISOString() })
+      .eq('id', note.id)
+      .select();
+    if (error) throw error;
+    return data;
+  } else {
+    const { data, error } = await supabase
+      .from('notes')
+      .insert([{ user_id: SOLO_USER_ID, course_id: note.course_id, title: note.title, content: note.content }])
+      .select();
+    if (error) throw error;
+    return data;
+  }
 }
