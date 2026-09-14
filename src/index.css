@@ -21,4 +21,13 @@
     --radius-md: 16px;
     --radius-lg: 23px;
   }
+  @layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
 }
