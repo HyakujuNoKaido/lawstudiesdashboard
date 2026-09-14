@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, BrainCircuit, Award, ChevronRight, Clock, Scale, FileText, Timer } from 'lucide-react';
+import { BookOpen, BrainCircuit, ChevronRight, Clock, Scale, FileText, Timer } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { fetchCourses, fetchFlashcards, fetchEvents } from '../services/supabaseService';
@@ -36,42 +36,50 @@ export function Dashboard() {
 
   const totalECTS = courses.reduce((acc, c) => acc + (c.status === 'Validé' ? Number(c.ects || 0) : 0), 0);
   const dueCards = flashcards.filter(f => new Date(f.due_at) <= new Date()).length;
-  
   const upcomingCourses = events.filter(e => e.category === 'Cours' && new Date(e.event_date) >= new Date()).slice(0, 2);
-  const upcomingDeadlines = events.filter(e => (e.category === 'Rendu' || e.category === 'Séminaire') && new Date(e.event_date) >= new Date()).slice(0, 2);
 
   return (
-    <div className="flex flex-col gap-6 pt-2 pb-16 animate-in fade-in duration-300 text-text">
+    <div className="flex flex-col gap-8 pt-2 pb-16 animate-in fade-in duration-300 text-text">
       
-      {/* En-tête */}
-      <header className="flex justify-between items-center px-1">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent">
-            <Scale size={22} />
-          </div>
-          <div>
-            <h1 className="font-serif text-2xl font-bold tracking-tight text-text">Bonjour, {userName}</h1>
-            <p className="text-text-muted text-xs">Espace académique de droit suisse.</p>
-          </div>
+      {/* En-tête épurée (Bouton profil en double retiré) */}
+      <header className="flex items-center gap-3 px-1">
+        <div className="w-12 h-12 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent">
+          <Scale size={24} strokeWidth={1.5} />
         </div>
-        <button 
-          onClick={() => navigate('/profile')}
-          className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center text-accent hover:border-accent/50 transition-colors cursor-pointer"
-        >
-          <Award size={20} />
-        </button>
+        <div>
+          <h1 className="font-serif text-3xl font-bold tracking-tight text-text">Bonjour, {userName}</h1>
+          <p className="text-text-muted text-xs font-medium mt-0.5">Espace académique de droit suisse.</p>
+        </div>
       </header>
 
-      {/* 1. Accès rapides aux outils juridiques phares */}
+      {/* 1. Progression ECTS - Design minimaliste */}
+      <Card 
+        onClick={() => navigate('/courses')}
+        className="cursor-pointer bg-surface border-border hover:border-accent/40 transition-all p-6 flex flex-col gap-4 shadow-sm group"
+      >
+        <div className="flex justify-between items-center">
+          <span className="text-[11px] font-bold tracking-widest text-text-muted uppercase">Progression ECTS</span>
+          <ChevronRight size={16} className="text-text-muted group-hover:text-accent transition-colors" />
+        </div>
+        <div className="flex items-baseline gap-2">
+          <span className="font-serif text-4xl font-bold text-text">{totalECTS}</span>
+          <span className="text-sm text-text-muted font-medium">/ 180 ECTS</span>
+        </div>
+        <div className="w-full bg-surface-elevated rounded-full h-1.5 overflow-hidden">
+          <div 
+            className="bg-accent h-full rounded-full transition-all duration-700 ease-out" 
+            style={{ width: `${Math.min(100, (totalECTS / 180) * 100)}%` }}
+          />
+        </div>
+      </Card>
+
+      {/* 2. Outils juridiques */}
       <section className="flex flex-col gap-3">
-        <h2 className="font-serif text-lg font-semibold px-1">Outils juridiques avancés</h2>
+        <h2 className="font-serif text-xl font-semibold px-1">Outils juridiques</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <Card 
-            onClick={() => navigate('/cases/law')}
-            className="cursor-pointer bg-surface border-border hover:border-accent/50 p-4 flex items-center gap-3 transition-all group"
-          >
-            <div className="w-10 h-10 rounded-xl bg-warning/10 text-warning flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <FileText size={20} />
+          <Card onClick={() => navigate('/cases/law')} className="cursor-pointer bg-surface border-border hover:border-accent/50 p-4 flex items-center gap-4 transition-all group shadow-sm">
+            <div className="w-10 h-10 rounded-xl bg-warning/10 text-warning flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+              <FileText size={20} strokeWidth={1.5} />
             </div>
             <div>
               <h3 className="font-medium text-sm text-text">Fiche d'Arrêt (ATF)</h3>
@@ -79,25 +87,19 @@ export function Dashboard() {
             </div>
           </Card>
 
-          <Card 
-            onClick={() => navigate('/cases/study')}
-            className="cursor-pointer bg-surface border-border hover:border-accent/50 p-4 flex items-center gap-3 transition-all group"
-          >
-            <div className="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <Scale size={20} />
+          <Card onClick={() => navigate('/cases/study')} className="cursor-pointer bg-surface border-border hover:border-accent/50 p-4 flex items-center gap-4 transition-all group shadow-sm">
+            <div className="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+              <Scale size={20} strokeWidth={1.5} />
             </div>
             <div>
-              <h3 className="font-medium text-sm text-text">Assistant Subsumption</h3>
+              <h3 className="font-medium text-sm text-text">Subsumption</h3>
               <p className="text-[11px] text-text-muted">Résolution de cas pratique</p>
             </div>
           </Card>
 
-          <Card 
-            onClick={() => navigate('/exams/simulator')}
-            className="cursor-pointer bg-surface border-border hover:border-accent/50 p-4 flex items-center gap-3 transition-all group"
-          >
-            <div className="w-10 h-10 rounded-xl bg-info/10 text-info flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <Timer size={20} />
+          <Card onClick={() => navigate('/exams/simulator')} className="cursor-pointer bg-surface border-border hover:border-accent/50 p-4 flex items-center gap-4 transition-all group shadow-sm">
+            <div className="w-10 h-10 rounded-xl bg-info/10 text-info flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+              <Timer size={20} strokeWidth={1.5} />
             </div>
             <div>
               <h3 className="font-medium text-sm text-text">Examen Blanc</h3>
@@ -107,76 +109,39 @@ export function Dashboard() {
         </div>
       </section>
 
-      {/* 2. Progression ECTS */}
-      <Card 
-        onClick={() => navigate('/courses')}
-        className="cursor-pointer bg-surface border-border hover:border-accent/40 transition-all p-5 flex flex-col gap-3 shadow-lg"
-      >
-        <div className="flex justify-between items-center">
-          <span className="text-[11px] font-semibold tracking-wider text-text-muted uppercase">Progression ECTS</span>
-          <span className="text-xs text-text-muted font-medium">Encore {Math.max(0, 180 - totalECTS)} ECTS pour ton diplôme</span>
-        </div>
-        <div className="flex items-baseline justify-between">
-          <span className="font-serif text-3xl font-bold text-text">{totalECTS}<span className="text-lg text-text-muted font-normal">/180 ECTS</span></span>
-        </div>
-        <div className="w-full bg-surface-elevated rounded-full h-2.5 overflow-hidden">
-          <div 
-            className="bg-accent h-full rounded-full transition-all duration-500" 
-            style={{ width: `${Math.min(100, (totalECTS / 180) * 100)}%` }}
-          />
-        </div>
-      </Card>
-
-      {/* 3. Prochains cours planifiés */}
-      <section className="flex flex-col gap-3">
-        <div className="flex justify-between items-center px-1">
-          <h2 className="font-serif text-lg font-semibold">Prochains cours</h2>
-          <button onClick={() => navigate('/schedule')} className="text-xs text-accent font-medium hover:underline cursor-pointer">
-            Calendrier
-          </button>
-        </div>
-
-        {upcomingCourses.length === 0 ? (
-          <Card className="bg-surface border-border p-4 text-center text-text-muted text-xs">
-            Aucun cours planifié prochainement. Ajoute des cours avec horaires récurrents.
-          </Card>
-        ) : (
-          upcomingCourses.map(ev => (
-            <Card key={ev.id} className="bg-surface border-border p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center">
-                  <Clock size={18} />
-                </div>
-                <div>
-                  <p className="font-medium text-sm text-text">{ev.title}</p>
-                  <p className="text-xs text-text-muted">{ev.courses?.title || 'Matière'} • {new Date(ev.event_date).toLocaleDateString()}</p>
-                </div>
-              </div>
-              <Badge variant="outline">Cours</Badge>
-            </Card>
-          ))
-        )}
-      </section>
-
-      {/* 4. Widget Flashcards */}
-      <Card 
-        onClick={() => navigate('/study')}
-        className="cursor-pointer bg-surface border-border hover:border-accent/40 transition-all p-4 flex items-center justify-between group"
-      >
-        <div className="flex items-center gap-4">
-          <div className="w-11 h-11 rounded-xl bg-info/10 text-info flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-            <BrainCircuit size={22} />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* 3. Révisions actives */}
+        <Card onClick={() => navigate('/study')} className="cursor-pointer bg-surface border-border hover:border-accent/40 transition-all p-5 flex flex-col gap-3 group shadow-sm">
+          <div className="flex items-center justify-between">
+            <div className="w-10 h-10 rounded-xl bg-info/10 text-info flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+              <BrainCircuit size={20} strokeWidth={1.5} />
+            </div>
+            <ChevronRight size={18} className="text-text-muted group-hover:text-accent transition-colors" />
           </div>
-          <div>
-            <span className="text-[10px] font-semibold tracking-wider text-text-muted uppercase">Révisions actives</span>
-            <h3 className="font-medium text-base text-text mt-0.5">
-              {dueCards} flashcards à réviser
-            </h3>
-            <p className="text-xs text-text-muted mt-0.5">Répétition espacée</p>
+          <div className="mt-2">
+            <span className="text-[10px] font-bold tracking-widest text-text-muted uppercase">Révisions actives</span>
+            <h3 className="font-medium text-lg text-text mt-1">{dueCards} flashcards dues</h3>
           </div>
-        </div>
-        <ChevronRight size={18} className="text-text-muted group-hover:text-accent transition-colors" />
-      </Card>
+        </Card>
+
+        {/* 4. Prochains cours */}
+        <Card onClick={() => navigate('/schedule')} className="cursor-pointer bg-surface border-border hover:border-accent/40 transition-all p-5 flex flex-col gap-3 group shadow-sm">
+          <div className="flex items-center justify-between">
+            <div className="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+              <Clock size={20} strokeWidth={1.5} />
+            </div>
+            <ChevronRight size={18} className="text-text-muted group-hover:text-accent transition-colors" />
+          </div>
+          <div className="mt-2">
+            <span className="text-[10px] font-bold tracking-widest text-text-muted uppercase">Planning</span>
+            {upcomingCourses.length > 0 ? (
+              <h3 className="font-medium text-lg text-text mt-1 truncate">{upcomingCourses[0].title}</h3>
+            ) : (
+              <h3 className="font-medium text-lg text-text mt-1">Aucun cours à venir</h3>
+            )}
+          </div>
+        </Card>
+      </div>
 
     </div>
   );
