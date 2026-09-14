@@ -1,21 +1,47 @@
 import React, { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Home, BookOpen, Calendar, BrainCircuit, User, Plus, X, Scale, FileText, Timer, Upload, FileEdit } from 'lucide-react';
+import { Home, BookOpen, Calendar, BrainCircuit, Plus, X, Scale, FileText, Timer, Upload, FileEdit, Search } from 'lucide-react';
+import { CommandMenu } from '../ui/CommandMenu';
 
 export function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   const isActive = (path: string) => location.pathname === path;
 
   return (
     <div className="min-h-screen bg-background text-text flex flex-col antialiased selection:bg-accent/30 selection:text-accent">
       
+      {/* Barre d'en-tête globale avec bouton de recherche */}
+      <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b border-border px-4 py-3">
+        <div className="max-w-4xl mx-auto flex justify-between items-center">
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
+            <div className="w-8 h-8 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent">
+              <Scale size={18} />
+            </div>
+            <span className="font-serif font-bold text-lg tracking-tight">Lexi</span>
+          </div>
+
+          <button 
+            onClick={() => setIsSearchOpen(true)}
+            className="flex items-center gap-2 bg-surface border border-border px-3.5 py-2 rounded-xl text-xs text-text-muted hover:border-accent/50 transition-colors cursor-pointer"
+          >
+            <Search size={15} className="text-accent" />
+            <span className="hidden sm:inline">Rechercher...</span>
+            <kbd className="hidden sm:inline bg-surface-elevated px-1.5 py-0.5 rounded text-[10px] font-mono border border-border">Cmd+K</kbd>
+          </button>
+        </div>
+      </header>
+
       {/* Contenu principal */}
       <main className="flex-1 max-w-4xl w-full mx-auto p-4 md:p-6 pb-28">
         <Outlet />
       </main>
+
+      {/* Menu de recherche globale (CommandMenu) */}
+      <CommandMenu isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
 
       {/* Menu d'actions rapides (Modal / Action Sheet) */}
       {isActionMenuOpen && (
