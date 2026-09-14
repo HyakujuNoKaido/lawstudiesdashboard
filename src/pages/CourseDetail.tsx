@@ -4,9 +4,25 @@ import { ChevronLeft, MoreVertical, FileText, Upload, Plus, Clock, BookMarked, S
 import { Badge } from '../components/ui/Badge';
 import { Card } from '../components/ui/Card';
 import { fetchCourseById, fetchCourseDocuments, fetchCourseGrades, fetchCourseChapters, createChapter, parseAndCreateChaptersFromSyllabus } from '../services/supabaseService';
+import { Scale, BookOpen, FileText, Layers } from 'lucide-react';
 
 const TABS = ['Aperçu', 'Programme & Chapitres', 'Documents', 'Évaluations'];
 
+export function getDocumentIcon(type: string) {
+  switch (type) {
+    case 'Arrêt ATF':
+    case 'Jurisprudence':
+      return <Scale size={16} className="text-warning" />;
+    case 'Doctrine':
+    case 'Manuel':
+      return <BookOpen size={16} className="text-accent" />;
+    case 'Support de cours':
+    case 'Slides':
+      return <FileText size={16} className="text-info" />;
+    default:
+      return <Layers size={16} className="text-text-muted" />;
+  }
+}
 export function CourseDetail() {
   const navigate = useNavigate();
   const { courseId } = useParams();
