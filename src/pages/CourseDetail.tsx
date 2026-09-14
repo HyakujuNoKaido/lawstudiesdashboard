@@ -1,353 +1,262 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft, MoreVertical, FileText, Upload, Plus, Clock, BookMarked, Sparkles } from 'lucide-react';
-import { Badge } from '../components/ui/Badge';
+import { useParams, useNavigate } from 'react-router-dom';
+import { ChevronLeft, BookOpen, FileText, Upload, Plus, Award, Scale, Layers, Trash2 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
-import { fetchCourseById, fetchCourseDocuments, fetchCourseGrades, fetchCourseChapters, createChapter, parseAndCreateChaptersFromSyllabus } from '../services/supabaseService';
-import { Scale, BookOpen, FileText, Layers } from 'lucide-react';
+import { Badge } from '../components/ui/Badge';
+import { ProgressBar } from '../components/ui/ProgressBar';
+import { fetchCourseById, fetchCourseChapters, fetchCourseDocuments, fetchCourseGrades, createChapter, uploadCourseDocument } from '../services/supabaseService';
 
-const TABS = ['Aperçu', 'Programme & Chapitres', 'Documents', 'Évaluations'];
-
-export function getDocumentIcon(type: string) {
-  switch (type) {
-    case 'Arrêt ATF':
-    case 'Jurisprudence':
-      return <Scale size={16} className="text-warning" />;
-    case 'Doctrine':
-    case 'Manuel':
-      return <BookOpen size={16} className="text-accent" />;
-    case 'Support de cours':
-    case 'Slides':
-      return <FileText size={16} className="text-info" />;
-    default:
-      return <Layers size={16} className="text-text-muted" />;
-  }
-}
 export function CourseDetail() {
+  const { courseId } = useParams<{ courseId: string }>();
   const navigate = useNavigate();
-  const { courseId } = useParams();
-  const [activeTab, setActiveTab] = useState('Programme & Chapitres');
+
   const [course, setCourse] = useState<any>(null);
+  const [chapters, setChapters] = useState<any[]>([]);
   const [documents, setDocuments] = useState<any[]>([]);
   const [grades, setGrades] = useState<any[]>([]);
-  const [chapters, setChapters] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
-  // Formulaire d'ajout de chapitre ou syllabus
+
+  // Modal Chapitre / Document
+  const [isChapterModalOpen, setIsChapterModalOpen] = useState(false);
   const [newChapterTitle, setNewChapterTitle] = useState('');
-  const [syllabusText, setSyllabusText] = useState('');
-  const [showSyllabusModal, setShowSyllabusModal] = useState(false);
+  const [isDocModalOpen, setIsDocModalOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [docType, setDocType] = useState('Support de cours');
 
   useEffect(() => {
-    if (!courseId) return;
-    
-    Promise.all([
-      fetchCourseById(courseId),
-      fetchCourseDocuments(courseId),
-      fetchCourseGrades(courseId),
-      fetchCourseChapters(courseId)
-    ])
-      .then(([courseData, docsData, gradesData, chaptersData]) => {
-        setCourse(courseData);
-        setDocuments(docsData);
-        setGrades(gradesData);
-        setChapters(chaptersData);
-      })
-      .finally(() => setLoading(false));
+    if (courseId) {
+      loadCourseData(courseId);
+    }
   }, [courseId]);
 
-  const handleAddChapter = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newChapterTitle.trim() || !courseId) return;
+  async function loadCourseData(id: string) {
     try {
-      await createChapter({ course_id: courseId, title: newChapterTitle, order_index: chapters.length + 1 });
-      setNewChapterTitle('');
-      const updated = await fetchCourseChapters(courseId);
-      setChapters(updated);
+      const [courseRes, chaptersRes, docsRes, gradesRes] = await Promise.all([
+        fetchCourseById(id),
+        fetchCourseChapters(id),
+        fetchCourseDocuments(id),
+        fetchCourseGrades(id)
+      ]);
+      setCourse(courseRes);
+      setChapters(chaptersRes);
+      setDocuments(docsRes);
+      setGrades(gradesRes);
     } catch (err) {
-      console.error("Erreur ajout chapitre:", err);
+      console.error("Erreur chargement détails du cours:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const handleCreateChapter = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newChapterTitle || !courseId) return;
+    try {
+      await createChapter({
+        course_id: courseId,
+        title: newChapterTitle,
+        order_index: chapters.length + 1
+      });
+      setNewChapterTitle('');
+      setIsChapterModalOpen(false);
+      loadCourseData(courseId);
+    } catch (err) {
+      console.error("Erreur création chapitre:", err);
     }
   };
 
-  const handleImportSyllabus = async (e: React.FormEvent) => {
+  const handleUploadDoc = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!syllabusText.trim() || !courseId) return;
+    if (!selectedFile || !courseId) return;
     try {
-      await parseAndCreateChaptersFromSyllabus(courseId, syllabusText);
-      setSyllabusText('');
-      setShowSyllabusModal(false);
-      const updated = await fetchCourseChapters(courseId);
-      setChapters(updated);
-      alert("Syllabus analysé et chapitres créés avec succès !");
+      await uploadCourseDocument(selectedFile, courseId, docType);
+      setSelectedFile(null);
+      setIsDocModalOpen(false);
+      loadCourseData(courseId);
     } catch (err) {
-      console.error("Erreur import syllabus:", err);
+      console.error("Erreur upload document:", err);
+      alert("Échec du téléchargement du fichier.");
+    }
+  };
+
+  // Icône dynamique sans emoji selon le type de document
+  const getDocumentIcon = (type: string) => {
+    switch (type) {
+      case 'Arrêt ATF':
+      case 'Jurisprudence':
+        return <Scale size={16} className="text-warning" />;
+      case 'Doctrine':
+      case 'Manuel':
+        return <BookOpen size={16} className="text-accent" />;
+      case 'Support de cours':
+      case 'Slides':
+        return <FileText size={16} className="text-info" />;
+      default:
+        return <Layers size={16} className="text-text-muted" />;
     }
   };
 
   if (loading) {
-    return <div className="text-center py-12 text-text-muted text-sm">Chargement du cours...</div>;
+    return <div className="text-center py-20 text-text-muted text-sm">Chargement du cours...</div>;
   }
 
   if (!course) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 gap-4">
-        <p className="text-text-muted">Cours introuvable.</p>
-        <button onClick={() => navigate('/courses')} className="text-accent underline text-sm">Retour aux cours</button>
+      <div className="text-center py-20 flex flex-col items-center gap-4">
+        <p className="text-text-muted text-sm">Cours introuvable.</p>
+        <button onClick={() => navigate('/courses')} className="px-4 py-2 bg-accent text-background rounded-xl text-xs font-semibold">
+          Retour aux cours
+        </button>
       </div>
     );
   }
 
+  const courseAverage = grades.length > 0 
+    ? (grades.reduce((acc, g) => acc + Number(g.grade) * Number(g.weight), 0) / grades.reduce((acc, g) => acc + Number(g.weight), 0)).toFixed(2)
+    : 'N/A';
+
   return (
-    <div className="flex flex-col gap-6 pt-2 pb-6 animate-in fade-in duration-300">
+    <div className="flex flex-col gap-6 pt-2 pb-16 animate-in fade-in duration-300 text-text">
       
-      <header className="flex items-center justify-between">
+      {/* En-tête */}
+      <header className="flex flex-col gap-4 px-1">
         <button 
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-1 text-text-muted hover:text-text transition-colors -ml-2 p-2"
+          onClick={() => navigate('/courses')}
+          className="flex items-center gap-1 text-text-muted hover:text-text transition-colors -ml-2 p-2 w-fit cursor-pointer"
         >
           <ChevronLeft size={20} />
-          <span className="text-sm font-medium">Retour</span>
+          <span className="text-sm font-medium">Retour aux cours</span>
         </button>
-        <button className="text-text-muted hover:text-text p-2">
-          <MoreVertical size={20} />
-        </button>
+
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-surface p-6 rounded-2xl border border-border">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent shrink-0">
+              <BookOpen size={24} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Badge variant="outline">{course.course_code || 'DROIT'}</Badge>
+                <Badge variant="success">{course.status}</Badge>
+              </div>
+              <h1 className="font-serif text-2xl md:text-3xl font-bold">{course.title}</h1>
+              <p className="text-xs text-text-muted mt-1">{course.teacher_name ? `Enseignant: ${course.teacher_name} • ` : ''}{course.ects} ECTS • Semestre : {course.semester || 'Automne 2026'}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="bg-surface-elevated px-4 py-3 rounded-xl border border-border flex flex-col items-center">
+              <span className="text-[10px] uppercase text-text-muted font-semibold">Moyenne</span>
+              <span className="font-serif text-lg font-bold text-accent">{courseAverage}</span>
+            </div>
+          </div>
+        </div>
       </header>
 
-      <div>
-        <div className="flex flex-wrap items-center gap-2 mb-3">
-          <Badge variant="outline">{course.course_code || 'COURS'}</Badge>
-          <Badge variant="accent" icon={<Clock size={12}/>}>{course.status}</Badge>
-          <Badge>{course.ects} ECTS</Badge>
-        </div>
-        <h1 className="font-serif text-3xl leading-tight mb-2">
-          {course.title}
-        </h1>
-        {course.teacher_name && (
-          <p className="text-text-muted text-sm">
-            Enseignant·e : {course.teacher_name}
-          </p>
+      {/* Actions rapides */}
+      <div className="grid grid-cols-2 gap-3 px-1">
+        <button 
+          onClick={() => setIsChapterModalOpen(true)}
+          className="bg-surface border border-border py-3 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 hover:border-accent/50 transition-colors cursor-pointer"
+        >
+          <Plus size={16} className="text-accent" />
+          <span>Ajouter un chapitre</span>
+        </button>
+        <button 
+          onClick={() => setIsDocModalOpen(true)}
+          className="bg-accent text-background py-3 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 glow-gold hover:bg-accent-strong transition-colors cursor-pointer"
+        >
+          <Upload size={16} />
+          <span>Importer un document</span>
+        </button>
+      </div>
+
+      {/* Chapitres du cours */}
+      <section className="flex flex-col gap-3">
+        <h2 className="font-serif text-lg font-semibold px-1">Plan et chapitres</h2>
+        {chapters.length === 0 ? (
+          <Card className="bg-surface border-border p-6 text-center text-text-muted text-xs">
+            Aucun chapitre enregistré pour l'instant. Utilisez le bouton ci-dessus pour en ajouter.
+          </Card>
+        ) : (
+          chapters.map((chap, idx) => (
+            <Card key={chap.id} className="bg-surface border-border p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="w-7 h-7 rounded-lg bg-surface-elevated text-accent font-mono text-xs flex items-center justify-center font-bold">
+                  {idx + 1}
+                </span>
+                <span className="font-medium text-sm text-text">{chap.title}</span>
+              </div>
+            </Card>
+          ))
         )}
-      </div>
+      </section>
 
-      <div className="flex gap-6 overflow-x-auto border-b border-border scrollbar-hide">
-        {TABS.map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`whitespace-nowrap pb-3 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === tab 
-                ? 'text-accent border-accent' 
-                : 'text-text-muted border-transparent hover:text-text'
-            }`}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
+      {/* Documents et Fiches associés */}
+      <section className="flex flex-col gap-3">
+        <h2 className="font-serif text-lg font-semibold px-1">Documents et Fiches (Arrêts ATF, Doctrine)</h2>
+        {documents.length === 0 ? (
+          <Card className="bg-surface border-border p-6 text-center text-text-muted text-xs">
+            Aucun document importé pour ce cours.
+          </Card>
+        ) : (
+          documents.map(doc => (
+            <Card key={doc.id} className="bg-surface border-border p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-surface-elevated flex items-center justify-center">
+                  {getDocumentIcon(doc.document_type)}
+                </div>
+                <div>
+                  <p className="font-medium text-sm text-text">{doc.original_name}</p>
+                  <p className="text-xs text-text-muted">{doc.document_type} • {(doc.size_bytes / (1024 * 1024)).toFixed(2)} MB</p>
+                </div>
+              </div>
+              <Badge variant="outline">{doc.document_type}</Badge>
+            </Card>
+          ))
+        )}
+      </section>
 
-      <main>
-        {activeTab === 'Programme & Chapitres' && (
-          <div className="flex flex-col gap-6 animate-in fade-in duration-200">
-            <div className="flex justify-between items-center">
-              <h2 className="font-medium text-lg">Structure du cours & Syllabus</h2>
-              <button 
-                onClick={() => setShowSyllabusModal(true)}
-                className="flex items-center gap-1.5 text-xs font-semibold text-accent bg-accent/10 px-3 py-2 rounded-md hover:bg-accent/20 transition-colors"
-              >
-                <Sparkles size={14} />
-                Importer un Syllabus
-              </button>
-            </div>
-
-            {/* Formulaire ajout manuel de chapitre */}
-            <form onSubmit={handleAddChapter} className="flex gap-2">
+      {/* Modal Ajout Chapitre */}
+      {isChapterModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-surface-elevated border border-border rounded-2xl p-6 shadow-2xl">
+            <h2 className="font-serif text-xl font-bold mb-4">Nouveau chapitre</h2>
+            <form onSubmit={handleCreateChapter} className="flex flex-col gap-4">
               <input 
-                type="text"
-                placeholder="Ajouter un chapitre (ex: Chapitre 1: Introduction au CO)..."
-                value={newChapterTitle}
-                onChange={(e) => setNewChapterTitle(e.target.value)}
-                className="flex-1 bg-surface border border-border rounded-md py-2.5 px-3 text-sm focus:outline-none focus:border-accent"
+                type="text" required value={newChapterTitle} onChange={(e) => setNewChapterTitle(e.target.value)}
+                placeholder="ex: Chapitre 3 - Les vices du consentement"
+                className="w-full bg-surface border border-border rounded-xl py-3 px-3 text-sm focus:outline-none focus:border-accent"
               />
-              <button type="submit" className="bg-text text-background px-4 py-2 rounded-md text-xs font-semibold hover:bg-text-muted">
-                Ajouter
-              </button>
+              <div className="flex gap-2 mt-2">
+                <button type="button" onClick={() => setIsChapterModalOpen(false)} className="flex-1 bg-surface border border-border py-3 rounded-xl text-sm">Annuler</button>
+                <button type="submit" className="flex-1 bg-accent text-background py-3 rounded-xl text-sm font-semibold glow-gold">Enregistrer</button>
+              </div>
             </form>
-
-            {chapters.length === 0 ? (
-              <div className="text-center py-12 border border-dashed border-border rounded-lg text-text-muted text-sm">
-                Aucun chapitre défini. Ajoutez-en un ou importez votre syllabus pour structurer automatiquement votre matière.
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {chapters.map((chap, idx) => {
-                  const chapDocs = documents.filter(d => d.chapter_id === chap.id);
-                  return (
-                    <Card key={chap.id} className="p-4 flex flex-col gap-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <span className="w-6 h-6 rounded-full bg-surface-elevated flex items-center justify-center text-xs font-bold text-accent">
-                            {idx + 1}
-                          </span>
-                          <h3 className="font-medium text-sm">{chap.title}</h3>
-                        </div>
-                        <Badge variant="outline">{chapDocs.length} document(s)</Badge>
-                      </div>
-
-                      {chapDocs.length > 0 && (
-                        <div className="pl-9 mt-1 flex flex-col gap-1">
-                          {chapDocs.map(d => (
-                            <div key={d.id} onClick={() => navigate(`/viewer/${d.id}`)} className="text-xs text-text-muted hover:text-accent cursor-pointer flex items-center gap-1.5">
-                              <FileText size={12} />
-                              <span>{d.original_name}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
           </div>
-        )}
+        </div>
+      )}
 
-        {activeTab === 'Documents' && (
-          <div className="flex flex-col gap-4 animate-in fade-in duration-200">
-            <div className="flex justify-between items-center mb-1">
-              <h2 className="font-medium">Fichiers et supports</h2>
-              <button 
-                onClick={() => navigate('/add/document')}
-                className="flex items-center gap-1.5 text-xs font-semibold text-background bg-text px-3 py-1.5 rounded-sm hover:bg-text-muted transition-colors"
+      {/* Modal Import Document */}
+      {isDocModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-surface-elevated border border-border rounded-2xl p-6 shadow-2xl">
+            <h2 className="font-serif text-xl font-bold mb-4">Importer un document</h2>
+            <form onSubmit={handleUploadDoc} className="flex flex-col gap-4">
+              <select 
+                value={docType} onChange={(e) => setDocType(e.target.value)}
+                className="w-full bg-surface border border-border rounded-xl py-3 px-3 text-sm appearance-none"
               >
-                <Upload size={14} />
-                Importer
-              </button>
-            </div>
-
-            {documents.length === 0 ? (
-              <div className="text-center py-10 border border-dashed border-border rounded-lg text-text-muted text-sm">
-                Aucun document importé pour ce cours.
-              </div>
-            ) : (
-              documents.map(doc => (
-                <Card 
-                  key={doc.id} 
-                  onClick={() => navigate(`/viewer/${doc.id}`)} 
-                  className="group flex items-center justify-between p-4 cursor-pointer hover:border-accent/50"
-                >
-                  <div className="flex items-center gap-4 min-w-0">
-                    <div className="w-10 h-10 bg-info/10 text-info rounded flex items-center justify-center shrink-0">
-                      <FileText size={20} />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-medium text-sm group-hover:text-accent transition-colors truncate">{doc.original_name}</p>
-                      <div className="flex items-center gap-2 text-xs text-text-muted mt-0.5">
-                        <span className="text-accent font-medium">{doc.document_type || 'Document'}</span>
-                        {doc.chapters?.title && (
-                          <>
-                            <span>•</span>
-                            <span className="text-info">{doc.chapters.title}</span>
-                          </>
-                        )}
-                        {doc.atf_ref && (
-                          <>
-                            <span>•</span>
-                            <span className="text-warning font-semibold">{doc.atf_ref}</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <button onClick={(e) => { e.stopPropagation(); }} className="text-text-muted hover:text-text p-2 shrink-0">
-                    <MoreVertical size={16} />
-                  </button>
-                </Card>
-              ))
-            )}
-          </div>
-        )}
-
-        {activeTab === 'Évaluations' && (
-          <div className="flex flex-col gap-4 animate-in fade-in duration-200">
-            <div className="flex justify-between items-center mb-1">
-              <h2 className="font-medium">Notes et résultats</h2>
-              <button 
-                onClick={() => navigate('/add/grade')}
-                className="flex items-center gap-1.5 text-xs font-semibold text-background bg-text px-3 py-1.5 rounded-sm hover:bg-text-muted transition-colors"
-              >
-                <Plus size={14} />
-                Saisir une note
-              </button>
-            </div>
-
-            {grades.length === 0 ? (
-              <div className="text-center py-10 border border-dashed border-border rounded-lg text-text-muted text-sm">
-                Aucune note enregistrée pour ce cours.
-              </div>
-            ) : (
-              grades.map(g => (
-                <Card key={g.id} className="flex items-center justify-between p-4">
-                  <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-serif text-xl font-bold ${g.grade >= 4.0 ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
-                      {g.grade.toFixed(2)}
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm">{g.eval_type}</p>
-                      <p className="text-xs text-text-muted mt-0.5">Poids : {g.weight}% • Ajouté le {new Date(g.created_at).toLocaleDateString()}</p>
-                    </div>
-                  </div>
-                  <Badge variant={g.grade >= 4.0 ? 'success' : 'danger'}>
-                    {g.grade >= 4.0 ? 'Validé' : 'Insuffisant'}
-                  </Badge>
-                </Card>
-              ))
-            )}
-          </div>
-        )}
-
-        {activeTab === 'Aperçu' && (
-          <div className="flex flex-col gap-4 text-sm text-text-muted">
-            <p>Vue d'ensemble et statistiques de la matière {course.title}.</p>
-            <div className="bg-surface p-4 rounded border border-border flex flex-col gap-2">
-              <span className="text-text font-medium">Crédits ECTS attribués : {course.ects}</span>
-              <span className="text-text font-medium">Statut actuel : {course.status}</span>
-            </div>
-          </div>
-        )}
-      </main>
-
-      {/* Modal d'importation de Syllabus */}
-      {showSyllabusModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-lg bg-surface-elevated border border-border rounded-xl p-6 shadow-2xl">
-            <h2 className="font-serif text-2xl mb-2">Importer un Syllabus</h2>
-            <p className="text-xs text-text-muted mb-4">Collez le texte brut de votre syllabus ou plan de cours. Lexi détectera et créera automatiquement les chapitres correspondants.</p>
-            
-            <form onSubmit={handleImportSyllabus} className="flex flex-col gap-4">
-              <textarea 
-                rows={8}
-                required
-                value={syllabusText}
-                onChange={(e) => setSyllabusText(e.target.value)}
-                placeholder="Exemple:&#10;Chapitre 1: Introduction au droit des obligations&#10;Chapitre 2: La formation du contrat&#10;Semaine 3: Les vices du consentement..."
-                className="w-full bg-surface border border-border rounded-md p-3 text-sm focus:outline-none focus:border-accent font-mono text-xs"
+                <option value="Support de cours">Support de cours / Slides</option>
+                <option value="Arrêt ATF">Arrêt ATF / Jurisprudence</option>
+                <option value="Doctrine">Doctrine / Manuel</option>
+              </select>
+              <input 
+                type="file" required onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                className="w-full bg-surface border border-border rounded-xl p-3 text-sm text-text-muted"
               />
-
-              <div className="flex gap-2">
-                <button 
-                  type="button" 
-                  onClick={() => setShowSyllabusModal(false)}
-                  className="flex-1 bg-surface border border-border text-text py-2.5 rounded-md text-sm font-medium hover:bg-surface/80"
-                >
-                  Annuler
-                </button>
-                <button 
-                  type="submit" 
-                  className="flex-1 bg-accent text-background py-2.5 rounded-md text-sm font-medium hover:bg-accent-strong flex items-center justify-center gap-1.5"
-                >
-                  <Sparkles size={16} />
-                  <span>Générer les chapitres</span>
-                </button>
+              <div className="flex gap-2 mt-2">
+                <button type="button" onClick={() => setIsDocModalOpen(false)} className="flex-1 bg-surface border border-border py-3 rounded-xl text-sm">Annuler</button>
+                <button type="submit" className="flex-1 bg-accent text-background py-3 rounded-xl text-sm font-semibold glow-gold">Télécharger</button>
               </div>
             </form>
           </div>
