@@ -34,6 +34,37 @@ export async function deleteCourse(courseId: string) {
   if (error) throw error;
 }
 
+// NOUVEAU : Mise à jour d'un cours existant
+export async function updateCourse(
+  courseId: string,
+  courseData: { title: string; course_code?: string; ects: number; status: string; teacher_name?: string; semester?: string }
+) {
+  const { data, error } = await supabase
+    .from('courses')
+    .update({
+      title: courseData.title,
+      course_code: courseData.course_code || null,
+      ects: Number(courseData.ects) || 6,
+      status: courseData.status || 'En cours',
+      teacher_name: courseData.teacher_name || null,
+      semester: courseData.semester || 'Automne 2026'
+    })
+    .eq('id', courseId)
+    .select();
+
+  if (error) throw error;
+  return data[0];
+}
+
+// NOUVEAU : Suppression d'un document
+export async function deleteDocument(docId: string, bucketPath?: string) {
+  if (bucketPath) {
+    await supabase.storage.from('user-documents').remove([bucketPath]);
+  }
+  const { error } = await supabase.from('documents').delete().eq('id', docId);
+  if (error) throw error;
+}
+
 export async function createCourseWithSchedule(
   courseData: { title: string; course_code?: string; ects: number; status: string; teacher_name?: string; semester?: string },
   schedules: Array<{ day_of_week: string; start_time: string; end_time: string }>
@@ -192,6 +223,17 @@ export async function createFlashcard(card: { course_id: string; chapter_id?: st
     .from('flashcards')
     .insert([{ user_id: SOLO_USER_ID, ...card }])
     .select();
+  if (error) throw error;
+  return data;
+}
+
+// NOUVEAU : Création de lot de flashcards (Quizlet style)
+export async function createFlashcardsBatch(cards: Array<{ course_id: string; chapter_id?: string; front: string; back: string }>) {
+  const formatted = cards.map(c => ({
+    user_id: SOLO_USER_ID,
+    ...c
+  }));
+  const { data, error } = await supabase.from('flashcards').insert(formatted).select();
   if (error) throw error;
   return data;
 }
