@@ -4,7 +4,8 @@ import { BookOpen, BrainCircuit, CalendarDays, Upload, Plus, Award, ChevronRight
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { ProgressBar } from '../components/ui/ProgressBar';
-import { fetchCourses, fetchFlashcards, fetchEvents, supabase } from '../services/supabaseService';
+import { fetchCourses, fetchFlashcards, fetchEvents } from '../services/supabaseService';
+import { supabase } from '../lib/supabase';
 
 const SOLO_USER_ID = '00000000-0000-0000-0000-000000000000';
 
@@ -28,7 +29,6 @@ export function Dashboard() {
         setFlashcards(cardsData);
         setEvents(eventsData);
         if (profileRes.data?.full_name) {
-          // Récupère le prénom ou le nom complet
           const firstName = profileRes.data.full_name.split(' ')[0];
           setUserName(firstName);
         }
@@ -45,7 +45,7 @@ export function Dashboard() {
     : null;
 
   return (
-    <div className="flex flex-col gap-6 pt-2 pb-12 animate-in fade-in duration-300 text-text">
+    <div className="flex flex-col gap-6 pt-2 pb-16 animate-in fade-in duration-300 text-text">
       
       {/* En-tête avec prénom dynamique */}
       <header className="flex justify-between items-center px-1">
