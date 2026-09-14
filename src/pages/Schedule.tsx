@@ -11,8 +11,7 @@ export function Schedule() {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
   
-  // Date active pour la navigation du calendrier
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -47,20 +46,27 @@ export function Schedule() {
     }
   }
 
-  // Navigation du calendrier (< et >)
   const handlePrev = () => {
-    const newDate = new Date(currentDate);
-    if (viewMode === 'month') newDate.setMonth(newDate.getMonth() - 1);
-    else if (viewMode === 'week') newDate.setDate(newDate.getDate() - 7);
-    else newDate.setDate(newDate.getDate() - 1);
+    const newDate = new Date(currentDate.getTime());
+    if (viewMode === 'month') {
+      newDate.setMonth(newDate.getMonth() - 1);
+    } else if (viewMode === 'week') {
+      newDate.setDate(newDate.getDate() - 7);
+    } else {
+      newDate.setDate(newDate.getDate() - 1);
+    }
     setCurrentDate(newDate);
   };
 
   const handleNext = () => {
-    const newDate = new Date(currentDate);
-    if (viewMode === 'month') newDate.setMonth(newDate.getMonth() + 1);
-    else if (viewMode === 'week') newDate.setDate(newDate.getDate() + 7);
-    else newDate.setDate(new Date.getDate() + 1);
+    const newDate = new Date(currentDate.getTime());
+    if (viewMode === 'month') {
+      newDate.setMonth(newDate.getMonth() + 1);
+    } else if (viewMode === 'week') {
+      newDate.setDate(newDate.getDate() + 7);
+    } else {
+      newDate.setDate(newDate.getDate() + 1);
+    }
     setCurrentDate(newDate);
   };
 
@@ -119,18 +125,14 @@ export function Schedule() {
     setIsModalOpen(true);
   };
 
-  // --- Génération de la grille du calendrier ---
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const monthNames = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
 
-  // Jours du mois pour la vue mensuelle
   const firstDayIndex = new Date(year, month, 1).getDay();
-  // Ajustement pour commencer par Lundi (0 = Lundi, 6 = Dimanche)
   const adjustedFirstDay = (firstDayIndex === 0 ? 6 : firstDayIndex - 1);
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  // Filtrer les événements selon la vue active
   const filteredEvents = events.filter(evt => {
     const evtDate = new Date(evt.event_date);
     if (viewMode === 'month') {
@@ -138,10 +140,9 @@ export function Schedule() {
     } else if (viewMode === 'day') {
       return evtDate.toDateString() === currentDate.toDateString();
     } else {
-      // Vue semaine (7 jours à partir de currentDate)
-      const startOfWeek = new Date(currentDate);
+      const startOfWeek = new Date(currentDate.getTime());
       startOfWeek.setHours(0,0,0,0);
-      const endOfWeek = new Date(startOfWeek);
+      const endOfWeek = new Date(startOfWeek.getTime());
       endOfWeek.setDate(endOfWeek.getDate() + 7);
       return evtDate >= startOfWeek && evtDate < endOfWeek;
     }
@@ -157,7 +158,6 @@ export function Schedule() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Sélecteur de vue */}
           <div className="flex bg-surface border border-border rounded-xl p-1">
             {(['month', 'week', 'day'] as const).map(mode => (
               <button
@@ -185,7 +185,6 @@ export function Schedule() {
       {/* --- WIDGET CALENDRIER VISUEL --- */}
       <Card className="bg-surface border-border p-4 flex flex-col gap-4">
         
-        {/* En-tête du calendrier (Mois / Année et flèches) */}
         <div className="flex justify-between items-center px-2">
           <h3 className="font-serif text-lg font-bold">
             {monthNames[month]} {year}
@@ -202,24 +201,19 @@ export function Schedule() {
 
         {viewMode === 'month' && (
           <div className="flex flex-col gap-2">
-            {/* Jours de la semaine */}
             <div className="grid grid-cols-7 text-center text-[10px] font-semibold text-text-muted uppercase tracking-wider">
               <span>Lun</span><span>Mar</span><span>Mer</span><span>Jeu</span><span>Ven</span><span>Sam</span><span>Dim</span>
             </div>
 
-            {/* Grille des jours */}
             <div className="grid grid-cols-7 gap-1 text-center">
-              {/* Cases vides pour décaler au bon jour de la semaine */}
               {Array.from({ length: adjustedFirstDay }).map((_, i) => (
                 <div key={`empty-${i}`} className="h-10" />
               ))}
 
-              {/* Jours du mois */}
               {Array.from({ length: daysInMonth }).map((_, i) => {
                 const dayNum = i + 1;
                 const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
                 
-                // Vérifier s'il y a des événements ce jour-là
                 const dayEvents = events.filter(e => e.event_date && e.event_date.startsWith(dateStr));
                 const isToday = new Date().toDateString() === new Date(year, month, dayNum).toDateString();
 
