@@ -1,9 +1,9 @@
 import React from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
-import { House, BookOpen, BrainCircuit, CalendarDays, UserRound, Plus } from 'lucide-react';
+import { Home, BookOpen, BrainCircuit, CalendarDays, UserRound, Plus } from 'lucide-react';
 
 const navItems = [
-  { icon: House, label: 'Accueil', path: '/' },
+  { icon: Home, label: 'Accueil', path: '/' },
   { icon: BookOpen, label: 'Cours', path: '/courses' },
   { icon: BrainCircuit, label: 'Réviser', path: '/study' },
   { icon: CalendarDays, label: 'Planning', path: '/schedule' },
