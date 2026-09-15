@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, FileText, Edit3, Trash2, BrainCircuit, FileEdit, Award, LayoutGrid, Scale, Plus, X, Check, ClipboardPaste, ChevronRight, ChevronDown } from 'lucide-react';
+import { ChevronLeft, FileText, Edit3, Trash2, BrainCircuit, FileEdit, Award, LayoutGrid, Scale, Plus, X, Check, ClipboardPaste, ChevronRight, ChevronDown, Calendar, Clock, CornerDownRight } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
 import { Card } from '../components/ui/Card';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
-import { fetchCourseById, fetchCourseChapters, fetchCourseDocuments, fetchCourseGrades, fetchNotes, fetchFlashcards, deleteDocument, createChapter, parseAndCreateChaptersFromSyllabus } from '../services/supabaseService';
+import { fetchCourseById, fetchCourseChapters, fetchCourseDocuments, fetchCourseGrades, fetchNotes, fetchFlashcards, deleteDocument, createChapter, parseAndCreateChaptersFromSyllabus, fetchEvents, createEvent } from '../services/supabaseService';
 import { supabase } from '../lib/supabase';
 import { toast } from '../lib/toast';
 
@@ -17,26 +17,29 @@ export function CourseDetail() {
   const [grades, setGrades] = useState<any[]>([]);
   const [notes, setNotes] = useState<any[]>([]);
   const [flashcards, setFlashcards] = useState<any[]>([]);
+  const [courseEvents, setCourseEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [docToDelete, setDocToDelete] = useState<{id: string, path: string} | null>(null);
 
-  // États pour la gestion des chapitres
+  // Gestion des chapitres
   const [isAddingChapter, setIsAddingChapter] = useState(false);
   const [newChapterTitle, setNewChapterTitle] = useState('');
+  const [parentChapterId, setParentChapterId] = useState<string | null>(null); // Pour ajouter un sous-chapitre ciblé
   
-  // État pour l'édition d'un chapitre
   const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
-
-  // État pour la modale de suppression de chapitre
   const [chapterToDelete, setChapterToDelete] = useState<string | null>(null);
 
-  // État pour l'import rapide par copier-coller de la table des matières
+  // Import en masse
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkSyllabusText, setBulkSyllabusText] = useState('');
 
-  // NOUVEAU : État pour gérer les chapitres ouverts/fermés (pliés/dépliés)
-  // Par défaut, tous les chapitres sont ouverts (true)
+  // Planning du cours
+  const [isAddingEvent, setIsAddingEvent] = useState(false);
+  const [eventForm, setEventForm] = useState({ title: '', event_date: '', category: 'Cours' });
+  const [eventToDelete, setEventToDelete] = useState<string | null>(null);
+
+  // État plié/déplié des chapitres
   const [openChapters, setOpenChapters] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -46,13 +49,14 @@ export function CourseDetail() {
   async function loadData() {
     setLoading(true);
     try {
-      const [courseData, chaptersData, docsData, gradesData, notesData, flashcardsData] = await Promise.all([
+      const [courseData, chaptersData, docsData, gradesData, notesData, flashcardsData, eventsData] = await Promise.all([
         fetchCourseById(courseId!),
         fetchCourseChapters(courseId!),
         fetchCourseDocuments(courseId!),
         fetchCourseGrades(courseId!),
         fetchNotes(),
-        fetchFlashcards(courseId!)
+        fetchFlashcards(courseId!),
+        fetchEvents()
       ]);
       setCourse(courseData);
       setChapters(chaptersData);
@@ -60,12 +64,10 @@ export function CourseDetail() {
       setGrades(gradesData);
       setNotes(notesData.filter((n: any) => n.course_id === courseId));
       setFlashcards(flashcardsData);
+      setCourseEvents(eventsData.filter((e: any) => e.course_id === courseId));
 
-      // Initialiser tous les chapitres comme ouverts par défaut
       const initialOpenState: Record<string, boolean> = {};
-      chaptersData.forEach((ch: any) => {
-        initialOpenState[ch.id] = true;
-      });
+      chaptersData.forEach((ch: any) => { initialOpenState[ch.id] = true; });
       setOpenChapters(initialOpenState);
     } catch (err) {
       console.error("Erreur chargement:", err);
@@ -75,24 +77,16 @@ export function CourseDetail() {
     }
   }
 
-  // Basculer l'état plié/déplié d'un chapitre
   const toggleChapter = (chapterId: string) => {
-    setOpenChapters(prev => ({
-      ...prev,
-      [chapterId]: !prev[chapterId]
-    }));
+    setOpenChapters(prev => ({ ...prev, [chapterId]: !prev[chapterId] }));
   };
 
-  // Tout plier / Tout déplier
   const handleToggleAll = (open: boolean) => {
     const newState: Record<string, boolean> = {};
-    chapters.forEach(ch => {
-      newState[ch.id] = open;
-    });
+    chapters.forEach(ch => { newState[ch.id] = open; });
     setOpenChapters(newState);
   };
 
-  // Création d'un chapitre unitaire
   const handleCreateChapter = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newChapterTitle.trim() || !courseId) return;
@@ -100,25 +94,23 @@ export function CourseDetail() {
       await createChapter({
         course_id: courseId,
         title: newChapterTitle.trim(),
+        parent_id: parentChapterId,
         order_index: chapters.length + 1
       });
       setNewChapterTitle('');
       setIsAddingChapter(false);
-      toast("Chapitre ajouté", "success");
+      setParentChapterId(null);
+      toast("Chapitre ou sous-chapitre ajouté", "success");
       loadData();
     } catch (err) {
-      toast("Erreur lors de la création du chapitre", "error");
+      toast("Erreur lors de la création", "error");
     }
   };
 
-  // Modification d'un chapitre
   const handleUpdateChapter = async (chapterId: string) => {
     if (!editingTitle.trim()) return;
     try {
-      const { error } = await supabase
-        .from('chapters')
-        .update({ title: editingTitle.trim() })
-        .eq('id', chapterId);
+      const { error } = await supabase.from('chapters').update({ title: editingTitle.trim() }).eq('id', chapterId);
       if (error) throw error;
       setEditingChapterId(null);
       toast("Chapitre mis à jour", "success");
@@ -128,7 +120,6 @@ export function CourseDetail() {
     }
   };
 
-  // Suppression d'un chapitre
   const confirmDeleteChapter = async () => {
     if (!chapterToDelete) return;
     try {
@@ -142,17 +133,16 @@ export function CourseDetail() {
     }
   };
 
-  // Import en masse par copier-coller de la table des matières
   const handleBulkImport = async () => {
     if (!bulkSyllabusText.trim() || !courseId) return;
     try {
       await parseAndCreateChaptersFromSyllabus(courseId, bulkSyllabusText);
       setBulkSyllabusText('');
       setShowBulkModal(false);
-      toast("Table des matières importée avec succès !", "success");
+      toast("Table des matières hiérarchique importée !", "success");
       loadData();
     } catch (err) {
-      toast("Erreur lors de l'importation en masse", "error");
+      toast("Erreur lors de l'importation", "error");
     }
   };
 
@@ -168,26 +158,171 @@ export function CourseDetail() {
     }
   };
 
-  if (loading) return <div className="text-center p-12 text-text-muted font-mono animate-pulse">Chargement du plan d'études...</div>;
+  const handleCreateEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!eventForm.title || !eventForm.event_date || !courseId) return;
+    try {
+      await createEvent({ title: eventForm.title, event_date: eventForm.event_date, category: eventForm.category, course_id: courseId });
+      setEventForm({ title: '', event_date: '', category: 'Cours' });
+      setIsAddingEvent(false);
+      toast("Créneau ajouté au planning", "success");
+      loadData();
+    } catch (err) {
+      toast("Erreur lors de l'ajout du créneau", "error");
+    }
+  };
+
+  const confirmDeleteEvent = async () => {
+    if (!eventToDelete) return;
+    try {
+      const { error } = await supabase.from('events').delete().eq('id', eventToDelete);
+      if (error) throw error;
+      setEventToDelete(null);
+      toast("Créneau supprimé", "success");
+      loadData();
+    } catch (err) {
+      toast("Erreur", "error");
+    }
+  };
+
+  // Organiser les chapitres en arbre hiérarchique (Chapitre -> Sous-chapitre -> Sous-sous-chapitre)
+  const buildChapterTree = (flatChapters: any[]) => {
+    const map = new Map();
+    const roots: any[] = [];
+    flatChapters.forEach(ch => map.set(ch.id, { ...ch, children: [] }));
+    flatChapters.forEach(ch => {
+      if (ch.parent_id && map.has(ch.parent_id)) {
+        map.get(ch.parent_id).children.push(map.get(ch.id));
+      } else {
+        roots.push(map.get(ch.id));
+      }
+    });
+    return roots;
+  };
+
+  if (loading) return <div className="text-center p-12 text-text-muted font-mono animate-pulse">Chargement...</div>;
   if (!course) return <div className="text-center p-12 text-text-muted">Cours introuvable</div>;
 
   const dueCardsCount = flashcards.filter(f => new Date(f.due_at) <= new Date()).length;
+  const chapterTree = buildChapterTree(chapters);
+
+  // Fonction récursive pour afficher les chapitres et leurs sous-niveaux avec indentation
+  const renderChapterItem = (chapter: any, depth = 0) => {
+    const chapterDocs = documents.filter(d => d.chapter_id === chapter.id);
+    const hasCards = flashcards.some(f => f.chapter_id === chapter.id);
+    const isEditing = editingChapterId === chapter.id;
+    const isOpen = openChapters[chapter.id] ?? true;
+    const indentClass = depth === 1 ? 'ml-6 border-l-2 border-accent/30 pl-2' : depth >= 2 ? 'ml-12 border-l-2 border-secondary/30 pl-2' : '';
+
+    return (
+      <div key={chapter.id} className={`flex flex-col gap-2 ${indentClass}`}>
+        <div className="bg-surface border border-border rounded-2xl overflow-hidden shadow-sm group">
+          <div 
+            onClick={() => !isEditing && toggleChapter(chapter.id)}
+            className="p-3.5 flex items-center justify-between bg-surface hover:bg-surface-elevated transition-colors cursor-pointer select-none"
+          >
+            <div className="flex items-center gap-3 flex-1 min-w-0 pr-2">
+              <div className="text-text-muted shrink-0">
+                {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+              </div>
+              {depth > 0 && <CornerDownRight size={14} className="text-accent shrink-0" />}
+              <h3 className="font-semibold text-sm text-text truncate">{chapter.title}</h3>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+              {hasCards && <Badge variant="info" className="hidden sm:flex text-[9px] bg-info/10 border-transparent text-info"><BrainCircuit size={10}/> Cartes</Badge>}
+              <span className="text-xs text-text-muted font-medium bg-background px-2 py-0.5 rounded-md">
+                {chapterDocs.length} doc{chapterDocs.length !== 1 && 's'}
+              </span>
+              <div className="flex items-center gap-1 border-l border-border pl-2 ml-1">
+                <button 
+                  onClick={() => { setParentChapterId(chapter.id); setIsAddingChapter(true); }}
+                  className="p-1 text-text-muted hover:text-accent transition-colors rounded cursor-pointer"
+                  title="Ajouter un sous-chapitre"
+                >
+                  <Plus size={14} />
+                </button>
+                <button 
+                  onClick={() => { setEditingChapterId(chapter.id); setEditingTitle(chapter.title); }}
+                  className="p-1 text-text-muted hover:text-accent transition-colors rounded cursor-pointer"
+                  title="Modifier"
+                >
+                  <Edit3 size={14} />
+                </button>
+                <button 
+                  onClick={() => setChapterToDelete(chapter.id)}
+                  className="p-1 text-text-muted hover:text-danger transition-colors rounded cursor-pointer"
+                  title="Supprimer"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Édition en ligne */}
+          {isEditing && (
+            <div className="p-3 bg-surface-elevated border-t border-border flex gap-2" onClick={(e) => e.stopPropagation()}>
+              <input 
+                type="text"
+                autoFocus
+                value={editingTitle}
+                onChange={(e) => setEditingTitle(e.target.value)}
+                className="bg-background border border-border rounded-lg px-3 py-1 text-sm text-text w-full focus:border-accent"
+              />
+              <button onClick={() => handleUpdateChapter(chapter.id)} className="px-3 bg-success text-white rounded-lg text-xs font-bold cursor-pointer">OK</button>
+              <button onClick={() => setEditingChapterId(null)} className="px-3 bg-surface border border-border rounded-lg text-xs cursor-pointer">Annuler</button>
+            </div>
+          )}
+
+          {/* Documents du chapitre */}
+          {isOpen && chapterDocs.length > 0 && (
+            <div className="border-t border-border/50 bg-background/50 flex flex-col divide-y divide-border/50">
+              {chapterDocs.map(doc => {
+                const isPdf = doc.mime_type === 'application/pdf' || doc.original_name.endsWith('.pdf');
+                return (
+                  <div key={doc.id} className="p-3 pl-12 flex items-center justify-between cursor-pointer hover:bg-surface transition-colors" onClick={() => navigate(`/viewer/${doc.id}`)}>
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className={`p-1.5 rounded-lg shrink-0 ${isPdf ? 'bg-danger/10 text-danger' : 'bg-info/10 text-info'}`}>
+                        <FileText size={14} />
+                      </div>
+                      <div className="min-w-0 pr-2">
+                        <p className="text-sm font-medium text-text truncate hover:text-accent transition-colors">{doc.original_name}</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); setDocToDelete({ id: doc.id, path: doc.bucket_path }); }}
+                      className="p-1.5 text-text-muted hover:text-danger rounded-lg transition-colors cursor-pointer"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Rendu récursif des sous-chapitres et sous-sous-chapitres */}
+        {chapter.children && chapter.children.length > 0 && (
+          <div className="flex flex-col gap-2 mt-1">
+            {chapter.children.map((child: any) => renderChapterItem(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col gap-8 pt-2 pb-16 animate-in fade-in duration-300">
-      {/* HEADER ÉDITORIAL */}
       <header className="flex flex-col gap-6 text-text border-b border-border pb-6">
         <div className="flex items-center justify-between">
           <button onClick={() => navigate('/courses')} className="flex items-center gap-1 text-text-muted hover:text-text transition-colors -ml-2 p-2 cursor-pointer">
             <ChevronLeft size={20} />
             <span className="text-sm font-medium">Plan d'études</span>
           </button>
-          <button 
-            onClick={() => navigate(`/edit/course/${course.id}`)}
-            className="flex items-center gap-1.5 bg-surface border border-border px-3 py-2 rounded-xl text-xs font-medium text-text hover:border-accent transition-colors cursor-pointer"
-          >
-            <Edit3 size={14} />
-            <span className="hidden sm:inline">Modifier</span>
+          <button onClick={() => navigate(`/edit/course/${course.id}`)} className="flex items-center gap-1.5 bg-surface border border-border px-3 py-2 rounded-xl text-xs font-medium text-text hover:border-accent transition-colors cursor-pointer">
+            <Edit3 size={14} /> Modifier
           </button>
         </div>
         <div>
@@ -204,7 +339,7 @@ export function CourseDetail() {
         </div>
       </header>
 
-      {/* TOOLBAR D'ACTIONS RAPIDES */}
+      {/* Raccourcis rapides */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card variant="minimal" onClick={() => navigate('/add/document')} className="cursor-pointer bg-surface p-4 flex items-center gap-3 hover:border-accent/50 transition-colors border">
           <div className="w-10 h-10 rounded-lg bg-surface-elevated flex items-center justify-center text-text-muted"><FileText size={18} /></div>
@@ -225,256 +360,141 @@ export function CourseDetail() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* COLONNE GAUCHE (Documents & Chapitres) */}
+        {/* COLONNE GAUCHE (Chapitres hiérarchiques) */}
         <section className="lg:col-span-2 flex flex-col gap-4 text-text">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-2">
             <div className="flex items-center gap-3">
               <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
-                <LayoutGrid size={16} /> Chapitres ({chapters.length})
+                <LayoutGrid size={16} /> Structure hiérarchique ({chapters.length})
               </h2>
-              {chapters.length > 0 && (
-                <div className="flex items-center gap-1 text-[11px] text-text-muted font-mono">
-                  <button onClick={() => handleToggleAll(true)} className="hover:text-accent cursor-pointer">Déplier tout</button>
-                  <span>•</span>
-                  <button onClick={() => handleToggleAll(false)} className="hover:text-accent cursor-pointer">Plier tout</button>
-                </div>
-              )}
             </div>
             <div className="flex items-center gap-2">
-              <button 
-                onClick={() => setShowBulkModal(true)}
-                className="text-xs text-text font-semibold flex items-center gap-1 hover:border-accent/50 transition-colors cursor-pointer bg-surface px-3 py-1.5 rounded-lg border border-border"
-              >
-                <ClipboardPaste size={14} className="text-accent" /> Coller la table des matières
+              <button onClick={() => setShowBulkModal(true)} className="text-xs text-text font-semibold flex items-center gap-1 hover:border-accent/50 transition-colors cursor-pointer bg-surface px-3 py-1.5 rounded-lg border border-border">
+                <ClipboardPaste size={14} className="text-accent" /> Table des matières
               </button>
-              <button 
-                onClick={() => setIsAddingChapter(true)}
-                className="text-xs text-accent font-bold flex items-center gap-1 hover:underline cursor-pointer bg-accent/10 px-3 py-1.5 rounded-lg border border-accent/20"
-              >
-                <Plus size={14} /> Chapitre
+              <button onClick={() => { setParentChapterId(null); setIsAddingChapter(true); }} className="text-xs text-accent font-bold flex items-center gap-1 hover:underline cursor-pointer bg-accent/10 px-3 py-1.5 rounded-lg border border-accent/20">
+                <Plus size={14} /> Chapitre principal
               </button>
             </div>
           </div>
 
-          {/* Formulaire d'ajout rapide de chapitre */}
+          {/* Formulaire d'ajout de chapitre / sous-chapitre */}
           {isAddingChapter && (
-            <form onSubmit={handleCreateChapter} className="bg-surface border border-accent/40 p-4 rounded-2xl flex gap-2 animate-in fade-in duration-200">
-              <input 
-                type="text"
-                autoFocus
-                value={newChapterTitle}
-                onChange={(e) => setNewChapterTitle(e.target.value)}
-                placeholder="Intitulé du chapitre (ex: Chapitre 1 - La formation du contrat)"
-                className="flex-1 bg-surface-elevated border border-border rounded-xl px-3 py-2 text-sm focus:border-accent"
-              />
-              <button type="submit" className="bg-accent text-background px-4 py-2 rounded-xl text-xs font-bold cursor-pointer">
-                Créer
-              </button>
-              <button type="button" onClick={() => setIsAddingChapter(false)} className="p-2 text-text-muted hover:text-text">
-                <X size={18} />
-              </button>
+            <form onSubmit={handleCreateChapter} className="bg-surface border border-accent/40 p-4 rounded-2xl flex flex-col gap-3 animate-in fade-in duration-200">
+              <span className="text-xs font-bold text-accent">
+                {parentChapterId ? "Ajouter un sous-chapitre" : "Ajouter un chapitre principal"}
+              </span>
+              <div className="flex gap-2">
+                <input 
+                  type="text"
+                  autoFocus
+                  value={newChapterTitle}
+                  onChange={(e) => setNewChapterTitle(e.target.value)}
+                  placeholder="Intitulé (ex: 1.1 Notion de consentement)"
+                  className="flex-1 bg-surface-elevated border border-border rounded-xl px-3 py-2 text-sm focus:border-accent"
+                />
+                <button type="submit" className="bg-accent text-background px-4 py-2 rounded-xl text-xs font-bold cursor-pointer">Créer</button>
+                <button type="button" onClick={() => { setIsAddingChapter(false); setParentChapterId(null); }} className="p-2 text-text-muted hover:text-text"><X size={18}/></button>
+              </div>
             </form>
           )}
 
-          {chapters.length === 0 && documents.length === 0 && !isAddingChapter ? (
-            <div className="text-center py-12 border border-dashed border-border rounded-2xl text-text-muted text-sm flex flex-col items-center gap-2">
-              <p>Ce cours est vide. Ajoutez des chapitres ou collez votre table des matières.</p>
+          {chapters.length === 0 && !isAddingChapter ? (
+            <div className="text-center py-12 border border-dashed border-border rounded-2xl text-text-muted text-sm">
+              Aucun chapitre. Collez votre table des matières ou créez un chapitre principal.
             </div>
           ) : (
-            <div className="flex flex-col gap-4">
-              {chapters.map((chapter) => {
-                const chapterDocs = documents.filter(d => d.chapter_id === chapter.id);
-                const hasCards = flashcards.some(f => f.chapter_id === chapter.id);
-                const isEditing = editingChapterId === chapter.id;
-                const isOpen = openChapters[chapter.id] ?? true; // Déplié par défaut
-
-                return (
-                  <div key={chapter.id} className="bg-surface border border-border rounded-2xl overflow-hidden shadow-sm group">
-                    {/* EN-TÊTE DU CHAPITRE (Cliquable pour plier/déplier) */}
-                    <div 
-                      onClick={() => !isEditing && toggleChapter(chapter.id)}
-                      className="p-4 flex items-center justify-between bg-surface hover:bg-surface-elevated transition-colors cursor-pointer select-none"
-                    >
-                      <div className="flex items-center gap-3 flex-1 min-w-0 pr-2">
-                        <div className="text-text-muted shrink-0">
-                          {isOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                        </div>
-                        <div className="w-7 h-7 rounded-lg bg-background border border-border text-text-muted flex items-center justify-center font-bold text-xs shrink-0">
-                          {chapter.order_index}
-                        </div>
-                        {isEditing ? (
-                          <div className="flex items-center gap-2 flex-1" onClick={(e) => e.stopPropagation()}>
-                            <input 
-                              type="text"
-                              autoFocus
-                              value={editingTitle}
-                              onChange={(e) => setEditingTitle(e.target.value)}
-                              className="bg-background border border-border rounded-lg px-2.5 py-1 text-sm text-text w-full focus:border-accent"
-                            />
-                            <button onClick={() => handleUpdateChapter(chapter.id)} className="p-1.5 text-success hover:bg-success/10 rounded cursor-pointer"><Check size={16}/></button>
-                            <button onClick={() => setEditingChapterId(null)} className="p-1.5 text-text-muted hover:bg-surface rounded cursor-pointer"><X size={16}/></button>
-                          </div>
-                        ) : (
-                          <h3 className="font-semibold text-sm text-text truncate">{chapter.title}</h3>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-                        {hasCards && <Badge variant="info" className="hidden sm:flex text-[9px] bg-info/10 border-transparent text-info"><BrainCircuit size={10}/> Cartes</Badge>}
-                        <span className="text-xs text-text-muted font-medium bg-background px-2 py-1 rounded-md">
-                          {chapterDocs.length} doc{chapterDocs.length !== 1 && 's'}
-                        </span>
-                        {!isEditing && (
-                          <div className="flex items-center gap-1 border-l border-border pl-2 ml-1">
-                            <button 
-                              onClick={() => { setEditingChapterId(chapter.id); setEditingTitle(chapter.title); }}
-                              className="p-1.5 text-text-muted hover:text-accent transition-colors rounded cursor-pointer"
-                              title="Modifier le chapitre"
-                            >
-                              <Edit3 size={15} />
-                            </button>
-                            <button 
-                              onClick={() => setChapterToDelete(chapter.id)}
-                              className="p-1.5 text-text-muted hover:text-danger transition-colors rounded cursor-pointer"
-                              title="Supprimer le chapitre"
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* CONTENU DU CHAPITRE (S'affiche uniquement si déplié / isOpen === true) */}
-                    {isOpen && (
-                      <div className="border-t border-border/50 bg-background/50 flex flex-col divide-y divide-border/50 animate-in fade-in duration-200">
-                        {chapterDocs.length === 0 ? (
-                          <div className="p-4 text-center text-xs text-text-muted italic">
-                            Aucun document rattaché à ce chapitre pour le moment.
-                          </div>
-                        ) : (
-                          chapterDocs.map(doc => {
-                            const isPdf = doc.mime_type === 'application/pdf' || doc.original_name.endsWith('.pdf');
-                            return (
-                              <div key={doc.id} className="p-3 pl-10 flex items-center justify-between cursor-pointer hover:bg-surface transition-colors" onClick={() => navigate(`/viewer/${doc.id}`)}>
-                                <div className="flex items-center gap-3 min-w-0 flex-1">
-                                  <div className={`p-2 rounded-lg shrink-0 ${isPdf ? 'bg-danger/10 text-danger' : 'bg-info/10 text-info'}`}>
-                                    <FileText size={16} />
-                                  </div>
-                                  <div className="min-w-0 pr-2">
-                                    <p className="text-sm font-medium text-text truncate hover:text-accent transition-colors">{doc.original_name}</p>
-                                    <div className="flex items-center gap-2 mt-1 text-[10px] font-mono text-text-muted">
-                                      <span className="uppercase">{doc.document_type}</span>
-                                      {doc.atf_ref && <span className="text-warning bg-warning/10 px-1 rounded">{doc.atf_ref}</span>}
-                                    </div>
-                                  </div>
-                                </div>
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); setDocToDelete({ id: doc.id, path: doc.bucket_path }); }}
-                                  className="p-2 text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors cursor-pointer"
-                                  title="Supprimer le document"
-                                >
-                                  <Trash2 size={16} />
-                                </button>
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+            <div className="flex flex-col gap-3">
+              {chapterTree.map(rootChapter => renderChapterItem(rootChapter, 0))}
             </div>
           )}
         </section>
 
-        {/* COLONNE DROITE (Widgets Mémoire & Notes) */}
-        <aside className="lg:col-span-1 flex flex-col gap-4">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted mb-2 flex items-center gap-2">
-            <BrainCircuit size={16} /> Travail personnel
-          </h2>
-          <Card onClick={() => navigate(`/study`)} className="bg-surface border-border p-5 cursor-pointer hover:border-info/50 transition-colors group">
+        {/* COLONNE DROITE (Planning, Mémoire & Notes) */}
+        <aside className="lg:col-span-1 flex flex-col gap-6">
+          <div className="flex flex-col gap-3">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
+                <Calendar size={16} /> Planning & Créneaux
+              </h2>
+              <button onClick={() => setIsAddingEvent(true)} className="text-xs text-accent font-bold flex items-center gap-1 hover:underline cursor-pointer bg-accent/10 px-2.5 py-1 rounded-lg border border-accent/20">
+                <Plus size={12} /> Créneau
+              </button>
+            </div>
+
+            {isAddingEvent && (
+              <form onSubmit={handleCreateEvent} className="bg-surface border border-accent/40 p-3 rounded-2xl flex flex-col gap-2.5">
+                <input type="text" required value={eventForm.title} onChange={(e) => setEventForm({ ...eventForm, title: e.target.value })} placeholder="Titre (ex: Séminaire)" className="bg-surface-elevated border border-border rounded-xl px-3 py-2 text-xs" />
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="datetime-local" required value={eventForm.event_date} onChange={(e) => setEventForm({ ...eventForm, event_date: e.target.value })} className="bg-surface-elevated border border-border rounded-xl px-2 py-2 text-xs" />
+                  <select value={eventForm.category} onChange={(e) => setEventForm({ ...eventForm, category: e.target.value })} className="bg-surface-elevated border border-border rounded-xl px-2 py-2 text-xs">
+                    <option value="Cours">Cours</option>
+                    <option value="Examen">Examen</option>
+                    <option value="Séminaire">Séminaire</option>
+                    <option value="Rendu">Rendu</option>
+                  </select>
+                </div>
+                <div className="flex gap-2 mt-1">
+                  <button type="submit" className="flex-1 bg-accent text-background py-1.5 rounded-xl text-xs font-bold">Enregistrer</button>
+                  <button type="button" onClick={() => setIsAddingEvent(false)} className="px-3 bg-surface border border-border text-text-muted py-1.5 rounded-xl text-xs">Annuler</button>
+                </div>
+              </form>
+            )}
+
+            <div className="bg-surface border border-border rounded-2xl p-4 flex flex-col gap-2.5">
+              {courseEvents.length === 0 ? (
+                <p className="text-xs text-text-muted italic text-center py-2">Aucun créneau programmé.</p>
+              ) : (
+                courseEvents.map(evt => (
+                  <div key={evt.id} className="flex items-center justify-between bg-surface-elevated p-2.5 rounded-xl border border-border/50 text-xs">
+                    <div className="flex flex-col gap-0.5 min-w-0 pr-2">
+                      <span className="font-semibold text-text truncate">{evt.title}</span>
+                      <span className="text-[10px] font-mono text-text-muted flex items-center gap-1">
+                        <Clock size={10} /> {new Date(evt.event_date).toLocaleString('fr-CH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <button onClick={() => setEventToDelete(evt.id)} className="p-1.5 text-text-muted hover:text-danger rounded-lg"><Trash2 size={14} /></button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <Card onClick={() => navigate(`/study`)} className="bg-surface border-border p-5 cursor-pointer hover:border-info/50 group">
             <div className="flex justify-between items-start mb-4">
               <div className="p-2.5 bg-info/10 text-info rounded-xl group-hover:scale-110 transition-transform"><BrainCircuit size={20} /></div>
-              <ChevronRight size={18} className="text-text-muted group-hover:text-info transition-colors" />
+              <ChevronRight size={18} className="text-text-muted group-hover:text-info" />
             </div>
             <h3 className="font-serif font-bold text-xl mb-1">Répétition espacée</h3>
-            <div className="flex flex-col gap-1 mt-3">
-              <p className="text-sm text-text-muted flex justify-between">Total du cours: <span className="font-bold text-text">{flashcards.length}</span></p>
-              <p className="text-sm text-text-muted flex justify-between">À réviser: <span className="font-bold text-info">{dueCardsCount}</span></p>
-            </div>
-          </Card>
-          <Card className="bg-surface border-border p-5">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2.5 bg-accent/10 text-accent rounded-xl"><FileEdit size={20} /></div>
-              <h3 className="font-serif font-bold text-xl">Notes de cours</h3>
-            </div>
-            {notes.length === 0 ? (
-              <p className="text-xs text-text-muted italic">Aucune note liée à ce cours.</p>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {notes.map(n => (
-                  <div key={n.id} onClick={() => navigate(`/editor/${n.id}`)} className="text-sm font-medium hover:text-accent cursor-pointer truncate flex items-center gap-2 p-2 rounded-lg hover:bg-surface-elevated transition-colors border border-transparent hover:border-border">
-                    <div className="w-1.5 h-1.5 rounded-full bg-accent shrink-0"></div>
-                    <span className="truncate">{n.title}</span>
-                  </div>
-                ))}
-              </div>
-            )}
+            <p className="text-sm text-text-muted">À réviser : <span className="font-bold text-info">{dueCardsCount}</span></p>
           </Card>
         </aside>
       </div>
 
-      {/* Modale d'import en masse (Table des matières) */}
+      {/* Modale d'import en masse */}
       {showBulkModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="w-full max-w-xl bg-surface-elevated border border-border rounded-3xl p-6 shadow-2xl flex flex-col gap-4 text-text">
             <div className="flex justify-between items-center pb-2 border-b border-border">
-              <h3 className="font-serif text-xl font-bold">Coller la table des matières</h3>
-              <button onClick={() => setShowBulkModal(false)} className="p-1.5 hover:bg-surface rounded-xl text-text-muted cursor-pointer"><X size={20} /></button>
+              <h3 className="font-serif text-xl font-bold">Importer la table des matières hiérarchique</h3>
+              <button onClick={() => setShowBulkModal(false)} className="p-1.5 hover:bg-surface rounded-xl text-text-muted"><X size={20} /></button>
             </div>
             <p className="text-xs text-text-muted leading-relaxed">
-              Copiez-collez le plan de votre cours ou votre table des matières (PDF, Word, syllabus). L'intelligence de l'application détectera automatiquement les chapitres par ligne.
+              Collez votre table des matières. Le parseur détecte automatiquement les niveaux (Chapitres I, II, 1.1, 1.1.1) grâce à l'indentation et la numérotation.
             </p>
-            <textarea
-              autoFocus
-              value={bulkSyllabusText}
-              onChange={(e) => setBulkSyllabusText(e.target.value)}
-              placeholder="Chapitre 1 : Introduction au droit des obligations&#10;Chapitre 2 : La conclusion du contrat&#10;Chapitre 3 : Les vices du consentement..."
-              className="w-full h-48 bg-surface border border-border rounded-xl p-4 text-sm focus:border-accent resize-none font-serif"
-            />
+            <textarea autoFocus value={bulkSyllabusText} onChange={(e) => setBulkSyllabusText(e.target.value)} placeholder="I. Introduction&#10;  1. Notion de base&#10;    1.1 Sous-point..." className="w-full h-48 bg-surface border border-border rounded-xl p-4 text-sm font-serif resize-none" />
             <div className="flex gap-2 mt-2">
-              <button onClick={() => setShowBulkModal(false)} className="flex-1 bg-surface border border-border py-3 rounded-xl text-sm font-medium hover:bg-surface/80 cursor-pointer">Annuler</button>
-              <button onClick={handleBulkImport} className="flex-1 bg-accent text-background py-3 rounded-xl text-sm font-bold glow-gold hover:bg-accent-strong cursor-pointer">Importer les chapitres</button>
+              <button onClick={() => setShowBulkModal(false)} className="flex-1 bg-surface border border-border py-3 rounded-xl text-sm">Annuler</button>
+              <button onClick={handleBulkImport} className="flex-1 bg-accent text-background py-3 rounded-xl text-sm font-bold glow-gold">Lancer l'import intelligent</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modale de confirmation de suppression de document */}
-      <ConfirmModal 
-        isOpen={!!docToDelete}
-        title="Supprimer le document ?"
-        message="Ce document sera définitivement effacé de vos ressources."
-        confirmText="Supprimer"
-        cancelText="Annuler"
-        isDanger={true}
-        onConfirm={handleDeleteDocument}
-        onClose={() => setDocToDelete(null)}
-      />
-
-      {/* Modale de confirmation de suppression de chapitre */}
-      <ConfirmModal 
-        isOpen={!!chapterToDelete}
-        title="Supprimer le chapitre ?"
-        message="Voulez-vous vraiment supprimer ce chapitre ? Les documents associés ne seront pas supprimés mais perdront leur rattachement."
-        confirmText="Supprimer"
-        cancelText="Annuler"
-        isDanger={true}
-        onConfirm={confirmDeleteChapter}
-        onClose={() => setChapterToDelete(null)}
-      />
+      {/* Modales de suppression */}
+      <ConfirmModal isOpen={!!docToDelete} title="Supprimer le document ?" message="Ce document sera définitivement effacé." confirmText="Supprimer" cancelText="Annuler" isDanger={true} onConfirm={handleDeleteDocument} onClose={() => setDocToDelete(null)} />
+      <ConfirmModal isOpen={!!chapterToDelete} title="Supprimer le chapitre ?" message="Attention, les sous-chapitres associés seront également supprimés." confirmText="Supprimer" cancelText="Annuler" isDanger={true} onConfirm={confirmDeleteChapter} onClose={() => setChapterToDelete(null)} />
+      <ConfirmModal isOpen={!!eventToDelete} title="Supprimer le créneau ?" message="Supprimer cet événement du calendrier ?" confirmText="Supprimer" cancelText="Annuler" isDanger={true} onConfirm={confirmDeleteEvent} onClose={() => setEventToDelete(null)} />
     </div>
   );
 }
