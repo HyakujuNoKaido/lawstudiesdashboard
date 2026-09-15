@@ -218,6 +218,16 @@ export async function parseAndCreateChaptersFromSyllabus(courseId: string, sylla
   return createdChapters;
 }
 
+export async function updateChapterParent(chapterId: string, parentId: string | null) {
+  const { data, error } = await supabase
+    .from('chapters')
+    .update({ parent_id: parentId })
+    .eq('id', chapterId)
+    .select();
+  if (error) throw error;
+  return data[0];
+}
+
 export async function createMultipleCourses(coursesList: Array<{ title: string; course_code?: string; ects: number; status?: string; semester?: string }>) {
   const formatted = coursesList.map(c => ({
     user_id: SOLO_USER_ID,
@@ -431,4 +441,6 @@ export async function searchGlobal(keyword: string) {
     caseLaws: caseLawsRes.data || [],
     caseStudies: caseStudiesRes.data || []
   };
+
+  
 }
