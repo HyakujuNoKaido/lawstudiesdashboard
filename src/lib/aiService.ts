@@ -26,7 +26,6 @@ export async function extractTextFromPDF(fileUrl: string, startPage?: number, en
   }
 }
 
-// Utilisation du même pattern robuste que generateAISummary
 export async function generateAIFlashcards(text: string, courseId: string, chapterId?: string) {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("Clé API Gemini introuvable.");
@@ -54,7 +53,7 @@ export async function generateAIFlashcards(text: string, courseId: string, chapt
   const data = await response.json();
   let rawText = data.candidates[0].content.parts[0].text.trim();
 
-  // Nettoyage automatique des balises markdown si l'IA en ajoute
+  // Nettoyage automatique du markdown
   if (rawText.startsWith('```json')) {
     rawText = rawText.replace(/^```json/, '').replace(/```$/, '').trim();
   } else if (rawText.startsWith('```')) {
