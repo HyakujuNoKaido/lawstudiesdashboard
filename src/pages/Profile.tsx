@@ -1,290 +1,263 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UserRound, Save, GraduationCap, Building2, BookOpen, Settings2, Activity, Moon, Zap, LayoutList } from 'lucide-react';
+import { User, GraduationCap, Settings2, Target, BookOpen, Award, LogOut, Moon, Sun, ChevronRight } from 'lucide-react';
 import { Card } from '../components/ui/Card';
-import { Badge } from '../components/ui/Badge';
-import { supabase } from '../lib/supabase';
 import { useApp } from '../context/AppContext';
 import { toast } from '../lib/toast';
-import { SOLO_USER_ID } from '../lib/constants';
 
 export function Profile() {
   const navigate = useNavigate();
-  const { settings, updateSettings, logs } = useApp();
+  const { settings, setSettings } = useApp();
   
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [profile, setProfile] = useState({
-    full_name: 'Étudiant en Droit',
-    university_name: 'Université de Lausanne (UNIL)',
-    program_name: 'Master en Droit',
-    program_level: 'Master',
-    required_ects: 90,
-    current_semester: 2,
-    grade_min: 1.0,
-    grade_max: 6.0,
-    passing_grade: 4.0
-  });
+  // Gestion des onglets : 'diploma' | 'personal' | 'settings'
+  const [activeTab, setActiveTab] = useState<'diploma' | 'personal' | 'settings'>('diploma');
 
-  useEffect(() => {
-    async function loadProfile() {
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', SOLO_USER_ID)
-          .single();
-        if (data) setProfile(data);
-      } catch (err) {
-        console.log("Profil initial non trouvé, utilisation des valeurs par défaut.");
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadProfile();
-  }, []);
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .upsert({
-          id: SOLO_USER_ID,
-          ...profile,
-          updated_at: new Date().toISOString()
-        });
-      if (error) throw error;
-      toast("Profil mis à jour avec succès", "success");
-    } catch (err: any) {
-      console.error("Erreur sauvegarde profil:", err);
-      toast("Échec de la sauvegarde du profil", "error");
-    } finally {
-      setSaving(false);
+  const handleLogout = () => {
+    if (window.confirm("Êtes-vous sûr de vouloir vous déconnecter ?")) {
+      // Logique de déconnexion à implémenter avec Supabase (supabase.auth.signOut())
+      toast("Déconnexion réussie", "success");
+      navigate('/onboarding');
     }
   };
 
-  if (loading) {
-    return <div className="text-center py-12 text-text-muted text-sm font-mono animate-pulse">Chargement du profil...</div>;
-  }
-
   return (
-    <div className="flex flex-col gap-8 pt-2 pb-16 animate-in fade-in duration-300">
+    <div className="flex flex-col gap-8 pt-2 pb-16 animate-in fade-in duration-300 text-text max-w-4xl mx-auto w-full">
       
-      <header className="flex items-center gap-4 px-1 border-b border-border pb-6">
-        <div className="w-14 h-14 bg-surface border-y border-r border-l-[3px] border-l-secondary border-y-border border-r-border rounded-r-xl flex items-center justify-center text-secondary shadow-sm">
-          <UserRound size={28} />
+      {/* HEADER PROFIL : Identité visuelle forte */}
+      <div className="flex flex-col md:flex-row items-center md:items-start gap-6 bg-surface border border-border p-6 md:p-8 rounded-3xl shadow-sm">
+        <div className="w-24 h-24 rounded-full bg-accent/10 border-2 border-accent text-accent flex items-center justify-center font-serif text-4xl font-bold uppercase shrink-0 shadow-inner">
+          AB
         </div>
-        <div>
-          <h1 className="font-serif text-3xl font-bold mb-1">Mon Profil</h1>
-          <p className="text-text-muted text-sm">Paramètres académiques et préférences de l'application.</p>
+        <div className="flex flex-col items-center md:items-start text-center md:text-left flex-1">
+          <h1 className="font-serif text-3xl font-bold text-text mb-1.5">Aniss Bahaji</h1>
+          <p className="text-sm font-medium text-text-muted flex items-center gap-2 mb-4">
+            <GraduationCap size={16} /> Master en Droit • Université de Genève (UNIGE)
+          </p>
+          <div className="flex flex-wrap justify-center md:justify-start gap-2">
+            <span className="bg-success/10 text-success px-3 py-1 rounded-lg text-xs font-bold border border-success/20">Moyenne: 5.2/6.0</span>
+            <span className="bg-info/10 text-info px-3 py-1 rounded-lg text-xs font-bold border border-info/20">Semestre 2</span>
+            <span className="bg-surface-elevated text-text-muted px-3 py-1 rounded-lg text-xs font-bold border border-border">90 ECTS</span>
+          </div>
         </div>
-      </header>
+      </div>
 
-      <form onSubmit={handleSave} className="flex flex-col gap-6">
-        
-        {/* IDENTITÉ */}
-        <Card variant="default" className="flex flex-col gap-4">
-          <h2 className="font-bold text-xs uppercase tracking-wider text-text-muted flex items-center gap-2 mb-2">
-            <Building2 size={16} className="text-accent" /> Informations institutionnelles
-          </h2>
-          <div className="flex flex-col gap-2">
-            <label className="text-xs font-medium text-text-muted">Nom / Prénom</label>
-            <input 
-              type="text" 
-              value={profile.full_name}
-              onChange={(e) => setProfile({ ...profile, full_name: e.target.value })}
-              className="w-full bg-surface-elevated border border-border rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors"
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <label className="text-xs font-medium text-text-muted">Université / Faculté</label>
-            <input 
-              type="text" 
-              value={profile.university_name}
-              onChange={(e) => setProfile({ ...profile, university_name: e.target.value })}
-              className="w-full bg-surface-elevated border border-border rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors"
-            />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-medium text-text-muted">Programme</label>
-              <input 
-                type="text" 
-                value={profile.program_name}
-                onChange={(e) => setProfile({ ...profile, program_name: e.target.value })}
-                className="w-full bg-surface-elevated border border-border rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors"
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-medium text-text-muted">Niveau</label>
-              <select 
-                value={profile.program_level}
-                onChange={(e) => setProfile({ ...profile, program_level: e.target.value })}
-                className="w-full bg-surface-elevated border border-border rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-accent appearance-none cursor-pointer transition-colors"
-              >
-                <option value="Bachelor">Bachelor</option>
-                <option value="Master">Master</option>
-                <option value="Doctorat">Doctorat</option>
-              </select>
-            </div>
-          </div>
-        </Card>
-
-        {/* CURSUS & BARÈME */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card variant="default" className="flex flex-col gap-4">
-            <h2 className="font-bold text-xs uppercase tracking-wider text-text-muted flex items-center gap-2 mb-2">
-              <GraduationCap size={16} className="text-info" /> Cursus & ECTS
-            </h2>
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-medium text-text-muted">ECTS totaux requis</label>
-              <input 
-                type="number" 
-                value={profile.required_ects}
-                onChange={(e) => setProfile({ ...profile, required_ects: Number(e.target.value) })}
-                className="w-full bg-surface-elevated border border-border rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors"
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-medium text-text-muted">Semestre actuel</label>
-              <input 
-                type="number" 
-                value={profile.current_semester}
-                onChange={(e) => setProfile({ ...profile, current_semester: Number(e.target.value) })}
-                className="w-full bg-surface-elevated border border-border rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors"
-              />
-            </div>
-          </Card>
-
-          <Card variant="default" className="flex flex-col gap-4">
-            <h2 className="font-bold text-xs uppercase tracking-wider text-text-muted flex items-center gap-2 mb-2">
-              <BookOpen size={16} className="text-success" /> Barème Suisse
-            </h2>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-2">
-                <label className="text-xs font-medium text-text-muted">Note min</label>
-                <input 
-                  type="number" step="0.1" value={profile.grade_min}
-                  onChange={(e) => setProfile({ ...profile, grade_min: Number(e.target.value) })}
-                  className="w-full bg-surface-elevated border border-border rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-accent"
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-xs font-medium text-text-muted">Note max</label>
-                <input 
-                  type="number" step="0.1" value={profile.grade_max}
-                  onChange={(e) => setProfile({ ...profile, grade_max: Number(e.target.value) })}
-                  className="w-full bg-surface-elevated border border-border rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-accent"
-                />
-              </div>
-            </div>
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-medium text-text-muted">Seuil de réussite</label>
-              <input 
-                type="number" step="0.1" value={profile.passing_grade}
-                onChange={(e) => setProfile({ ...profile, passing_grade: Number(e.target.value) })}
-                className="w-full bg-surface-elevated border border-border rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-accent font-bold text-accent"
-              />
-            </div>
-          </Card>
-        </div>
-
+      {/* SYSTÈME D'ONGLETS */}
+      <div className="flex bg-surface-elevated border border-border rounded-xl p-1 w-full sm:w-fit overflow-x-auto custom-scrollbar">
         <button 
-          type="submit"
-          disabled={saving}
-          className="w-full bg-accent text-background rounded-xl py-4 px-4 flex items-center justify-center gap-2 font-bold hover:bg-accent-strong transition-colors disabled:opacity-50 glow-gold cursor-pointer"
+          onClick={() => setActiveTab('diploma')} 
+          className={`flex-1 sm:flex-none whitespace-nowrap px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'diploma' ? 'bg-accent text-background shadow-sm' : 'text-text-muted hover:text-text'}`}
         >
-          <Save size={18} />
-          <span>{saving ? 'Enregistrement de la base...' : 'Mettre à jour le profil académique'}</span>
+          Vue du diplôme
         </button>
-      </form>
+        <button 
+          onClick={() => setActiveTab('personal')} 
+          className={`flex-1 sm:flex-none whitespace-nowrap px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'personal' ? 'bg-accent text-background shadow-sm' : 'text-text-muted hover:text-text'}`}
+        >
+          Objectifs & Identité
+        </button>
+        <button 
+          onClick={() => setActiveTab('settings')} 
+          className={`flex-1 sm:flex-none whitespace-nowrap px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'settings' ? 'bg-accent text-background shadow-sm' : 'text-text-muted hover:text-text'}`}
+        >
+          Préférences UX
+        </button>
+      </div>
 
-      {/* PARAMÈTRES ERGONOMIQUES (Liés au AppContext) */}
-      <section className="mt-10">
-        <h2 className="font-serif text-2xl font-bold mb-4 flex items-center gap-2">
-          <Settings2 size={24} className="text-text-muted" /> Préférences UX
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          
-          <Card className="flex flex-col gap-3">
-            <div className="flex items-center gap-2 text-warning mb-1">
-              <Moon size={18} /> <h3 className="font-bold text-sm">Mode Focus</h3>
+      {/* CONTENU DES ONGLETS */}
+      <div className="flex flex-col gap-6">
+        
+        {/* ONGLET 1 : DIPLÔME & ECTS */}
+        {activeTab === 'diploma' && (
+          <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            {/* Statistiques ECTS */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Card className="bg-surface flex flex-col items-center justify-center p-6 text-center hover:border-success/30 transition-colors">
+                <span className="text-[10px] uppercase font-bold text-text-muted tracking-wider mb-2">ECTS Obtenus</span>
+                <span className="font-serif text-5xl font-bold text-success">42</span>
+                <span className="text-xs text-text-muted mt-2">/ 90 requis</span>
+              </Card>
+              <Card className="bg-surface flex flex-col items-center justify-center p-6 text-center hover:border-info/30 transition-colors">
+                <span className="text-[10px] uppercase font-bold text-text-muted tracking-wider mb-2">En cours</span>
+                <span className="font-serif text-5xl font-bold text-info">24</span>
+                <span className="text-xs text-text-muted mt-2">Semestre actuel</span>
+              </Card>
+              <Card className="bg-surface flex flex-col items-center justify-center p-6 text-center border-accent/30 shadow-sm relative overflow-hidden">
+                <div className="absolute inset-0 bg-accent/5 pointer-events-none"></div>
+                <span className="text-[10px] uppercase font-bold text-accent tracking-wider mb-2 relative z-10">Progression</span>
+                <span className="font-serif text-5xl font-bold text-text relative z-10">46%</span>
+                <div className="w-full bg-surface-elevated h-2 rounded-full mt-4 overflow-hidden relative z-10">
+                  <div className="bg-accent h-full w-[46%] transition-all duration-1000 ease-out"></div>
+                </div>
+              </Card>
             </div>
-            <p className="text-[11px] text-text-muted mb-2">Réduit le contraste des couleurs et coupe les lueurs (glows) pour réduire la fatigue visuelle.</p>
-            <button 
-              onClick={() => updateSettings({ focusMode: !settings.focusMode })}
-              className={`py-2 px-3 rounded-lg text-xs font-bold transition-colors w-full border ${settings.focusMode ? 'bg-warning/10 border-warning text-warning' : 'bg-surface-elevated border-border text-text-muted hover:text-text'}`}
-            >
-              {settings.focusMode ? 'Activé' : 'Désactivé'}
-            </button>
-          </Card>
 
-          <Card className="flex flex-col gap-3">
-            <div className="flex items-center gap-2 text-info mb-1">
-              <Zap size={18} /> <h3 className="font-bold text-sm">Animations</h3>
+            {/* Liste des Modules */}
+            <div>
+              <h3 className="font-bold text-lg flex items-center gap-2 mb-3 px-1 text-text">
+                <BookOpen size={18} className="text-accent" /> Modules du Plan d'Études
+              </h3>
+              <div className="bg-surface border border-border rounded-2xl overflow-hidden shadow-sm">
+                <div className="p-4 md:p-5 border-b border-border flex flex-col md:flex-row md:justify-between md:items-center gap-2 bg-surface-elevated/30 hover:bg-surface-elevated transition-colors cursor-pointer group">
+                  <div className="flex flex-col">
+                    <span className="font-semibold text-text group-hover:text-accent transition-colors">Droit Privé (Obligations, Réels)</span>
+                    <span className="text-xs text-text-muted">Tronc commun</span>
+                  </div>
+                  <span className="text-sm font-bold bg-surface-elevated border border-border px-3 py-1.5 rounded-lg w-fit">18 / 24 ECTS</span>
+                </div>
+                
+                <div className="p-4 md:p-5 border-b border-border flex flex-col md:flex-row md:justify-between md:items-center gap-2 bg-surface-elevated/30 hover:bg-surface-elevated transition-colors cursor-pointer group">
+                  <div className="flex flex-col">
+                    <span className="font-semibold text-text group-hover:text-accent transition-colors">Droit Pénal & Procédure</span>
+                    <span className="text-xs text-text-muted">Tronc commun</span>
+                  </div>
+                  <span className="text-sm font-bold text-success bg-success/10 border border-success/20 px-3 py-1.5 rounded-lg w-fit flex items-center gap-1.5">
+                    12 / 12 ECTS <Award size={14} />
+                  </span>
+                </div>
+                
+                <div className="p-4 md:p-5 flex flex-col md:flex-row md:justify-between md:items-center gap-2 bg-surface-elevated/30 hover:bg-surface-elevated transition-colors cursor-pointer group">
+                  <div className="flex flex-col">
+                    <span className="font-semibold text-text group-hover:text-accent transition-colors">Droit Public (Administratif, Constit)</span>
+                    <span className="text-xs text-text-muted">Tronc commun</span>
+                  </div>
+                  <span className="text-sm font-bold text-warning bg-warning/10 border border-warning/20 px-3 py-1.5 rounded-lg w-fit">
+                    0 / 18 ECTS
+                  </span>
+                </div>
+              </div>
             </div>
-            <p className="text-[11px] text-text-muted mb-2">Ajuste la vitesse des transitions entre les pages (utile sur vieux appareils).</p>
-            <select 
-              value={settings.animationSpeed}
-              onChange={(e) => updateSettings({ animationSpeed: e.target.value as any })}
-              className="bg-surface-elevated border border-border rounded-lg py-2 px-3 text-xs w-full focus:outline-none focus:border-info appearance-none"
-            >
-              <option value="normal">Normales (Fluides)</option>
-              <option value="fast">Rapides</option>
-              <option value="none">Désactivées</option>
-            </select>
-          </Card>
+          </div>
+        )}
 
-          <Card className="flex flex-col gap-3">
-            <div className="flex items-center gap-2 text-success mb-1">
-              <LayoutList size={18} /> <h3 className="font-bold text-sm">Densité d'affichage</h3>
-            </div>
-            <p className="text-[11px] text-text-muted mb-2">Passez d'une interface aérée à une vue condensée (idéal pour les longues listes).</p>
-            <div className="flex gap-2">
-              <button 
-                onClick={() => updateSettings({ listDensity: 'comfortable' })}
-                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors border ${settings.listDensity === 'comfortable' ? 'bg-success/10 border-success text-success' : 'bg-surface-elevated border-border text-text-muted hover:text-text'}`}
-              >Aéré</button>
-              <button 
-                onClick={() => updateSettings({ listDensity: 'compact' })}
-                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors border ${settings.listDensity === 'compact' ? 'bg-success/10 border-success text-success' : 'bg-surface-elevated border-border text-text-muted hover:text-text'}`}
-              >Compact</button>
-            </div>
-          </Card>
+        {/* ONGLET 2 : OBJECTIFS & IDENTITÉ */}
+        {activeTab === 'personal' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <Card className="bg-surface p-6 flex flex-col gap-5">
+              <h3 className="font-bold flex items-center gap-2 text-accent text-lg"><User size={20}/> Identité Académique</h3>
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-bold text-text-muted tracking-wider">Nom complet</label>
+                  <p className="font-medium text-text bg-surface-elevated border border-border px-3 py-2 rounded-xl">Aniss Bahaji</p>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-bold text-text-muted tracking-wider">Université</label>
+                  <p className="font-medium text-text bg-surface-elevated border border-border px-3 py-2 rounded-xl">Université de Genève (UNIGE)</p>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-bold text-text-muted tracking-wider">Cycle actuel</label>
+                  <p className="font-medium text-text bg-surface-elevated border border-border px-3 py-2 rounded-xl">Master en Droit</p>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-bold text-text-muted tracking-wider">Langue d'étude</label>
+                  <p className="font-medium text-text bg-surface-elevated border border-border px-3 py-2 rounded-xl">Français</p>
+                </div>
+              </div>
+            </Card>
+            
+            <Card className="bg-surface p-6 flex flex-col gap-5">
+              <h3 className="font-bold flex items-center gap-2 text-warning text-lg"><Target size={20}/> Objectifs</h3>
+              <div className="flex flex-col gap-4 flex-1">
+                <div className="flex justify-between items-center border-b border-border/50 pb-3">
+                  <span className="text-sm font-medium text-text">Moyenne cible</span>
+                  <span className="font-bold font-mono text-accent bg-accent/10 px-2 py-1 rounded">5.5 / 6.0</span>
+                </div>
+                <div className="flex justify-between items-center border-b border-border/50 pb-3">
+                  <span className="text-sm font-medium text-text">Heures d'étude / semaine</span>
+                  <span className="font-bold font-mono text-text bg-surface-elevated px-2 py-1 rounded">35h</span>
+                </div>
+                <div className="flex justify-between items-center border-b border-border/50 pb-3">
+                  <span className="text-sm font-medium text-text">Cartes à réviser / jour</span>
+                  <span className="font-bold font-mono text-text bg-surface-elevated px-2 py-1 rounded">50</span>
+                </div>
+                <div className="flex justify-between items-center pb-2">
+                  <span className="text-sm font-medium text-text">Fin de diplôme prévue</span>
+                  <span className="font-bold font-mono text-text bg-surface-elevated px-2 py-1 rounded">Juin 2027</span>
+                </div>
+                
+                <button className="mt-auto w-full text-xs font-bold text-background bg-text py-3 rounded-xl hover:scale-[1.02] transition-transform">
+                  Modifier mes objectifs
+                </button>
+              </div>
+            </Card>
+          </div>
+        )}
 
-        </div>
-      </section>
-
-      {/* JOURNAL D'ACTIVITÉ */}
-      <section className="mt-10">
-        <h2 className="font-serif text-2xl font-bold mb-4 flex items-center gap-2">
-          <Activity size={24} className="text-text-muted" /> Journal d'Activité
-        </h2>
-        <Card variant="minimal" className="bg-surface p-4">
-          {logs.length === 0 ? (
-            <p className="text-xs text-text-muted italic text-center py-6">Aucune activité récente enregistrée.</p>
-          ) : (
-            <div className="flex flex-col gap-3 max-h-[300px] overflow-y-auto pr-2">
-              {logs.map((log) => (
-                <div key={log.id} className="flex items-start gap-3 border-b border-border/50 pb-3 last:border-0 last:pb-0">
-                  <div className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${
-                    log.type === 'create' ? 'bg-success' : 
-                    log.type === 'delete' ? 'bg-danger' : 
-                    log.type === 'study' ? 'bg-info' : 'bg-accent'
-                  }`} />
-                  <div className="flex flex-col min-w-0">
-                    <p className="text-sm text-text font-medium">{log.action}</p>
-                    <p className="text-[10px] text-text-muted font-mono">{new Date(log.timestamp).toLocaleString('fr-CH')}</p>
+        {/* ONGLET 3 : PRÉFÉRENCES UX & PARAMÈTRES */}
+        {activeTab === 'settings' && (
+          <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="bg-surface border border-border rounded-3xl p-6 flex flex-col gap-6">
+              <h3 className="font-bold flex items-center gap-2 text-info text-lg border-b border-border/50 pb-4">
+                <Settings2 size={20}/> Paramètres de l'application
+              </h3>
+              
+              <div className="flex flex-col gap-5">
+                {/* Thème */}
+                <div className="flex justify-between items-center group cursor-pointer">
+                  <div>
+                    <p className="font-bold text-sm text-text">Thème de l'interface</p>
+                    <p className="text-xs text-text-muted mt-0.5">Basculer entre mode sombre et clair.</p>
+                  </div>
+                  <div className="flex bg-surface-elevated border border-border rounded-lg p-1">
+                    <button className="p-1.5 rounded text-text-muted hover:text-text hover:bg-background transition-colors"><Sun size={16} /></button>
+                    <button className="p-1.5 rounded bg-accent text-background shadow-sm transition-colors"><Moon size={16} /></button>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </Card>
-      </section>
 
+                <div className="h-px bg-border/50"></div>
+
+                {/* Densité */}
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="font-bold text-sm text-text">Densité d'affichage</p>
+                    <p className="text-xs text-text-muted mt-0.5">Style des listes (flashcards, cours).</p>
+                  </div>
+                  <select 
+                    value={settings.listDensity}
+                    onChange={(e) => setSettings({ ...settings, listDensity: e.target.value as 'comfortable' | 'compact' })}
+                    className="bg-background border border-border rounded-xl text-sm font-medium p-2 focus:ring-1 focus:ring-accent cursor-pointer"
+                  >
+                    <option value="comfortable">Aéré (Défaut)</option>
+                    <option value="compact">Compact</option>
+                  </select>
+                </div>
+
+                <div className="h-px bg-border/50"></div>
+
+                {/* Vitesse Animation */}
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="font-bold text-sm text-text">Vitesse des animations</p>
+                    <p className="text-xs text-text-muted mt-0.5">Fluidité des transitions de pages.</p>
+                  </div>
+                  <select 
+                    value={settings.animationSpeed}
+                    onChange={(e) => setSettings({ ...settings, animationSpeed: e.target.value as 'normal' | 'fast' | 'none' })}
+                    className="bg-background border border-border rounded-xl text-sm font-medium p-2 focus:ring-1 focus:ring-accent cursor-pointer"
+                  >
+                    <option value="normal">Normal</option>
+                    <option value="fast">Rapide</option>
+                    <option value="none">Aucune</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            
+            {/* Zone de danger */}
+            <div className="bg-danger/5 border border-danger/20 rounded-3xl p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <p className="font-bold text-sm text-danger flex items-center gap-2"><LogOut size={16}/> Déconnexion</p>
+                <p className="text-xs text-text-muted mt-1 max-w-sm">Quitter votre session sécurisée sur cet appareil. Vos données resteront sauvegardées sur le cloud Lexi.</p>
+              </div>
+              <button 
+                onClick={handleLogout}
+                className="w-full sm:w-auto text-danger text-sm font-bold bg-danger/10 px-6 py-2.5 rounded-xl hover:bg-danger/20 transition-colors cursor-pointer whitespace-nowrap"
+              >
+                Se déconnecter
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
