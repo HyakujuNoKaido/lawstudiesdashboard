@@ -4,20 +4,21 @@
 
 @layer base {
   :root {
-    --color-background: #0A0A0F;
-    --color-surface: #12121A;
-    --color-surface-elevated: #1A1A24;
-    --color-border: #2A2A38;
-    --color-text: #F3F3F6;
-    --color-text-muted: #9E9EAE;
+    --color-background: #0A0A0E;
+    --color-surface: #121218;
+    --color-surface-elevated: #191922;
+    --color-border: #262631;
+    --color-text: #F1F1F4;
+    --color-text-muted: #9595A6;
     --color-accent: #FFB800;
     --color-accent-strong: #E5A600;
+    --color-secondary: #7A2828; /* Bordeaux chaud */
     --color-success: #10B981;
     --color-warning: #F59E0B;
     --color-danger: #EF4444;
     --color-info: #3B82F6;
-
-    --radius-sm: 0.375rem;
+    
+    --radius-sm: 0.25rem;
     --radius-md: 0.5rem;
     --radius-lg: 0.75rem;
   }
@@ -31,31 +32,33 @@
     overflow-x: hidden;
   }
 
-  /* Forcer le mode sombre sur les champs de saisie */
+  /* Forcer le mode sombre sur les champs de saisie, on réduit le côté plastique */
   input, select, textarea {
     background-color: var(--color-surface) !important;
     color: var(--color-text) !important;
     border-color: var(--color-border) !important;
+    transition: border-color 0.2s ease;
   }
+
   input:focus, select:focus, textarea:focus {
     border-color: var(--color-accent) !important;
     outline: none;
+    box-shadow: none !important;
   }
 }
 
 @layer utilities {
+  /* On affine les glows pour les rendre moins "app générique" */
   .glow-gold {
-    box-shadow: 0 0 20px rgba(255, 184, 0, 0.25);
+    box-shadow: 0 0 16px rgba(255, 184, 0, 0.15);
   }
-
   .glow-gold-subtle {
-    box-shadow: 0 0 12px rgba(255, 184, 0, 0.12);
+    box-shadow: 0 0 8px rgba(255, 184, 0, 0.08);
   }
-
   .glow-green {
-    box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+    box-shadow: 0 0 16px rgba(16, 185, 129, 0.15);
   }
-
+  
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
@@ -69,8 +72,7 @@
   button, .card-interactive {
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
-
   button:active {
-    transform: scale(0.97);
+    transform: scale(0.98);
   }
 }
