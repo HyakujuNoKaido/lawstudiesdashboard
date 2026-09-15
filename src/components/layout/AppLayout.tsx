@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Sun, GraduationCap, Library, Plus, X, Search, WifiOff } from 'lucide-react';
+import { Outlet, useNavigate, useLocation, NavLink } from 'react-router-dom';
+import { Sun, Book, CalendarDays, BrainCircuit, Plus, X, Search, WifiOff, Settings, HelpCircle, LogOut, GraduationCap, FileText, FileEdit, BookOpen, AlertTriangle, Scale, Zap } from 'lucide-react';
 import { CommandMenu } from '../ui/CommandMenu';
 import { ToastEventDetail } from '../../lib/toast';
 import { useApp } from '../../context/AppContext';
@@ -11,13 +11,18 @@ export function AppLayout() {
   const location = useLocation();
   const { isOffline, settings } = useApp();
   
+  // États
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
+  const [isAvatarMenuOpen, setIsAvatarMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: string; id: number } | null>(null);
 
-  const isActive = (paths: string[]) => paths.includes(location.pathname);
+  const isActive = (paths: string[]) => paths.some(path => location.pathname === path || location.pathname.startsWith(path + '/'));
 
-  // Transitions intelligentes selon la route (Pilotage vs Savoir vs Action)
+  // Sécurité : masquer les barres de navigation quand on lit un PDF plein écran
+  const isViewer = location.pathname.includes('/viewer');
+
+  // Transitions intelligentes selon la route (Logique conservée)
   const getTransitionClass = () => {
     const path = location.pathname;
     const baseSpeed = settings.animationSpeed === 'fast' ? 'duration-150' : settings.animationSpeed === 'none' ? 'duration-0' : 'duration-400';
@@ -31,6 +36,7 @@ export function AppLayout() {
     return `animate-in fade-in ${baseSpeed} ease-in-out`; // Pilotage : Fondu calme
   };
 
+  // Gestionnaire de Toasts (Logique conservée)
   useEffect(() => {
     const handleToast = (e: Event) => {
       const customEvent = e as CustomEvent<ToastEventDetail>;
@@ -47,45 +53,91 @@ export function AppLayout() {
   return (
     <div className={`min-h-screen bg-background text-text flex flex-col antialiased selection:bg-accent/30 selection:text-accent relative overflow-x-hidden ${settings.focusMode ? 'grayscale-[0.2] contrast-125' : ''}`}>
       
-      {/* HEADER GLOBAL */}
-      <header className="sticky top-0 z-30 bg-background/90 backdrop-blur-md border-b border-border px-4 py-3">
-        <div className="max-w-4xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
-              <div className="w-8 h-8 rounded-lg bg-secondary/10 border border-secondary/20 flex items-center justify-center text-secondary">
-                <LexiIcons.Law size={18} strokeWidth={2.5} />
+      {/* HEADER GLOBAL (Refondu avec Navigation Desktop et Avatar) */}
+      {!isViewer && (
+        <header className="sticky top-0 z-30 bg-background/90 backdrop-blur-md border-b border-border px-4 py-3 shrink-0">
+          <div className="max-w-5xl mx-auto flex justify-between items-center relative">
+            
+            {/* Logo & Mode Offline */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
+                <div className="w-8 h-8 rounded-lg bg-secondary/10 border border-secondary/20 flex items-center justify-center text-secondary shrink-0">
+                  <LexiIcons.Law size={18} strokeWidth={2.5} />
+                </div>
+                <span className="font-serif font-bold text-xl tracking-tight hidden sm:block text-accent">Lexi</span>
               </div>
-              <span className="font-serif font-bold text-xl tracking-tight">Lexi</span>
+              
+              {isOffline && (
+                <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 bg-warning/10 border border-warning/30 text-warning text-[10px] font-bold rounded uppercase tracking-wider">
+                  <WifiOff size={12} /> Mode Hors-ligne
+                </div>
+              )}
             </div>
-            {/* Mode Offline Badge */}
-            {isOffline && (
-              <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 bg-warning/10 border border-warning/30 text-warning text-[10px] font-bold rounded uppercase tracking-wider">
-                <WifiOff size={12} /> Mode Hors-ligne
+            
+            {/* NAVIGATION DESKTOP (Masquée sur mobile) */}
+            <nav className="hidden md:flex items-center gap-6 lg:gap-8 absolute left-1/2 -translate-x-1/2">
+              <NavLink to="/" className={({ isActive }) => `text-sm font-bold transition-colors ${isActive ? 'text-accent' : 'text-text-muted hover:text-text'}`}>Aujourd'hui</NavLink>
+              <NavLink to="/courses" className={({ isActive }) => `text-sm font-bold transition-colors ${isActive ? 'text-accent' : 'text-text-muted hover:text-text'}`}>Cours</NavLink>
+              <NavLink to="/documents" className={({ isActive }) => `text-sm font-bold transition-colors ${isActive ? 'text-accent' : 'text-text-muted hover:text-text'}`}>Bibliothèque</NavLink>
+              <NavLink to="/schedule" className={({ isActive }) => `text-sm font-bold transition-colors ${isActive ? 'text-accent' : 'text-text-muted hover:text-text'}`}>Planning</NavLink>
+              <NavLink to="/study" className={({ isActive }) => `text-sm font-bold transition-colors ${isActive ? 'text-accent' : 'text-text-muted hover:text-text'}`}>Révisions</NavLink>
+            </nav>
+
+            {/* Outils & Avatar (Droite) */}
+            <div className="flex items-center gap-3 md:gap-4">
+              <button 
+                onClick={() => setIsSearchOpen(true)}
+                className="flex items-center justify-center w-8 h-8 md:w-auto md:h-auto md:bg-surface-elevated md:border border-border md:px-3.5 md:py-2 rounded-xl text-xs text-text-muted hover:border-accent/50 hover:text-accent transition-colors cursor-pointer"
+                title="Rechercher (Cmd+K)"
+              >
+                <Search size={18} className="md:w-[15px] md:h-[15px] md:text-accent" />
+                <span className="hidden md:inline ml-2">Rechercher...</span>
+                <kbd className="hidden md:inline ml-2 bg-surface px-1.5 py-0.5 rounded text-[10px] font-mono border border-border text-text-muted">Cmd+K</kbd>
+              </button>
+
+              {/* MENU AVATAR */}
+              <div className="relative">
+                <button 
+                  onClick={() => setIsAvatarMenuOpen(!isAvatarMenuOpen)}
+                  className="w-8 h-8 rounded-full bg-accent/20 text-accent border border-accent flex items-center justify-center font-bold text-xs uppercase cursor-pointer"
+                >
+                  AB
+                </button>
+                
+                {isAvatarMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40 bg-transparent" onClick={() => setIsAvatarMenuOpen(false)}></div>
+                    <div className="absolute right-0 top-full mt-3 w-64 bg-surface-elevated border border-border rounded-2xl shadow-2xl z-50 py-2 animate-in fade-in slide-in-from-top-2">
+                      <div className="px-4 py-3 border-b border-border/50 mb-2">
+                        <p className="font-bold text-sm text-text">Aniss Bahaji</p>
+                        <p className="text-xs text-text-muted">Étudiant · Droit</p>
+                      </div>
+                      <button onClick={() => { setIsAvatarMenuOpen(false); navigate('/profile'); }} className="w-full px-4 py-2 text-sm text-text hover:bg-surface flex items-center gap-3 cursor-pointer"><GraduationCap size={16} className="text-accent" /> Profil & Diplôme</button>
+                      <button onClick={() => { setIsAvatarMenuOpen(false); /* Gérer l'ouverture des paramètres plus tard */ }} className="w-full px-4 py-2 text-sm text-text hover:bg-surface flex items-center gap-3 cursor-pointer"><Settings size={16} className="text-text-muted" /> Paramètres</button>
+                      <div className="h-px bg-border/50 my-1"></div>
+                      <button onClick={() => setIsAvatarMenuOpen(false)} className="w-full px-4 py-2 text-sm text-text hover:bg-surface flex items-center gap-3 cursor-pointer"><HelpCircle size={16} className="text-text-muted" /> Aide et raccourcis</button>
+                      <div className="h-px bg-border/50 my-1"></div>
+                      <button onClick={() => setIsAvatarMenuOpen(false)} className="w-full px-4 py-2 text-sm text-danger hover:bg-danger/10 flex items-center gap-3 cursor-pointer"><LogOut size={16} /> Se déconnecter</button>
+                    </div>
+                  </>
+                )}
               </div>
-            )}
+            </div>
           </div>
-          
-          <button 
-            onClick={() => setIsSearchOpen(true)}
-            className="flex items-center gap-2 bg-surface-elevated border border-border px-3.5 py-2 rounded-xl text-xs text-text-muted hover:border-accent/50 hover:text-text transition-colors cursor-pointer"
-          >
-            <Search size={15} className="text-accent" />
-            <span className="hidden sm:inline">Rechercher ou commander...</span>
-            <kbd className="hidden sm:inline bg-surface px-1.5 py-0.5 rounded text-[10px] font-mono border border-border text-text-muted">Cmd+K</kbd>
-          </button>
-        </div>
-      </header>
+        </header>
+      )}
 
       {/* CONTENU PRINCIPAL AVEC TRANSITIONS */}
-      <main key={location.pathname} className={`flex-1 max-w-4xl w-full mx-auto p-4 md:p-6 pb-28 relative ${getTransitionClass()}`}>
+      <main key={location.pathname} className={`flex-1 w-full max-w-5xl mx-auto p-4 md:p-6 relative ${isViewer ? '' : 'pb-28'} ${getTransitionClass()}`}>
         <Outlet />
       </main>
 
+      {/* Command Menu (Logique conservée) */}
       <CommandMenu isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
 
-      {/* SYSTÈME DE TOASTS */}
+      {/* SYSTÈME DE TOASTS (Logique conservée) */}
       {toast && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300">
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300 pointer-events-none">
           <div className={`flex items-center gap-2 px-4 py-3 rounded-2xl shadow-xl border backdrop-blur-md text-sm font-medium
             ${toast.type === 'success' ? 'bg-success/10 border-success/30 text-success' : ''}
             ${toast.type === 'error' ? 'bg-danger/10 border-danger/30 text-danger' : ''}
@@ -101,80 +153,80 @@ export function AppLayout() {
         </div>
       )}
 
-      {/* MENU D'ACTIONS RAPIDES */}
-      {isActionMenuOpen && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-background/90 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-surface border border-border rounded-3xl p-6 shadow-2xl flex flex-col gap-4 animate-in slide-in-from-bottom-5 duration-300">
-            <div className="flex justify-between items-center pb-2 border-b border-border">
-              <div>
-                <h3 className="font-serif text-xl font-bold">Que faisons-nous ?</h3>
-                <p className="text-xs text-text-muted">L'IA de Lexi vous assiste dans votre travail.</p>
-              </div>
-              <button onClick={() => setIsActionMenuOpen(false)} className="w-8 h-8 rounded-full bg-surface-elevated border border-border flex items-center justify-center text-text-muted hover:text-text cursor-pointer transition-colors">
-                <X size={18} />
+      {/* MENU D'ACTIONS RAPIDES (Le FAB restructuré) */}
+      {!isViewer && isActionMenuOpen && (
+        <>
+          <div className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm animate-in fade-in" onClick={() => setIsActionMenuOpen(false)}></div>
+          <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-[320px] bg-surface-elevated border border-border rounded-3xl shadow-2xl p-2 animate-in slide-in-from-bottom-4 fade-in">
+            
+            <div className="flex justify-between items-center px-4 pt-3 pb-2 border-b border-border/50 mb-2">
+              <h3 className="font-serif font-bold text-lg">Action rapide</h3>
+              <button onClick={() => setIsActionMenuOpen(false)} className="p-1 text-text-muted hover:text-text cursor-pointer rounded-full bg-surface">
+                <X size={16} />
               </button>
             </div>
 
-            <div className="grid grid-cols-1 gap-2.5">
-              <button onClick={() => { setIsActionMenuOpen(false); navigate('/cases/law'); }} className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-surface-elevated border border-border hover:border-warning/50 transition-all text-left group cursor-pointer">
-                <div className="w-10 h-10 rounded-xl bg-warning/10 text-warning flex items-center justify-center group-hover:scale-105 transition-transform"><LexiIcons.Document size={20} /></div>
-                <div><p className="font-medium text-sm text-text">Je fiche un arrêt (ATF)</p><p className="text-xs text-text-muted">Synthèse structurée de jurisprudence</p></div>
-              </button>
-              <button onClick={() => { setIsActionMenuOpen(false); navigate('/cases/study'); }} className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-surface-elevated border border-border hover:border-info/50 transition-all text-left group cursor-pointer">
-                <div className="w-10 h-10 rounded-xl bg-info/10 text-info flex items-center justify-center group-hover:scale-105 transition-transform"><LexiIcons.Law size={20} /></div>
-                <div><p className="font-medium text-sm text-text">Je résous un cas pratique</p><p className="text-xs text-text-muted">Assistant de subsumption guidé</p></div>
-              </button>
-              <button onClick={() => { setIsActionMenuOpen(false); navigate('/exams/simulator'); }} className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-surface-elevated border border-border hover:border-danger/50 transition-all text-left group cursor-pointer">
-                <div className="w-10 h-10 rounded-xl bg-danger/10 text-danger flex items-center justify-center group-hover:scale-105 transition-transform"><LexiIcons.Exam size={20} /></div>
-                <div><p className="font-medium text-sm text-text">Je m'entraîne pour l'examen</p><p className="text-xs text-text-muted">Simulation chronométrée inédite</p></div>
-              </button>
-              <button onClick={() => { setIsActionMenuOpen(false); navigate('/add/course'); }} className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-surface-elevated border border-border hover:border-success/50 transition-all text-left group cursor-pointer">
-                <div className="w-10 h-10 rounded-xl bg-success/10 text-success flex items-center justify-center group-hover:scale-105 transition-transform"><GraduationCap size={20} /></div>
-                <div><p className="font-medium text-sm text-text">J'ajoute une matière</p><p className="text-xs text-text-muted">Mise à jour du plan d'études</p></div>
-              </button>
-              <button onClick={() => { setIsActionMenuOpen(false); navigate('/library'); }} className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-surface-elevated border border-border hover:border-accent/50 transition-all text-left group cursor-pointer">
-                <div className="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center group-hover:scale-105 transition-transform"><LexiIcons.Note size={20} /></div>
-                <div><p className="font-medium text-sm text-text">Je prends des notes</p><p className="text-xs text-text-muted">Bibliothèque et notes de cours</p></div>
-              </button>
-              <button onClick={() => { setIsActionMenuOpen(false); navigate('/import'); }} className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-surface-elevated border border-border hover:border-secondary/50 transition-all text-left group cursor-pointer">
-                <div className="w-10 h-10 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center group-hover:scale-105 transition-transform"><LexiIcons.Upload size={20} /></div>
-                <div><p className="font-medium text-sm text-text">J'importe un plan d'études</p><p className="text-xs text-text-muted">À partir d'un document PDF</p></div>
-              </button>
+            <div className="flex flex-col gap-1 max-h-[60vh] overflow-y-auto custom-scrollbar">
+              <span className="text-[10px] uppercase font-bold text-text-muted px-4 py-1.5 tracking-wider mt-1">Créer</span>
+              <button onClick={() => { setIsActionMenuOpen(false); navigate('/add/course'); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface rounded-xl cursor-pointer"><BookOpen size={16} className="text-accent" /> Nouveau cours</button>
+              <button onClick={() => { setIsActionMenuOpen(false); navigate('/notes'); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface rounded-xl cursor-pointer"><FileEdit size={16} className="text-success" /> Nouvelle note</button>
+              <button onClick={() => { setIsActionMenuOpen(false); navigate('/add/document'); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface rounded-xl cursor-pointer"><FileText size={16} className="text-info" /> Ajouter un document</button>
+              
+              <div className="h-px bg-border/50 my-1 mx-2"></div>
+              
+              <span className="text-[10px] uppercase font-bold text-text-muted px-4 py-1.5 tracking-wider">Étudier</span>
+              <button onClick={() => { setIsActionMenuOpen(false); navigate('/session/all', { state: { from: location.pathname } }); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface rounded-xl cursor-pointer"><BrainCircuit size={16} className="text-warning" /> Lancer une révision</button>
+              <button onClick={() => { setIsActionMenuOpen(false); navigate('/add/flashcards/batch'); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface rounded-xl cursor-pointer"><Zap size={16} className="text-warning" /> Créer des flashcards (IA)</button>
+              <button onClick={() => { setIsActionMenuOpen(false); navigate('/exams/simulator'); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface rounded-xl cursor-pointer"><AlertTriangle size={16} className="text-danger" /> Examen blanc</button>
+              
+              <div className="h-px bg-border/50 my-1 mx-2"></div>
+              
+              <span className="text-[10px] uppercase font-bold text-text-muted px-4 py-1.5 tracking-wider">Droit</span>
+              <button onClick={() => { setIsActionMenuOpen(false); navigate('/cases/law'); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface rounded-xl cursor-pointer"><Scale size={16} className="text-secondary" /> Fiche d'arrêt</button>
+              <button onClick={() => { setIsActionMenuOpen(false); navigate('/cases/study'); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface rounded-xl cursor-pointer"><LexiIcons.Law size={16} className="text-info" /> Cas pratique</button>
             </div>
           </div>
-        </div>
+        </>
       )}
 
-      {/* BOTTOM NAV */}
-      <nav aria-label="Navigation principale" className="fixed bottom-0 left-0 right-0 z-40 bg-surface/90 backdrop-blur-xl border-t border-border px-2 py-2">
-        <div className="max-w-md mx-auto flex items-center justify-between relative px-2">
-          
-          <button onClick={() => navigate('/')} className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-colors cursor-pointer w-16 ${isActive(['/']) ? 'text-accent font-semibold' : 'text-text-muted hover:text-text'}`}>
-            <Sun size={22} className={isActive(['/']) && !settings.focusMode ? 'drop-shadow-[0_0_8px_rgba(255,184,0,0.4)]' : ''} />
-            <span className="text-[10px] tracking-wide">Aujourd'hui</span>
-          </button>
-          <button onClick={() => navigate('/courses')} className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-colors cursor-pointer w-16 ${isActive(['/courses', '/schedule']) ? 'text-accent font-semibold' : 'text-text-muted hover:text-text'}`}>
-            <GraduationCap size={22} />
-            <span className="text-[10px] tracking-wide">Diplôme</span>
-          </button>
-
-          <div className="relative -top-6 mx-2">
-            <button onClick={() => setIsActionMenuOpen(true)} className={`w-14 h-14 rounded-2xl bg-accent text-background flex items-center justify-center hover:bg-accent-strong transition-transform active:scale-95 shadow-xl cursor-pointer ${settings.focusMode ? '' : 'glow-gold'}`}>
-              <Plus size={28} strokeWidth={2.5} />
+      {/* BOTTOM NAV MOBILE (Symétrie Parfaite) */}
+      {!isViewer && (
+        <nav aria-label="Navigation principale" className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-surface/95 backdrop-blur-xl border-t border-border px-2 py-2 pb-safe">
+          <div className="max-w-md mx-auto flex items-center justify-between relative px-2">
+            
+            <button onClick={() => navigate('/')} className={`flex flex-col items-center justify-center gap-1 p-2 rounded-xl transition-colors cursor-pointer w-[60px] ${isActive(['/']) && location.pathname === '/' ? 'text-accent font-semibold' : 'text-text-muted hover:text-text'}`}>
+              <Sun size={22} className={isActive(['/']) && location.pathname === '/' && !settings.focusMode ? 'drop-shadow-[0_0_8px_rgba(255,184,0,0.4)]' : ''} />
+              <span className="text-[10px] tracking-wide">Accueil</span>
             </button>
+
+            <button onClick={() => navigate('/courses')} className={`flex flex-col items-center justify-center gap-1 p-2 rounded-xl transition-colors cursor-pointer w-[60px] ${isActive(['/courses']) ? 'text-accent font-semibold' : 'text-text-muted hover:text-text'}`}>
+              <Book size={22} />
+              <span className="text-[10px] tracking-wide">Cours</span>
+            </button>
+
+            {/* LE FAB CENTRAL */}
+            <div className="relative -top-6 px-1">
+              <button 
+                onClick={() => setIsActionMenuOpen(!isActionMenuOpen)}
+                className={`w-14 h-14 rounded-2xl bg-accent text-background flex items-center justify-center hover:bg-accent-strong transition-transform duration-300 shadow-xl cursor-pointer ${isActionMenuOpen ? 'rotate-45 scale-105' : 'hover:scale-105 active:scale-95'} ${settings.focusMode ? '' : 'glow-gold'}`}
+              >
+                <Plus size={28} strokeWidth={2.5} />
+              </button>
+            </div>
+
+            <button onClick={() => navigate('/schedule')} className={`flex flex-col items-center justify-center gap-1 p-2 rounded-xl transition-colors cursor-pointer w-[60px] ${isActive(['/schedule']) ? 'text-accent font-semibold' : 'text-text-muted hover:text-text'}`}>
+              <CalendarDays size={22} />
+              <span className="text-[10px] tracking-wide">Planning</span>
+            </button>
+
+            <button onClick={() => navigate('/study')} className={`flex flex-col items-center justify-center gap-1 p-2 rounded-xl transition-colors cursor-pointer w-[60px] ${isActive(['/study', '/session']) ? 'text-accent font-semibold' : 'text-text-muted hover:text-text'}`}>
+              <BrainCircuit size={22} />
+              <span className="text-[10px] tracking-wide">Révisions</span>
+            </button>
+
           </div>
-
-          <button onClick={() => navigate('/library')} className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-colors cursor-pointer w-16 ${isActive(['/library']) ? 'text-accent font-semibold' : 'text-text-muted hover:text-text'}`}>
-            <Library size={22} />
-            <span className="text-[10px] tracking-wide">Biblio</span>
-          </button>
-          <button onClick={() => navigate('/study')} className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-colors cursor-pointer w-16 ${isActive(['/study']) ? 'text-accent font-semibold' : 'text-text-muted hover:text-text'}`}>
-            <LexiIcons.Memory size={22} />
-            <span className="text-[10px] tracking-wide">Mémoire</span>
-          </button>
-
-        </div>
-      </nav>
+        </nav>
+      )}
     </div>
   );
 }
