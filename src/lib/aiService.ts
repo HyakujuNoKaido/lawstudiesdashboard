@@ -26,13 +26,13 @@ export async function extractTextFromPDF(fileUrl: string, startPage?: number, en
   }
 }
 
-// Fonction sécurisée avec réessai automatique pour supporter les pics du plan gratuit (503 / 429)
-async function callGeminiFreeTier(payload: any, retries = 3, delay = 2500): Promise<any> {
+// Fonction blindée pour gemini-3.6-flash avec réessais automatiques en cas de 503 (High Demand)
+async function callGeminiKeyAuthorized(payload: any, retries = 4, delay = 3000): Promise<any> {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("Clé API Gemini introuvable.");
 
-  // Utilisation de gemini-1.5-flash, standard et performant sur le plan gratuit
-  const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  // Modèle validé et autorisé par ta clé API
+  const url = `https://generativelanguage.googleapis.com/v1/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
 
   for (let i = 0; i < retries; i++) {
     try {
@@ -48,9 +48,9 @@ async function callGeminiFreeTier(payload: any, retries = 3, delay = 2500): Prom
 
       const errText = await response.text();
       
-      // Si le plan gratuit est saturé (503 ou 429), on patiente et on réessaie
-      if ((response.status === 503 || response.status === 429) && i < retries - 1) {
-        console.warn(`Plan gratuit saturé (${response.status}). Nouvelle tentative (${i + 1}/${retries - 1}) dans ${delay / 1000}s...`);
+      // Si le modèle est surchargé (503), on patiente et on réessaie automatiquement
+      if (response.status === 503 && i < retries - 1) {
+        console.warn(`Modèle gemini-3.6-flash surchargé (503). Nouvelle tentative (${i + 1}/${retries - 1}) dans ${(delay * (i + 1)) / 1000}s...`);
         await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
         continue;
       }
@@ -61,7 +61,7 @@ async function callGeminiFreeTier(payload: any, retries = 3, delay = 2500): Prom
       await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
     }
   }
-  throw new Error("Le serveur est temporairement occupé (quota du plan gratuit). Veuillez patienter quelques secondes et réessayer.");
+  throw new Error("Le serveur Gemini est fortement sollicité. Veuillez patienter quelques secondes et relancer la génération.");
 }
 
 export async function generateAIFlashcards(text: string, courseId: string, chapterId?: string) {
@@ -71,7 +71,7 @@ Renvoie UNIQUEMENT un tableau JSON valide au format strict : [{"question": "..."
 Texte :
 ${text.substring(0, 30000)}`;
 
-  const data = await callGeminiFreeTier({
+  const data = await callGeminiKeyAuthorized({
     contents: [{ parts: [{ text: prompt }] }]
   });
 
@@ -99,7 +99,7 @@ ${text.substring(0, 30000)}`;
 export async function generateAISummary(text: string): Promise<string> {
   const prompt = `Tu es un juriste suisse. Résume le texte juridique fourni en Markdown :\n\n${text.substring(0, 30000)}`;
   
-  const data = await callGeminiFreeTier({
+  const data = await callGeminiKeyAuthorized({
     contents: [{ parts: [{ text: prompt }] }]
   });
 
