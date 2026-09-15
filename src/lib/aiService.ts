@@ -26,33 +26,21 @@ export async function extractTextFromPDF(fileUrl: string, startPage?: number, en
   }
 }
 
+// Utilisation du même pattern robuste que generateAISummary
 export async function generateAIFlashcards(text: string, courseId: string, chapterId?: string) {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("Clé API Gemini introuvable.");
 
-  const systemPrompt = `Tu es un assistant de faculté de droit en Suisse. Crée des flashcards de révision (SM-2).`;
+  const systemPrompt = `Tu es un assistant de faculté de droit en Suisse. Génère une liste de flashcards de révision (SM-2) basées sur le texte juridique. Renvoie UNIQUEMENT un tableau JSON valide au format strict : [{"question": "...", "answer": "..."}]. Pas de texte additionnel, pas d'introduction.`;
   
-  // Utilisation du modèle standard gemini-1.5-flash
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: systemPrompt }] },
-      contents: [{ parts: [{ text: `Génère une liste de flashcards JSON à partir de ce texte :\n\n${text.substring(0, 60000)}` }] }],
+      contents: [{ parts: [{ text: `Génère les flashcards à partir de ce texte :\n\n${text.substring(0, 60000)}` }] }],
       generationConfig: {
-        temperature: 0.2,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: "ARRAY",
-          items: {
-            type: "OBJECT",
-            properties: {
-              question: { type: "STRING" },
-              answer: { type: "STRING" }
-            },
-            required: ["question", "answer"]
-          }
-        }
+        temperature: 0.3
       }
     })
   });
@@ -64,7 +52,16 @@ export async function generateAIFlashcards(text: string, courseId: string, chapt
   }
 
   const data = await response.json();
-  const flashcardsData = JSON.parse(data.candidates[0].content.parts[0].text);
+  let rawText = data.candidates[0].content.parts[0].text.trim();
+
+  // Nettoyage automatique des balises markdown si l'IA en ajoute
+  if (rawText.startsWith('```json')) {
+    rawText = rawText.replace(/^```json/, '').replace(/```$/, '').trim();
+  } else if (rawText.startsWith('```')) {
+    rawText = rawText.replace(/^```/, '').replace(/```$/, '').trim();
+  }
+
+  const flashcardsData = JSON.parse(rawText);
 
   for (const card of flashcardsData) {
     await createFlashcard({
