@@ -456,9 +456,7 @@ export async function batchMoveItems(chapterIds: string[], docIds: string[], tar
       .in('id', docIds);
     if (error) throw error;
   }
- 
-  
-// ... tes autres fonctions ...
+}
 
 /**
  * MET À JOUR UNE FLASHCARD APRÈS RÉVISION (Algorithme SM-2)
@@ -495,4 +493,4 @@ export async function updateFlashcardReview(id: string, q: number, currentCard: 
   }).eq('id', id);
 
   if (error) throw error;
-} // <-- Bien vérifier cette accolade fermante de la fonction !
+}
