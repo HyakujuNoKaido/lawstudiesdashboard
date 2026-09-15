@@ -90,45 +90,57 @@ export function Dashboard() {
 
       {/* JOURNAL DE BORD : LE BILAN ANTI-CULPABILITÉ */}
       <section className="flex flex-col gap-4">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
-          <Activity size={16} className="text-info" /> Bilan de la semaine
-        </h2>
-        <div className="bg-surface border border-info/30 rounded-2xl p-5 shadow-sm relative overflow-hidden">
-          <div className="absolute -right-10 -top-10 w-32 h-32 bg-info/5 rounded-full blur-2xl pointer-events-none"></div>
-          
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-full bg-info/10 text-info flex items-center justify-center shrink-0">
-                <Flame size={24} />
+        <div className="flex items-center justify-between px-1">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
+            <Activity size={16} className="text-accent" /> Dynamique & Bilan hebdomadaire
+          </h2>
+          <span className="text-[10px] font-mono text-text-muted bg-surface border border-border px-2.5 py-1 rounded-full">
+            7 derniers jours
+          </span>
+        </div>
+
+        <div className="bg-surface border border-border/80 rounded-3xl p-6 shadow-sm relative overflow-hidden group hover:border-accent/30 transition-all">
+          {/* Effet de lueur subtil en arrière-plan */}
+          <div className="absolute -right-20 -top-20 w-48 h-48 bg-accent/5 rounded-full blur-3xl pointer-events-none"></div>
+
+          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
+            
+            {/* Message d'encouragement pro */}
+            <div className="flex items-start gap-4 max-w-lg">
+              <div className="w-12 h-12 rounded-2xl bg-accent/10 border border-accent/20 text-accent flex items-center justify-center shrink-0 shadow-inner">
+                <Flame size={22} />
               </div>
-              <div>
-                <h3 className="font-serif text-xl font-bold text-text mb-1">Beau travail !</h3>
-                <p className="text-sm text-text-muted max-w-md leading-relaxed">
-                  Même si vous avez l'impression de stagner, les chiffres montrent le contraire. Votre régularité paie, continuez à structurer votre savoir.
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-accent mb-1">Analyse de régularité</span>
+                <h3 className="font-serif text-xl font-bold text-text mb-1.5">Cap maintenu avec constance</h3>
+                <p className="text-sm text-text-muted leading-relaxed">
+                  Chaque document analysé et chaque flashcard révisée consolide votre progression. Votre rigueur actuelle fait toute la différence pour les examens.
                 </p>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-4 md:gap-8 bg-background/50 p-3 rounded-xl border border-border/50">
-              <div className="flex flex-col items-center">
-                <span className="font-mono text-2xl font-bold text-accent">{weeklyStats.docsAdded}</span>
-                <span className="text-[10px] uppercase text-text-muted font-bold">Docs importés</span>
+            {/* Statistiques sous forme de mini-cartes épurées */}
+            <div className="grid grid-cols-3 gap-3 w-full lg:w-auto shrink-0">
+              <div className="bg-surface-elevated border border-border/60 rounded-2xl p-4 text-center flex flex-col items-center justify-center min-w-[95px] shadow-sm">
+                <span className="font-serif text-2xl md:text-3xl font-bold text-accent mb-0.5">{weeklyStats.docsAdded}</span>
+                <span className="text-[9px] uppercase tracking-wider text-text-muted font-bold">Documents</span>
               </div>
-              <div className="w-px h-8 bg-border/50 hidden md:block"></div>
-              <div className="flex flex-col items-center">
-                <span className="font-mono text-2xl font-bold text-warning">{weeklyStats.cardsReviewed}</span>
-                <span className="text-[10px] uppercase text-text-muted font-bold">Flashcards vues</span>
+              
+              <div className="bg-surface-elevated border border-border/60 rounded-2xl p-4 text-center flex flex-col items-center justify-center min-w-[95px] shadow-sm">
+                <span className="font-serif text-2xl md:text-3xl font-bold text-warning mb-0.5">{weeklyStats.cardsReviewed}</span>
+                <span className="text-[9px] uppercase tracking-wider text-text-muted font-bold">Flashcards</span>
               </div>
-              <div className="w-px h-8 bg-border/50 hidden md:block"></div>
-              <div className="flex flex-col items-center">
-                <span className="font-mono text-2xl font-bold text-success">{weeklyStats.notesUpdated}</span>
-                <span className="text-[10px] uppercase text-text-muted font-bold">Notes rédigées</span>
+              
+              <div className="bg-surface-elevated border border-border/60 rounded-2xl p-4 text-center flex flex-col items-center justify-center min-w-[95px] shadow-sm">
+                <span className="font-serif text-2xl md:text-3xl font-bold text-success mb-0.5">{weeklyStats.notesUpdated}</span>
+                <span className="text-[9px] uppercase tracking-wider text-text-muted font-bold">Notes</span>
               </div>
             </div>
+
           </div>
         </div>
       </section>
-
+      
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* COLONNE GAUCHE : AGENDA DU JOUR */}
