@@ -10,7 +10,7 @@ import { fetchCourses } from '../services/supabaseService';
 
 export function Profile() {
   const navigate = useNavigate();
-  const { settings, setSettings } = useApp();
+  const { settings } = useApp();
   const [activeTab, setActiveTab] = useState<'diploma' | 'personal' | 'settings'>('diploma');
 
   const [profile, setProfile] = useState<any>(null);
