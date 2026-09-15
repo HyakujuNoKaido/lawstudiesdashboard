@@ -62,7 +62,7 @@ export async function generateAIFlashcards(text: string, courseId: string, chapt
   for (const card of flashcardsData) {
     await createFlashcard({
       course_id: courseId,
-      chapter_id: chapterId || null,
+      chapter_id: chapterId ? chapterId : undefined,
       front: card.question,
       back: card.answer
     });
