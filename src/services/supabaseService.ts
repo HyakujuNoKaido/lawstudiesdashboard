@@ -442,5 +442,21 @@ export async function searchGlobal(keyword: string) {
     caseStudies: caseStudiesRes.data || []
   };
 
+  export async function batchMoveItems(chapterIds: string[], docIds: string[], targetChapterId: string | null) {
+  if (chapterIds.length > 0) {
+    const { error } = await supabase
+      .from('chapters')
+      .update({ parent_id: targetChapterId })
+      .in('id', chapterIds);
+    if (error) throw error;
+  }
+  if (docIds.length > 0) {
+    const { error } = await supabase
+      .from('documents')
+      .update({ chapter_id: targetChapterId })
+      .in('id', docIds);
+    if (error) throw error;
+  }
+}
   
 }
