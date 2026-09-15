@@ -1,278 +1,217 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft, Download, FileText, AlertCircle, Trash2, Edit3, RefreshCcw, FileEdit, BrainCircuit, X, Check } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { ChevronLeft, Maximize, Minimize, PanelRightOpen, PanelRightClose, Sparkles, FileText, Save } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { deleteDocument, updateDocumentMetadata, replaceDocumentFile } from '../services/supabaseService';
-import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { toast } from '../lib/toast';
 
 export function DocumentViewer() {
+  const { docId } = useParams<{ docId: string }>();
   const navigate = useNavigate();
-  const { docId } = useParams();
   
-  const [document, setDocument] = useState<any>(null);
-  const [fileUrl, setFileUrl] = useState<string | null>(null);
+  const [document, setDoc] = useState<any>(null);
+  const [publicUrl, setPublicUrl] = useState<string>('');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  
-  // États pour les actions
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [isRenaming, setIsRenaming] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [isReplacing, setIsReplacing] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // États pour la lecture
+  const [isFocusMode, setIsFocusMode] = useState(false);
+  const [isNotesOpen, setIsNotesOpen] = useState(false);
+  const [noteContent, setNoteContent] = useState('');
+  const [isSavingNote, setIsSavingNote] = useState(false);
+
+  // État de l'IA
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
 
   useEffect(() => {
-    if (docId) {
-      loadDocument();
+    async function loadDoc() {
+      if (!docId) return;
+      try {
+        const { data: docData, error } = await supabase
+          .from('documents')
+          .select('*, courses(title)')
+          .eq('id', docId)
+          .single();
+          
+        if (error) throw error;
+        setDoc(docData);
+
+        // Récupérer l'URL sécurisée du PDF
+        const { data: urlData } = await supabase.storage
+          .from('user-documents')
+          .createSignedUrl(docData.bucket_path, 3600); // Valide 1 heure
+          
+        if (urlData?.signedUrl) {
+          setPublicUrl(urlData.signedUrl);
+        }
+
+        // Tenter de charger une note associée (basée sur le titre du document)
+        const { data: existingNote } = await supabase
+          .from('notes')
+          .select('*')
+          .ilike('title', `%${docData.original_name}%`)
+          .limit(1);
+        
+        if (existingNote && existingNote.length > 0) {
+          setNoteContent(existingNote[0].content);
+        }
+
+      } catch (err) {
+        console.error(err);
+        toast("Impossible de charger le document", "error");
+      } finally {
+        setLoading(false);
+      }
     }
+    loadDoc();
   }, [docId]);
 
-  async function loadDocument() {
-    setLoading(true);
-    try {
-      const { data: docData, error: docError } = await supabase
-        .from('documents')
-        .select('*')
-        .eq('id', docId)
-        .single();
-        
-      if (docError) throw docError;
-      setDocument(docData);
-      setNewName(docData.original_name);
-      
-      const { data: urlData, error: urlError } = await supabase.storage
-        .from('user-documents')
-        .createSignedUrl(docData.bucket_path, 3600);
-        
-      if (urlError) throw urlError;
-      setFileUrl(urlData.signedUrl);
-    } catch (err: any) {
-      console.error("Erreur de chargement du document:", err);
-      setError("Impossible de charger le document.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // Action : Renommer
-  const handleRename = async () => {
-    if (!newName.trim() || newName === document.original_name) {
-      setIsRenaming(false);
-      return;
-    }
-    try {
-      await updateDocumentMetadata(document.id, { 
-        original_name: newName, 
-        document_type: document.document_type 
-      });
-      setDocument({ ...document, original_name: newName });
-      setIsRenaming(false);
-      toast("Document renommé", "success");
-    } catch (err) {
-      toast("Erreur lors du renommage", "error");
-    }
-  };
-
-  // Action : Remplacer (déclenché par le input caché)
-  const handleFileReplace = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !document) return;
-    
-    setIsReplacing(true);
-    toast("Remplacement du fichier en cours...", "info");
-    try {
-      await replaceDocumentFile(document.id, file, document.bucket_path);
-      toast("Fichier mis à jour avec succès", "success");
-      loadDocument(); // Recharge l'URL signée
-    } catch (err) {
-      console.error(err);
-      toast("Échec du remplacement", "error");
-    } finally {
-      setIsReplacing(false);
-    }
-  };
-
-  // Action : Supprimer
-  const confirmDelete = async () => {
+  const handleSaveNote = async () => {
     if (!document) return;
+    setIsSavingNote(true);
     try {
-      await deleteDocument(document.id, document.bucket_path);
-      toast("Document supprimé", "success");
-      navigate(-1);
+      // Sauvegarde simple de la note (on vérifie s'il faut insert ou update)
+      const { data: existingNote } = await supabase.from('notes').select('id').ilike('title', `%${document.original_name}%`).limit(1);
+      
+      if (existingNote && existingNote.length > 0) {
+        await supabase.from('notes').update({ content: noteContent, updated_at: new Date().toISOString() }).eq('id', existingNote[0].id);
+      } else {
+        await supabase.from('notes').insert([{
+          user_id: document.user_id,
+          course_id: document.course_id,
+          title: `Notes sur : ${document.original_name}`,
+          content: noteContent
+        }]);
+      }
+      toast("Notes sauvegardées", "success");
     } catch (err) {
-      toast("Erreur lors de la suppression", "error");
+      toast("Erreur lors de la sauvegarde", "error");
+    } finally {
+      setIsSavingNote(false);
     }
   };
 
   const isPdf = document?.mime_type === 'application/pdf' || document?.original_name?.toLowerCase().endsWith('.pdf');
-  const isOffice = document?.original_name?.match(/\.(docx?|pptx?)$/i);
+
+  if (loading) return <div className="text-center p-12 text-text-muted font-mono animate-pulse">Chargement du document...</div>;
+  if (!document) return <div className="text-center p-12 text-text-muted">Document introuvable</div>;
 
   return (
-    <div className="fixed inset-0 bg-background z-50 flex flex-col animate-in slide-in-from-bottom-2 duration-300">
+    <div className={`flex flex-col bg-background transition-all duration-300 ${isFocusMode ? 'fixed inset-0 z-50 p-2 md:p-4' : 'h-[calc(100vh-8rem)] pt-2'}`}>
       
-      {/* HEADER & TOOLBAR */}
-      <header className="flex flex-col border-b border-border bg-surface shrink-0">
-        <div className="flex items-center justify-between p-3 md:p-4">
-          <div className="flex items-center gap-3 overflow-hidden">
-            <button 
-              onClick={() => navigate(-1)}
-              className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-elevated border border-border text-text-muted hover:text-text transition-colors shrink-0 cursor-pointer"
-            >
+      {/* HEADER DU LECTEUR */}
+      <header className={`flex items-center justify-between gap-4 mb-4 ${isFocusMode ? 'bg-surface border border-border p-3 rounded-2xl shadow-sm' : ''}`}>
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          {!isFocusMode && (
+            <button onClick={() => navigate(-1)} className="p-2 text-text-muted hover:text-text bg-surface rounded-lg shrink-0 cursor-pointer">
               <ChevronLeft size={20} />
             </button>
-            <div className="min-w-0 flex flex-col">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted bg-surface-elevated px-2 py-0.5 rounded-md">
-                  {document?.document_type || 'Document'}
-                </span>
-                {isPdf && <span className="text-[9px] font-mono text-danger border border-danger/30 bg-danger/10 px-1.5 rounded">PDF</span>}
-                {isOffice && <span className="text-[9px] font-mono text-info border border-info/30 bg-info/10 px-1.5 rounded">OFFICE</span>}
-              </div>
-              
-              {isRenaming ? (
-                <div className="flex items-center gap-2">
-                  <input 
-                    type="text" 
-                    value={newName} 
-                    onChange={(e) => setNewName(e.target.value)}
-                    autoFocus
-                    className="bg-background border border-border rounded px-2 py-1 text-sm font-semibold focus:border-accent w-full max-w-[200px]"
-                  />
-                  <button onClick={handleRename} className="p-1 text-success hover:bg-success/10 rounded"><Check size={16}/></button>
-                  <button onClick={() => setIsRenaming(false)} className="p-1 text-text-muted hover:bg-surface-elevated rounded"><X size={16}/></button>
-                </div>
-              ) : (
-                <h1 
-                  onDoubleClick={() => setIsRenaming(true)}
-                  className="text-sm md:text-base font-semibold text-text truncate cursor-text"
-                  title="Double-cliquez pour renommer"
-                >
-                  {document ? document.original_name : 'Chargement...'}
-                </h1>
-              )}
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-1 shrink-0">
-            {fileUrl && (
-              <a 
-                href={fileUrl} 
-                download={document?.original_name}
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="w-10 h-10 flex items-center justify-center rounded-xl text-text-muted hover:bg-surface-elevated hover:text-text transition-colors"
-                title="Télécharger"
-              >
-                <Download size={18} />
-              </a>
-            )}
+          )}
+          <div className="min-w-0 flex flex-col">
+            <h1 className="font-bold text-sm md:text-base text-text truncate" title={document.original_name}>
+              {document.original_name}
+            </h1>
+            <span className="text-[10px] font-mono text-text-muted uppercase">
+              {document.courses?.title || 'Fichier global'} • {document.document_type}
+            </span>
           </div>
         </div>
 
-        {/* BARRE D'OUTILS HORIZONTALE */}
-        <div className="flex items-center gap-2 px-3 md:px-4 pb-3 overflow-x-auto scrollbar-hide">
+        <div className="flex items-center gap-2 shrink-0">
           <button 
-            onClick={() => navigate('/notes')}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/10 border border-accent/20 text-accent rounded-lg text-xs font-medium hover:bg-accent/20 transition-colors whitespace-nowrap cursor-pointer"
+            onClick={() => setIsAIModalOpen(true)}
+            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-warning/10 text-warning hover:bg-warning/20 border border-warning/20 rounded-lg text-xs font-bold transition-colors cursor-pointer"
           >
-            <FileEdit size={14} /> Créer une note
+            <Sparkles size={14} /> Analyser (IA)
           </button>
-          
           <button 
-            onClick={() => navigate('/add/flashcards/batch')}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-info/10 border border-info/20 text-info rounded-lg text-xs font-medium hover:bg-info/20 transition-colors whitespace-nowrap cursor-pointer"
+            onClick={() => setIsNotesOpen(!isNotesOpen)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border cursor-pointer ${isNotesOpen ? 'bg-accent text-background border-accent' : 'bg-surface text-text-muted hover:text-text border-border'}`}
+            title="Ouvrir le panneau de notes"
           >
-            <BrainCircuit size={14} /> Créer Flashcards
+            {isNotesOpen ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
+            <span className="hidden sm:inline">{isNotesOpen ? 'Fermer les notes' : 'Prendre des notes'}</span>
           </button>
-          
-          <div className="w-px h-4 bg-border mx-1"></div>
-
           <button 
-            onClick={() => setIsRenaming(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-elevated border border-border text-text-muted rounded-lg text-xs hover:text-text transition-colors whitespace-nowrap cursor-pointer"
+            onClick={() => setIsFocusMode(!isFocusMode)}
+            className="p-1.5 bg-surface border border-border text-text-muted hover:text-text rounded-lg transition-colors cursor-pointer"
+            title={isFocusMode ? "Quitter le plein écran" : "Mode Focus (Plein écran)"}
           >
-            <Edit3 size={14} /> Renommer
-          </button>
-
-          <button 
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isReplacing}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-elevated border border-border text-text-muted rounded-lg text-xs hover:text-text transition-colors whitespace-nowrap cursor-pointer disabled:opacity-50"
-          >
-            <RefreshCcw size={14} className={isReplacing ? "animate-spin" : ""} /> Remplacer
-          </button>
-          <input type="file" className="hidden" ref={fileInputRef} onChange={handleFileReplace} accept=".pdf,.doc,.docx,.ppt,.pptx" />
-
-          <button 
-            onClick={() => setIsDeleting(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-danger/5 border border-danger/20 text-danger rounded-lg text-xs hover:bg-danger/10 transition-colors whitespace-nowrap cursor-pointer ml-auto"
-          >
-            <Trash2 size={14} /> Supprimer
+            {isFocusMode ? <Minimize size={18} /> : <Maximize size={18} />}
           </button>
         </div>
       </header>
 
-      {/* VIEWER CONTENU */}
-      <main className="flex-1 bg-background flex flex-col items-center justify-center overflow-auto p-4 md:p-8">
-        {loading ? (
-          <div className="animate-pulse flex flex-col items-center gap-4 text-text-muted">
-            <div className="w-10 h-10 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-            <p className="text-sm font-medium font-mono">Déchiffrement du document...</p>
-          </div>
-        ) : error ? (
-          <div className="flex flex-col items-center gap-3 text-danger max-w-sm text-center bg-danger/10 border border-danger/20 p-6 rounded-2xl">
-            <AlertCircle size={32} />
-            <p className="text-sm font-medium">{error}</p>
-            <button onClick={() => navigate(-1)} className="mt-2 px-4 py-2 bg-background border border-danger/30 text-danger text-xs font-bold rounded-lg hover:bg-danger/20">
-              Fermer
-            </button>
-          </div>
-        ) : isPdf && fileUrl ? (
-          <iframe 
-            src={`${fileUrl}#toolbar=0`} 
-            title={document.original_name}
-            className="w-full h-full max-w-5xl bg-surface rounded-xl border border-border shadow-2xl"
-          />
-        ) : isOffice && fileUrl ? (
-          <div className="w-full max-w-md bg-surface border-y border-r border-l-[4px] border-l-info border-y-border border-r-border rounded-r-xl p-8 flex flex-col items-center text-center gap-4 shadow-xl">
-            <div className="w-16 h-16 bg-info/10 text-info rounded-xl flex items-center justify-center">
-              <FileText size={32} />
+      {/* ZONE DE CONTENU SCINDÉE (PDF | NOTES) */}
+      <div className="flex flex-1 gap-4 overflow-hidden">
+        
+        {/* LECTEUR PDF */}
+        <div className={`h-full bg-surface border border-border rounded-2xl overflow-hidden shadow-inner transition-all duration-300 flex-1 relative ${isNotesOpen ? 'hidden lg:flex' : 'flex'}`}>
+          {publicUrl && isPdf ? (
+            <iframe 
+              src={`${publicUrl}#toolbar=0&navpanes=0`} 
+              className="w-full h-full border-0"
+              title={document.original_name}
+            />
+          ) : (
+            <div className="flex flex-col items-center justify-center w-full h-full text-text-muted p-8 text-center gap-4">
+              <FileText size={48} className="opacity-20" />
+              <p>Ce format ({document.mime_type}) ne peut pas être affiché directement.</p>
+              <a href={publicUrl} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-accent text-background rounded-xl font-bold text-sm">
+                Télécharger le fichier
+              </a>
             </div>
-            <div>
-              <h2 className="font-serif text-xl mb-1">{document.original_name}</h2>
-              <p className="text-xs text-text-muted leading-relaxed">
-                Les documents Office (.docx, .pptx) nécessitent l'application native pour être affichés correctement.
-              </p>
+          )}
+        </div>
+
+        {/* PANNEAU LATÉRAL DE PRISE DE NOTES */}
+        {isNotesOpen && (
+          <div className="h-full w-full lg:w-[400px] xl:w-[500px] bg-surface border border-border rounded-2xl flex flex-col shadow-sm overflow-hidden shrink-0 animate-in slide-in-from-right-4">
+            <div className="flex items-center justify-between p-3 border-b border-border bg-surface-elevated">
+              <h3 className="font-bold text-sm flex items-center gap-2">
+                <FileEdit size={16} className="text-accent" /> Notes d'extraction
+              </h3>
+              <button 
+                onClick={handleSaveNote}
+                disabled={isSavingNote}
+                className="flex items-center gap-1.5 px-3 py-1 bg-accent/10 text-accent hover:bg-accent/20 rounded text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Save size={14} /> {isSavingNote ? '...' : 'Sauvegarder'}
+              </button>
             </div>
-            <a 
-              href={fileUrl}
-              download={document.original_name}
-              className="w-full bg-info text-white rounded-xl py-3 px-4 flex items-center justify-center gap-2 font-bold hover:bg-info/90 transition-colors shadow-lg shadow-info/20 mt-2"
-            >
-              <Download size={18} />
-              <span>Télécharger le fichier</span>
-            </a>
-          </div>
-        ) : (
-          <div className="text-center text-text-muted text-sm border border-dashed border-border p-8 rounded-xl">
-            <FileText size={32} className="mx-auto mb-3 opacity-30" />
-            Format de fichier non pris en charge pour l'aperçu direct. <br/> Veuillez le télécharger.
+            <textarea 
+              value={noteContent}
+              onChange={(e) => setNoteContent(e.target.value)}
+              placeholder="Copiez-collez ici les considérants importants, résumez l'arrêt, ou tapez vos réflexions..."
+              className="flex-1 w-full p-4 bg-transparent resize-none text-sm text-text focus:outline-none font-serif leading-relaxed"
+            />
           </div>
         )}
-      </main>
+      </div>
 
-      {/* Modal de suppression */}
-      <ConfirmModal 
-        isOpen={isDeleting}
-        title="Supprimer ce document ?"
-        message="Le fichier sera définitivement supprimé de la base. Les notes et flashcards qui lui sont potentiellement liées devront être supprimées manuellement si nécessaire."
-        confirmText="Supprimer définitivement"
-        cancelText="Annuler"
-        isDanger={true}
-        onConfirm={confirmDelete}
-        onClose={() => setIsDeleting(false)}
-      />
+      {/* MODALE IA DU LECTEUR */}
+      {isAIModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-background/85 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="w-full max-w-sm bg-surface-elevated border border-border rounded-3xl p-6 shadow-2xl flex flex-col gap-4 text-text">
+            <h3 className="font-serif text-xl font-bold flex items-center gap-2 text-warning">
+              <Sparkles size={20} /> Analyse IA du document
+            </h3>
+            <p className="text-xs text-text-muted">
+              Que souhaitez-vous extraire de <span className="font-bold text-text">{document.original_name}</span> ?
+            </p>
+            <div className="flex flex-col gap-2 mt-2">
+              <button onClick={() => { setIsAIModalOpen(false); toast("Génération du résumé en cours...", "info"); }} className="w-full py-3 bg-surface border border-border rounded-xl text-sm font-bold hover:border-warning/50 hover:text-warning transition-colors cursor-pointer text-left px-4 flex justify-between items-center">
+                Résumé complet <ChevronRight size={16} className="opacity-50"/>
+              </button>
+              <button onClick={() => { setIsAIModalOpen(false); toast("Création des flashcards en cours...", "info"); }} className="w-full py-3 bg-surface border border-border rounded-xl text-sm font-bold hover:border-warning/50 hover:text-warning transition-colors cursor-pointer text-left px-4 flex justify-between items-center">
+                Générer des Flashcards <ChevronRight size={16} className="opacity-50"/>
+              </button>
+              <button onClick={() => { setIsAIModalOpen(false); toast("Extraction des articles en cours...", "info"); }} className="w-full py-3 bg-surface border border-border rounded-xl text-sm font-bold hover:border-warning/50 hover:text-warning transition-colors cursor-pointer text-left px-4 flex justify-between items-center">
+                Lister les articles de loi cités <ChevronRight size={16} className="opacity-50"/>
+              </button>
+            </div>
+            <button onClick={() => setIsAIModalOpen(false)} className="mt-2 text-xs text-text-muted hover:text-text font-bold text-center cursor-pointer">Annuler</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
