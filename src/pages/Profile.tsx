@@ -7,7 +7,7 @@ import { toast } from '../lib/toast';
 
 export function Profile() {
   const navigate = useNavigate();
-  const { settings, setSettings } = useApp();
+  const { settings } = useApp();
   
   // Gestion des onglets : 'diploma' | 'personal' | 'settings'
   const [activeTab, setActiveTab] = useState<'diploma' | 'personal' | 'settings'>('diploma');
