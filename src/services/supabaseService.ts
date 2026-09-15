@@ -356,7 +356,19 @@ export async function fetchCaseLaws(courseId?: string) {
   return data || [];
 }
 
-export async function saveCaseLaw(caseLaw: { id?: string; course_id: string; chapter_id?: string; title: string; atf_citation: string; facts: string; procedure: string; consideranda: string; holding: string }) {
+export async function saveCaseLaw(caseLaw: { 
+  id?: string; 
+  course_id: string; 
+  chapter_id?: string; 
+  title: string; 
+  atf_citation: string; 
+  facts: string; 
+  procedure: string; 
+  legal_issues?: string;       // <-- Nouveau champ
+  consideranda: string; 
+  holding: string;
+  pedagogical_takeaway?: string; // <-- Nouveau champ
+}) {
   if (caseLaw.id) {
     const { data, error } = await supabase.from('case_laws').update(caseLaw).eq('id', caseLaw.id).select();
     if (error) throw error;
@@ -366,6 +378,7 @@ export async function saveCaseLaw(caseLaw: { id?: string; course_id: string; cha
     if (error) throw error;
     return data;
   }
+}
 }
 
 export async function saveCaseStudy(study: { course_id: string; title: string; legal_issue: string; major_premise: string; minor_premise: string; conclusion: string }) {
