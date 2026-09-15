@@ -160,8 +160,7 @@ export async function fetchCourseChapters(courseId: string) {
   return data || [];
 }
 
-export async function createChapter(chapter: { course_id: string; title: string; order_index?: number; description?: string }) {
-  // Correction : suppression de user_id qui n'existe pas dans la table chapters
+export async function createChapter(chapter: { course_id: string; title: string; parent_id?: string | null; order_index?: number; description?: string }) {
   const { data, error } = await supabase
     .from('chapters')
     .insert([chapter])
@@ -171,23 +170,49 @@ export async function createChapter(chapter: { course_id: string; title: string;
 }
 
 export async function parseAndCreateChaptersFromSyllabus(courseId: string, syllabusText: string) {
-  // On découpe le texte ligne par ligne en conservant la structure et l'indentation
-  const lines = syllabusText.split('\n').map(l => l.trim()).filter(l => l.length > 1);
-  let index = 1;
+  const lines = syllabusText.split('\n').map(l => {
+    const raw = l;
+    const trimmed = l.trim();
+    const leadingSpaces = raw.length - raw.trimStart().length;
+    return { raw: trimmed, indent: Math.floor(leadingSpaces / 2) };
+  }).filter(l => l.raw.length > 1);
+
+  let stack: { id: string; level: number }[] = [];
   const createdChapters = [];
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const { raw, indent } = lines[i];
+
+    let level = indent;
+    if (/^(chapitre|partie|[ivxlcdm]+\.|[A-Z]\.)/i.test(raw) && indent === 0) {
+      level = 0;
+    } else if (/^\d+\.\d+\.\d+/.test(raw)) {
+      level = 2;
+    } else if (/^\d+\.\d+/.test(raw) || /^\d+\./.test(raw)) {
+      level = 1;
+    }
+
+    // Remonter dans la pile pour trouver le bon parent
+    while (stack.length > 0 && stack[stack.length - 1].level >= level) {
+      stack.pop();
+    }
+
+    const parentId = stack.length > 0 ? stack[stack.length - 1].id : null;
+
     try {
-      // On accepte désormais toutes les lignes significatives de la table des matières
-      // (chiffres romains I, II, III, arabes 1, 2, 3, lettres A, B, tirets, etc.)
-      const res = await createChapter({ 
-        course_id: courseId, 
-        title: line, // Conserve le texte exact avec sa numérotation (ex: "I. Introduction", "  1. Sous-chapitre")
-        order_index: index++ 
+      const res = await createChapter({
+        course_id: courseId,
+        title: raw,
+        parent_id: parentId,
+        order_index: i + 1
       });
-      if (res) createdChapters.push(res[0]);
+      if (res && res[0]) {
+        const newId = res[0].id;
+        stack.push({ id: newId, level });
+        createdChapters.push(res[0]);
+      }
     } catch (err) {
-      console.error("Erreur insertion chapitre auto:", err);
+      console.error("Erreur insertion chapitre hiérarchique:", err);
     }
   }
   return createdChapters;
