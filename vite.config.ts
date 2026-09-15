@@ -3,6 +3,10 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  // Fait le pont entre le secret Cloudflare (GEMINI_API_KEY) et le code (VITE_GEMINI_API_KEY)
+  define: {
+    'import.meta.env.VITE_GEMINI_API_KEY': JSON.stringify(process.env.GEMINI_API_KEY || '')
+  },
   plugins: [
     react(),
     VitePWA({
@@ -12,7 +16,7 @@ export default defineConfig({
         name: 'Lexi Suisse',
         short_name: 'Lexi',
         description: 'Le carnet académique premium pour les facultés de droit suisses.',
-        theme_color: '#090a0e', // Correspond à --color-background
+        theme_color: '#090a0e',
         background_color: '#090a0e',
         display: 'standalone',
         orientation: 'portrait',
