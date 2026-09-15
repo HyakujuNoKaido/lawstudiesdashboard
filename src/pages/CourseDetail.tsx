@@ -4,7 +4,7 @@ import { ChevronLeft, FileText, Edit3, Trash2, BrainCircuit, FileEdit, Award, La
 import { Badge } from '../components/ui/Badge';
 import { Card } from '../components/ui/Card';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
-import { fetchCourseById, fetchCourseChapters, fetchCourseDocuments, fetchCourseGrades, fetchNotes, fetchFlashcards, deleteDocument, createChapter, parseAndCreateChaptersFromSyllabus, fetchEvents, createEvent } from '../services/supabaseService';
+import { fetchCourseById, fetchCourseChapters, fetchCourseDocuments, fetchCourseGrades, fetchNotes, fetchFlashcards, deleteDocument, createChapter, parseAndCreateChaptersFromSyllabus, fetchEvents, createEvent, updateChapterParent } from '../services/supabaseService';
 import { supabase } from '../lib/supabase';
 import { toast } from '../lib/toast';
 
@@ -25,8 +25,12 @@ export function CourseDetail() {
   const [isAddingChapter, setIsAddingChapter] = useState(false);
   const [newChapterTitle, setNewChapterTitle] = useState('');
   const [parentChapterId, setParentChapterId] = useState<string | null>(null);
+  
+  // États d'édition enrichis (Titre + Parent)
   const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
+  const [editingParentId, setEditingParentId] = useState<string | null>(null);
+  
   const [chapterToDelete, setChapterToDelete] = useState<string | null>(null);
 
   // Import en masse
@@ -157,13 +161,19 @@ export function CourseDetail() {
     }
   };
 
+  // Mise à jour complète (Titre + Parent pour fusionner/déplacer)
   const handleUpdateChapter = async (chapterId: string) => {
     if (!editingTitle.trim()) return;
     try {
-      const { error } = await supabase.from('chapters').update({ title: editingTitle.trim() }).eq('id', chapterId);
-      if (error) throw error;
+      // 1. Mettre à jour le titre
+      const { error: titleError } = await supabase.from('chapters').update({ title: editingTitle.trim() }).eq('id', chapterId);
+      if (titleError) throw titleError;
+
+      // 2. Mettre à jour le parent (déplacement hiérarchique)
+      await updateChapterParent(chapterId, editingParentId);
+
       setEditingChapterId(null);
-      toast("Chapitre mis à jour", "success");
+      toast("Chapitre mis à jour avec succès", "success");
       loadData();
     } catch (err) {
       toast("Erreur lors de la modification", "error");
@@ -256,7 +266,6 @@ export function CourseDetail() {
   const chapterTree = buildChapterTree(chapters);
   const totalSelectedCount = selectedChapterIds.length + selectedDocIds.length;
 
-  // FONCTION RÉCURSIVE INTELLIGENTE POUR L'ACCORDÉON HÉRÉDITAIRE
   const renderChapterItem = (chapter: any, depth = 0) => {
     const chapterDocs = documents.filter(d => d.chapter_id === chapter.id);
     const hasCards = flashcards.some(f => f.chapter_id === chapter.id);
@@ -268,7 +277,6 @@ export function CourseDetail() {
       <div key={chapter.id} className="flex flex-col gap-2">
         <div className={`bg-surface border rounded-2xl overflow-hidden shadow-sm group transition-all ${isSelected ? 'border-accent bg-accent/5' : 'border-border'}`}>
           
-          {/* En-tête du chapitre (Cliquable pour plier/déplier) */}
           <div 
             onClick={() => {
               if (isSelectMode) {
@@ -300,27 +308,50 @@ export function CourseDetail() {
               {!isSelectMode && (
                 <div className="flex items-center gap-1 border-l border-border pl-2 ml-1">
                   <button onClick={() => { setParentChapterId(chapter.id); setIsAddingChapter(true); }} className="p-1 text-text-muted hover:text-accent transition-colors rounded cursor-pointer" title="Ajouter un sous-chapitre"><Plus size={14} /></button>
-                  <button onClick={() => { setEditingChapterId(chapter.id); setEditingTitle(chapter.title); }} className="p-1 text-text-muted hover:text-accent transition-colors rounded cursor-pointer" title="Modifier"><Edit3 size={14} /></button>
+                  <button onClick={() => { setEditingChapterId(chapter.id); setEditingTitle(chapter.title); setEditingParentId(chapter.parent_id || null); }} className="p-1 text-text-muted hover:text-accent transition-colors rounded cursor-pointer" title="Modifier / Déplacer"><Edit3 size={14} /></button>
                   <button onClick={() => setChapterToDelete(chapter.id)} className="p-1 text-text-muted hover:text-danger transition-colors rounded cursor-pointer" title="Supprimer"><Trash2 size={14} /></button>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Édition en ligne */}
+          {/* FORMULAIRE DE MODIFICATION AVEC SÉLECTEUR DE DÉPLACEMENT DE PARENT */}
           {isEditing && (
-            <div className="p-3 bg-surface-elevated border-t border-border flex gap-2" onClick={(e) => e.stopPropagation()}>
-              <input type="text" autoFocus value={editingTitle} onChange={(e) => setEditingTitle(e.target.value)} className="bg-background border border-border rounded-lg px-3 py-1 text-sm text-text w-full focus:border-accent" />
-              <button onClick={() => handleUpdateChapter(chapter.id)} className="px-3 bg-success text-white rounded-lg text-xs font-bold cursor-pointer">OK</button>
-              <button onClick={() => setEditingChapterId(null)} className="px-3 bg-surface border border-border rounded-lg text-xs cursor-pointer">Annuler</button>
+            <div className="p-4 bg-surface-elevated border-t border-border flex flex-col gap-3 animate-in fade-in" onClick={(e) => e.stopPropagation()}>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-bold text-text-muted">Intitulé du chapitre</label>
+                <input 
+                  type="text" 
+                  value={editingTitle} 
+                  onChange={(e) => setEditingTitle(e.target.value)} 
+                  className="bg-background border border-border rounded-lg px-3 py-1.5 text-sm text-text w-full focus:border-accent" 
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-bold text-accent">Rattachement / Partie parente</label>
+                <select 
+                  value={editingParentId || ''} 
+                  onChange={(e) => setEditingParentId(e.target.value ? e.target.value : null)}
+                  className="bg-background border border-border rounded-lg px-3 py-1.5 text-xs text-text w-full focus:border-accent"
+                >
+                  <option value="">(Aucun parent / Chapitre principal / Partie I)</option>
+                  {chapters
+                    .filter(c => c.id !== chapter.id) // Empêcher de s'auto-sélectionner
+                    .map(c => (
+                      <option key={c.id} value={c.id}>{c.title}</option>
+                    ))
+                  }
+                </select>
+              </div>
+              <div className="flex justify-end gap-2 mt-1">
+                <button onClick={() => setEditingChapterId(null)} className="px-3 py-1.5 bg-surface border border-border rounded-lg text-xs cursor-pointer">Annuler</button>
+                <button onClick={() => handleUpdateChapter(chapter.id)} className="px-4 py-1.5 bg-accent text-background rounded-lg text-xs font-bold cursor-pointer glow-gold">Enregistrer</button>
+              </div>
             </div>
           )}
 
-          {/* CONTENU DU CHAPITRE : S'affiche uniquement si déplié (isOpen) */}
           {isOpen && (
             <div className="border-t border-border/50 bg-background/40 flex flex-col">
-              
-              {/* Documents directs du chapitre */}
               {chapterDocs.length > 0 && (
                 <div className="flex flex-col divide-y divide-border/50">
                   {chapterDocs.map(doc => {
@@ -359,7 +390,6 @@ export function CourseDetail() {
                 </div>
               )}
 
-              {/* SOUS-CHAPITRES IMBRIQUÉS (Repliés ou dépliés avec le parent) */}
               {chapter.children && chapter.children.length > 0 && (
                 <div className="flex flex-col gap-2 p-2.5 border-t border-border/30 bg-background/60">
                   {chapter.children.map((child: any) => renderChapterItem(child, depth + 1))}
@@ -425,7 +455,6 @@ export function CourseDetail() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* COLONNE GAUCHE (Chapitres hiérarchiques avec sélection multiple et accordéon gigogne) */}
         <section className="lg:col-span-2 flex flex-col gap-4 text-text">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-2">
             <div className="flex items-center gap-3">
@@ -459,7 +488,6 @@ export function CourseDetail() {
             </div>
           </div>
 
-          {/* Barre d'outils flottante de sélection multiple */}
           {isSelectMode && (
             <div className="bg-surface-elevated border border-accent/40 px-4 py-3 rounded-2xl flex items-center justify-between shadow-lg animate-in fade-in duration-200">
               <div className="flex items-center gap-3">
@@ -479,7 +507,6 @@ export function CourseDetail() {
             </div>
           )}
 
-          {/* Formulaire d'ajout */}
           {isAddingChapter && (
             <form onSubmit={handleCreateChapter} className="bg-surface border border-accent/40 p-4 rounded-2xl flex flex-col gap-3 animate-in fade-in duration-200">
               <span className="text-xs font-bold text-accent">
@@ -511,7 +538,7 @@ export function CourseDetail() {
           )}
         </section>
 
-        {/* COLONNE DROITE (Planning, Mémoire & Notes) */}
+        {/* COLONNE DROITE */}
         <aside className="lg:col-span-1 flex flex-col gap-6">
           <div className="flex flex-col gap-3">
             <div className="flex justify-between items-center">
@@ -572,7 +599,6 @@ export function CourseDetail() {
         </aside>
       </div>
 
-      {/* Modale d'import en masse */}
       {showBulkModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="w-full max-w-xl bg-surface-elevated border border-border rounded-3xl p-6 shadow-2xl flex flex-col gap-4 text-text">
@@ -580,28 +606,23 @@ export function CourseDetail() {
               <h3 className="font-serif text-xl font-bold">Importer la table des matières hiérarchique</h3>
               <button onClick={() => setShowBulkModal(false)} className="p-1.5 hover:bg-surface rounded-xl text-text-muted"><X size={20} /></button>
             </div>
-            <p className="text-xs text-text-muted leading-relaxed">
-              Collez votre table des matières. Le parseur détecte automatiquement les niveaux (Chapitres I, II, 1.1, 1.1.1) grâce à l'indentation et la numérotation.
-            </p>
-            <textarea autoFocus value={bulkSyllabusText} onChange={(e) => setBulkSyllabusText(e.target.value)} placeholder="I. Introduction&#10;  1. Notion de base&#10;    1.1 Sous-point..." className="w-full h-48 bg-surface border border-border rounded-xl p-4 text-sm font-serif resize-none" />
+            <textarea autoFocus value={bulkSyllabusText} onChange={(e) => setBulkSyllabusText(e.target.value)} placeholder="I. Introduction&#10;  1. Notion de base..." className="w-full h-48 bg-surface border border-border rounded-xl p-4 text-sm font-serif resize-none" />
             <div className="flex gap-2 mt-2">
               <button onClick={() => setShowBulkModal(false)} className="flex-1 bg-surface border border-border py-3 rounded-xl text-sm">Annuler</button>
-              <button onClick={handleBulkImport} className="flex-1 bg-accent text-background py-3 rounded-xl text-sm font-bold glow-gold">Lancer l'import intelligent</button>
+              <button onClick={handleBulkImport} className="flex-1 bg-accent text-background py-3 rounded-xl text-sm font-bold glow-gold">Lancer l'import</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modales de suppression unitaire */}
       <ConfirmModal isOpen={!!docToDelete} title="Supprimer le document ?" message="Ce document sera définitivement effacé." confirmText="Supprimer" cancelText="Annuler" isDanger={true} onConfirm={handleDeleteDocument} onClose={() => setDocToDelete(null)} />
       <ConfirmModal isOpen={!!chapterToDelete} title="Supprimer le chapitre ?" message="Attention, les sous-chapitres associés seront également supprimés." confirmText="Supprimer" cancelText="Annuler" isDanger={true} onConfirm={confirmDeleteChapter} onClose={() => setChapterToDelete(null)} />
       <ConfirmModal isOpen={!!eventToDelete} title="Supprimer le créneau ?" message="Supprimer cet événement du calendrier ?" confirmText="Supprimer" cancelText="Annuler" isDanger={true} onConfirm={confirmDeleteEvent} onClose={() => setEventToDelete(null)} />
 
-      {/* Modale de confirmation pour la suppression en masse */}
       <ConfirmModal 
         isOpen={isBatchDeleteModalOpen} 
         title="Supprimer la sélection ?" 
-        message={`Voulez-vous vraiment supprimer les ${totalSelectedCount} éléments sélectionnés (chapitres et/ou documents) ?`} 
+        message={`Voulez-vous vraiment supprimer les ${totalSelectedCount} éléments sélectionnés ?`} 
         confirmText="Tout supprimer" 
         cancelText="Annuler" 
         isDanger={true} 
