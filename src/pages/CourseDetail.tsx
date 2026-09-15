@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, FileText, Edit3, Trash2, BrainCircuit, FileEdit, Award, LayoutGrid, Scale, Plus, X, Check, ClipboardPaste, ChevronRight, ChevronDown, Calendar, Clock, CornerDownRight, CheckSquare, Square, FolderInput, UploadCloud } from 'lucide-react';
+import { ChevronLeft, FileText, Edit3, Trash2, BrainCircuit, FileEdit, Award, LayoutGrid, Scale, Plus, X, Check, ClipboardPaste, ChevronRight, ChevronDown, Calendar, Clock, CornerDownRight, CheckSquare, Square, FolderInput, UploadCloud, Globe } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
 import { Card } from '../components/ui/Card';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
@@ -39,8 +39,6 @@ export function CourseDetail() {
   const [eventToDelete, setEventToDelete] = useState<string | null>(null);
 
   const [openChapters, setOpenChapters] = useState<Record<string, boolean>>({});
-
-  // NOUVEAU : État pour ouvrir/fermer le menu contextuel du bouton "+" d'un chapitre
   const [activePlusMenuId, setActivePlusMenuId] = useState<string | null>(null);
 
   const [isSelectMode, setIsSelectMode] = useState(false);
@@ -277,6 +275,9 @@ export function CourseDetail() {
   const chapterTree = buildChapterTree(chapters);
   const totalSelectedCount = selectedChapterIds.length + selectedDocIds.length;
 
+  // Documents généraux (sans chapitre rattaché)
+  const generalDocs = documents.filter(d => !d.chapter_id);
+
   const renderChapterItem = (chapter: any, depth = 0) => {
     const chapterDocs = documents.filter(d => d.chapter_id === chapter.id);
     const hasCards = flashcards.some(f => f.chapter_id === chapter.id);
@@ -319,8 +320,6 @@ export function CourseDetail() {
               </span>
               {!isSelectMode && (
                 <div className="flex items-center gap-1 border-l border-border pl-2 ml-1 relative">
-                  
-                  {/* BOUTON "+" AVEC MENU DÉROULANT INSTINCTIF */}
                   <div className="relative">
                     <button 
                       onClick={(e) => {
@@ -333,7 +332,6 @@ export function CourseDetail() {
                       <Plus size={16} />
                     </button>
 
-                    {/* Menu contextuel au clic sur "+" */}
                     {isPlusMenuOpen && (
                       <div className="absolute right-0 top-full mt-1.5 w-52 bg-surface-elevated border border-border rounded-xl shadow-2xl z-50 py-1.5 animate-in fade-in duration-150 text-left">
                         <button 
@@ -479,7 +477,7 @@ export function CourseDetail() {
       </header>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card variant="minimal" onClick={() => navigate('/add/document')} className="cursor-pointer bg-surface p-4 flex items-center gap-3 hover:border-accent/50 transition-colors border">
+        <Card variant="minimal" onClick={() => navigate('/add/document', { state: { courseId } })} className="cursor-pointer bg-surface p-4 flex items-center gap-3 hover:border-accent/50 transition-colors border">
           <div className="w-10 h-10 rounded-lg bg-surface-elevated flex items-center justify-center text-text-muted"><FileText size={18} /></div>
           <span className="text-xs font-bold leading-tight">Ajouter<br/>Document</span>
         </Card>
@@ -498,96 +496,144 @@ export function CourseDetail() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <section className="lg:col-span-2 flex flex-col gap-4 text-text">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-2">
-            <div className="flex items-center gap-3">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
-                <LayoutGrid size={16} /> Structure hiérarchique ({chapters.length})
+        <section className="lg:col-span-2 flex flex-col gap-6 text-text">
+          
+          {/* SECTION DOCUMENTS GÉNÉRAUX / GLOBAUX DU COURS (POWERPOINT / PDF GÉNÉRAL) */}
+          {generalDocs.length > 0 && (
+            <div className="bg-surface border border-accent/40 rounded-2xl p-4 flex flex-col gap-3 shadow-md animate-in fade-in">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-accent flex items-center gap-2">
+                <Globe size={16} /> Documents généraux du cours ({generalDocs.length})
               </h2>
-              {chapters.length > 0 && (
-                <div className="flex items-center gap-1 text-[11px] text-text-muted font-mono">
-                  <button onClick={() => handleToggleAll(true)} className="hover:text-accent cursor-pointer">Déplier tout</button>
-                  <span>•</span>
-                  <button onClick={() => handleToggleAll(false)} className="hover:text-accent cursor-pointer">Plier tout</button>
-                </div>
-              )}
+              <div className="flex flex-col gap-2">
+                {generalDocs.map(doc => {
+                  const isPdf = doc.mime_type === 'application/pdf' || doc.original_name.endsWith('.pdf');
+                  const isDocSelected = selectedDocIds.includes(doc.id);
+                  return (
+                    <div 
+                      key={doc.id} 
+                      onClick={() => {
+                        if (isSelectMode) toggleSelectDoc(doc.id);
+                        else navigate(`/viewer/${doc.id}`);
+                      }}
+                      className={`p-3 bg-surface-elevated border rounded-xl flex items-center justify-between cursor-pointer transition-colors ${isDocSelected ? 'border-accent bg-accent/15' : 'border-border hover:border-accent/50'}`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        {isSelectMode && (
+                          <div onClick={(e) => { e.stopPropagation(); toggleSelectDoc(doc.id); }} className="text-accent cursor-pointer shrink-0">
+                            {isDocSelected ? <CheckSquare size={16} /> : <Square size={16} className="text-text-muted" />}
+                          </div>
+                        )}
+                        <div className={`p-2 rounded-lg shrink-0 ${isPdf ? 'bg-danger/10 text-danger' : 'bg-info/10 text-info'}`}>
+                          <FileText size={16} />
+                        </div>
+                        <div className="min-w-0 pr-2">
+                          <p className="text-sm font-medium text-text truncate hover:text-accent transition-colors">{doc.original_name}</p>
+                          <span className="text-[10px] font-mono text-text-muted uppercase">{doc.document_type} • Global</span>
+                        </div>
+                      </div>
+                      {!isSelectMode && (
+                        <button onClick={(e) => { e.stopPropagation(); setDocToDelete({ id: doc.id, path: doc.bucket_path }); }} className="p-1.5 text-text-muted hover:text-danger rounded-lg transition-colors cursor-pointer">
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={() => {
-                  setIsSelectMode(!isSelectMode);
-                  if (isSelectMode) { setSelectedChapterIds([]); setSelectedDocIds([]); }
-                }} 
-                className={`text-xs font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-colors cursor-pointer ${isSelectMode ? 'bg-accent text-background border-accent font-bold' : 'bg-surface border-border text-text'}`}
-              >
-                <CheckSquare size={14} /> {isSelectMode ? 'Mode sélection actif' : 'Sélectionner'}
-              </button>
-              <button onClick={() => setShowBulkModal(true)} className="text-xs text-text font-semibold flex items-center gap-1 hover:border-accent/50 transition-colors cursor-pointer bg-surface px-3 py-1.5 rounded-lg border border-border">
-                <ClipboardPaste size={14} className="text-accent" /> Table des matières
-              </button>
-              <button onClick={() => { setParentChapterId(null); setIsAddingChapter(true); }} className="text-xs text-accent font-bold flex items-center gap-1 hover:underline cursor-pointer bg-accent/10 px-3 py-1.5 rounded-lg border border-accent/20">
-                <Plus size={14} /> Chapitre
-              </button>
-            </div>
-          </div>
+          )}
 
-          {isSelectMode && (
-            <div className="bg-surface-elevated border border-accent/40 px-4 py-3 rounded-2xl flex flex-col sm:flex-row items-center justify-between shadow-lg gap-3 animate-in fade-in duration-200">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-2">
               <div className="flex items-center gap-3">
-                <button onClick={handleSelectAll} className="text-xs font-bold text-accent hover:underline cursor-pointer">
-                  {totalSelectedCount === chapters.length + documents.length ? 'Tout désélectionner' : 'Tout sélectionner'}
-                </button>
-                <span className="text-xs text-text-muted">|</span>
-                <span className="text-xs font-semibold text-text">{totalSelectedCount} sélectionné(s)</span>
+                <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
+                  <LayoutGrid size={16} /> Structure hiérarchique ({chapters.length})
+                </h2>
+                {chapters.length > 0 && (
+                  <div className="flex items-center gap-1 text-[11px] text-text-muted font-mono">
+                    <button onClick={() => handleToggleAll(true)} className="hover:text-accent cursor-pointer">Déplier tout</button>
+                    <span>•</span>
+                    <button onClick={() => handleToggleAll(false)} className="hover:text-accent cursor-pointer">Plier tout</button>
+                  </div>
+                )}
               </div>
-              <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="flex items-center gap-2">
                 <button 
-                  disabled={totalSelectedCount === 0}
-                  onClick={() => setIsBatchMoveModalOpen(true)}
-                  className="flex-1 sm:flex-none bg-info/15 text-info border border-info/30 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-info/25 transition-colors cursor-pointer disabled:opacity-40"
+                  onClick={() => {
+                    setIsSelectMode(!isSelectMode);
+                    if (isSelectMode) { setSelectedChapterIds([]); setSelectedDocIds([]); }
+                  }} 
+                  className={`text-xs font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-colors cursor-pointer ${isSelectMode ? 'bg-accent text-background border-accent font-bold' : 'bg-surface border-border text-text'}`}
                 >
-                  <FolderInput size={14} /> Déplacer vers...
+                  <CheckSquare size={14} /> {isSelectMode ? 'Mode sélection actif' : 'Sélectionner'}
                 </button>
-                <button 
-                  disabled={totalSelectedCount === 0}
-                  onClick={() => setIsBatchDeleteModalOpen(true)}
-                  className="flex-1 sm:flex-none bg-danger/10 text-danger border border-danger/30 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-danger/20 transition-colors cursor-pointer disabled:opacity-40"
-                >
-                  <Trash2 size={14} /> Supprimer
+                <button onClick={() => setShowBulkModal(true)} className="text-xs text-text font-semibold flex items-center gap-1 hover:border-accent/50 transition-colors cursor-pointer bg-surface px-3 py-1.5 rounded-lg border border-border">
+                  <ClipboardPaste size={14} className="text-accent" /> Table des matières
+                </button>
+                <button onClick={() => { setParentChapterId(null); setIsAddingChapter(true); }} className="text-xs text-accent font-bold flex items-center gap-1 hover:underline cursor-pointer bg-accent/10 px-3 py-1.5 rounded-lg border border-accent/20">
+                  <Plus size={14} /> Chapitre
                 </button>
               </div>
             </div>
-          )}
 
-          {isAddingChapter && (
-            <form onSubmit={handleCreateChapter} className="bg-surface border border-accent/40 p-4 rounded-2xl flex flex-col gap-3 animate-in fade-in duration-200">
-              <span className="text-xs font-bold text-accent">
-                {parentChapterId ? "Ajouter un sous-chapitre" : "Ajouter un chapitre principal"}
-              </span>
-              <div className="flex gap-2">
-                <input 
-                  type="text"
-                  autoFocus
-                  value={newChapterTitle}
-                  onChange={(e) => setNewChapterTitle(e.target.value)}
-                  placeholder="Intitulé (ex: 1.1 Notion de consentement)"
-                  className="flex-1 bg-surface-elevated border border-border rounded-xl px-3 py-2 text-sm focus:border-accent"
-                />
-                <button type="submit" className="bg-accent text-background px-4 py-2 rounded-xl text-xs font-bold cursor-pointer">Créer</button>
-                <button type="button" onClick={() => { setIsAddingChapter(false); setParentChapterId(null); }} className="p-2 text-text-muted hover:text-text"><X size={18}/></button>
+            {isSelectMode && (
+              <div className="bg-surface-elevated border border-accent/40 px-4 py-3 rounded-2xl flex flex-col sm:flex-row items-center justify-between shadow-lg gap-3 animate-in fade-in duration-200">
+                <div className="flex items-center gap-3">
+                  <button onClick={handleSelectAll} className="text-xs font-bold text-accent hover:underline cursor-pointer">
+                    {totalSelectedCount === chapters.length + documents.length ? 'Tout désélectionner' : 'Tout sélectionner'}
+                  </button>
+                  <span className="text-xs text-text-muted">|</span>
+                  <span className="text-xs font-semibold text-text">{totalSelectedCount} sélectionné(s)</span>
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button 
+                    disabled={totalSelectedCount === 0}
+                    onClick={() => setIsBatchMoveModalOpen(true)}
+                    className="flex-1 sm:flex-none bg-info/15 text-info border border-info/30 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-info/25 transition-colors cursor-pointer disabled:opacity-40"
+                  >
+                    <FolderInput size={14} /> Déplacer vers...
+                  </button>
+                  <button 
+                    disabled={totalSelectedCount === 0}
+                    onClick={() => setIsBatchDeleteModalOpen(true)}
+                    className="flex-1 sm:flex-none bg-danger/10 text-danger border border-danger/30 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-danger/20 transition-colors cursor-pointer disabled:opacity-40"
+                  >
+                    <Trash2 size={14} /> Supprimer
+                  </button>
+                </div>
               </div>
-            </form>
-          )}
+            )}
 
-          {chapters.length === 0 && !isAddingChapter ? (
-            <div className="text-center py-12 border border-dashed border-border rounded-2xl text-text-muted text-sm">
-              Aucun chapitre. Collez votre table des matières ou créez un chapitre principal.
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {chapterTree.map(rootChapter => renderChapterItem(rootChapter, 0))}
-            </div>
-          )}
+            {isAddingChapter && (
+              <form onSubmit={handleCreateChapter} className="bg-surface border border-accent/40 p-4 rounded-2xl flex flex-col gap-3 animate-in fade-in duration-200">
+                <span className="text-xs font-bold text-accent">
+                  {parentChapterId ? "Ajouter un sous-chapitre" : "Ajouter un chapitre principal"}
+                </span>
+                <div className="flex gap-2">
+                  <input 
+                    type="text"
+                    autoFocus
+                    value={newChapterTitle}
+                    onChange={(e) => setNewChapterTitle(e.target.value)}
+                    placeholder="Intitulé (ex: 1.1 Notion de consentement)"
+                    className="flex-1 bg-surface-elevated border border-border rounded-xl px-3 py-2 text-sm focus:border-accent"
+                  />
+                  <button type="submit" className="bg-accent text-background px-4 py-2 rounded-xl text-xs font-bold cursor-pointer">Créer</button>
+                  <button type="button" onClick={() => { setIsAddingChapter(false); setParentChapterId(null); }} className="p-2 text-text-muted hover:text-text"><X size={18}/></button>
+                </div>
+              </form>
+            )}
+
+            {chapters.length === 0 && !isAddingChapter ? (
+              <div className="text-center py-12 border border-dashed border-border rounded-2xl text-text-muted text-sm">
+                Aucun chapitre. Collez votre table des matières ou créez un chapitre principal.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {chapterTree.map(rootChapter => renderChapterItem(rootChapter, 0))}
+              </div>
+            )}
+          </div>
         </section>
 
         <aside className="lg:col-span-1 flex flex-col gap-6">
