@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Maximize, Minimize, PanelRightOpen, PanelRightClose, Sparkles, FileText, Save } from 'lucide-react';
+import { ChevronLeft, Maximize, Minimize, PanelRightOpen, PanelRightClose, Sparkles, FileText, Save, ExternalLink } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { toast } from '../lib/toast';
 
@@ -68,7 +68,6 @@ export function DocumentViewer() {
     if (!document) return;
     setIsSavingNote(true);
     try {
-      // Sauvegarde simple de la note (on vérifie s'il faut insert ou update)
       const { data: existingNote } = await supabase.from('notes').select('id').ilike('title', `%${document.original_name}%`).limit(1);
       
       if (existingNote && existingNote.length > 0) {
@@ -116,23 +115,39 @@ export function DocumentViewer() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {/* LIEN D'OUVERTURE NATIVE POUR MOBILE & PC */}
+          {publicUrl && isPdf && (
+            <a 
+              href={publicUrl} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-surface border border-border text-text-muted hover:text-accent rounded-lg text-xs font-bold transition-colors"
+              title="Ouvrir le PDF en plein écran dans un nouvel onglet"
+            >
+              <ExternalLink size={14} />
+              <span className="hidden sm:inline">Natif</span>
+            </a>
+          )}
+
           <button 
             onClick={() => setIsAIModalOpen(true)}
             className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-warning/10 text-warning hover:bg-warning/20 border border-warning/20 rounded-lg text-xs font-bold transition-colors cursor-pointer"
           >
             <Sparkles size={14} /> Analyser (IA)
           </button>
+          
           <button 
             onClick={() => setIsNotesOpen(!isNotesOpen)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border cursor-pointer ${isNotesOpen ? 'bg-accent text-background border-accent' : 'bg-surface text-text-muted hover:text-text border-border'}`}
             title="Ouvrir le panneau de notes"
           >
             {isNotesOpen ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
-            <span className="hidden sm:inline">{isNotesOpen ? 'Fermer les notes' : 'Prendre des notes'}</span>
+            <span className="hidden sm:inline">{isNotesOpen ? 'Fermer les notes' : 'Notes'}</span>
           </button>
+          
           <button 
             onClick={() => setIsFocusMode(!isFocusMode)}
-            className="p-1.5 bg-surface border border-border text-text-muted hover:text-text rounded-lg transition-colors cursor-pointer"
+            className="hidden md:flex p-1.5 bg-surface border border-border text-text-muted hover:text-text rounded-lg transition-colors cursor-pointer"
             title={isFocusMode ? "Quitter le plein écran" : "Mode Focus (Plein écran)"}
           >
             {isFocusMode ? <Minimize size={18} /> : <Maximize size={18} />}
@@ -144,17 +159,26 @@ export function DocumentViewer() {
       <div className="flex flex-1 gap-4 overflow-hidden">
         
         {/* LECTEUR PDF */}
-        <div className={`h-full bg-surface border border-border rounded-2xl overflow-hidden shadow-inner transition-all duration-300 flex-1 relative ${isNotesOpen ? 'hidden lg:flex' : 'flex'}`}>
+        <div className={`h-full bg-surface border border-border rounded-2xl overflow-hidden shadow-inner transition-all duration-300 flex-1 relative flex-col ${isNotesOpen ? 'hidden lg:flex' : 'flex'}`}>
           {publicUrl && isPdf ? (
-            <iframe 
-              src={`${publicUrl}#toolbar=0&navpanes=0`} 
-              className="w-full h-full border-0"
-              title={document.original_name}
-            />
+            <>
+              {/* BANDEAU MOBILE : Avertissement de défilement iOS/Android */}
+              <div className="md:hidden bg-info/10 border-b border-info/20 px-3 py-2 flex items-center justify-between shrink-0">
+                <span className="text-[10px] text-info font-medium">Pages bloquées ?</span>
+                <a href={publicUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] bg-info text-background px-2.5 py-1 rounded font-bold flex items-center gap-1 shadow-sm">
+                  <ExternalLink size={10} /> Ouvrir en plein écran
+                </a>
+              </div>
+              <iframe 
+                src={`${publicUrl}#toolbar=0&navpanes=0`} 
+                className="w-full h-full border-0 flex-1"
+                title={document.original_name}
+              />
+            </>
           ) : (
             <div className="flex flex-col items-center justify-center w-full h-full text-text-muted p-8 text-center gap-4">
               <FileText size={48} className="opacity-20" />
-              <p>Ce format ({document.mime_type}) ne peut pas être affiché directement.</p>
+              <p>Ce format ({document?.mime_type}) ne peut pas être affiché directement.</p>
               <a href={publicUrl} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-accent text-background rounded-xl font-bold text-sm">
                 Télécharger le fichier
               </a>
