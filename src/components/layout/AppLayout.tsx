@@ -9,7 +9,7 @@ import { LexiIcons } from '../../lib/icons';
 export function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isOffline, settings, setSettings } = useApp();
+  const { isOffline, settings } = useApp();
   
   // États
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
