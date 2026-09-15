@@ -18,7 +18,7 @@ export async function onRequest(context: { request: Request; env: { GEMINI_API_K
     const apiKey = context.env.GEMINI_API_KEY;
     
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: "Clé API Gemini manquante dans les variables Cloudflare (GEMINI_API_KEY)." }), {
+      return new Response(JSON.stringify({ error: "Clé API Gemini manquante." }), {
         status: 400,
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
       });
@@ -28,49 +28,48 @@ export async function onRequest(context: { request: Request; env: { GEMINI_API_K
 
     if (action === 'generate_case_law') {
       prompt = `
-        Tu es un juriste suisse expert, assistant un étudiant en droit.
-        Analyse et résume la jurisprudence suivante : ${payload.citation}.
-        Renvoie une synthèse claire, académique et structurée.
-        IMPORTANT : Tu dois renvoyer UNIQUEMENT un objet JSON valide avec ces clés exactes :
+        Tu es un Docteur en droit suisse, Professeur ordinaire à l'Université et ancien greffier au Tribunal fédéral (TF). Ton niveau d'analyse est celui du plus grand expert juridique possible.
+        Ta mission est de décortiquer l'arrêt suivant : ${payload.citation}.
+        
+        ATTENTES STRICTES :
+        - Le vocabulaire doit être techniquement irréprochable (maxime des débats, arbitraire, cognition, griefs, effet dévolutif, etc.).
+        - La "Partie en droit" doit restituer le raisonnement syllogistique complet du TF.
+        - Tu dois citer avec une précision absolue les articles de loi (ex: art. 97 al. 1 LTF, art. 8 CC) et la jurisprudence antérieure (ATF de référence) mentionnés par le TF.
+        
+        Tu dois renvoyer UNIQUEMENT un objet JSON valide avec ces clés exactes :
         {
-          "title": "Intitulé officiel de l'arrêt (ex: ATF 143 III 416 - Nom usuel si existant)",
-          "facts": "Résumé des faits pertinents",
-          "procedure": "Historique de la procédure (instances cantonales et recours)",
-          "consideranda": "Les considérants principaux et l'argumentation du Tribunal fédéral",
-          "holding": "Le dispositif / La conclusion"
+          "title": "Intitulé officiel et complet de l'arrêt (ex: ATF 145 III 365 ou 4A_123/2023) - avec un titre thématique très court.",
+          "facts": "Faits (Sachverhalt) : Restitution factuelle exhaustive, pertinente pour le droit. Identifie les parties (sans les nommer explicitement si anonymisées) et le litige de base.",
+          "procedure": "Historique procédural (Prozessgeschichte) : Résumé des instances cantonales, type de recours au TF (ex: Recours en matière civile, pénale, constitutionnelle) et conclusions du recourant.",
+          "legal_issues": "Questions de droit (Rechtsfragen) : Énumération claire et numérotée des problèmes juridiques exacts (ex: 1. Violation de l'art. 9 Cst. par appréciation arbitraire des preuves. 2. Application de l'art. x CO).",
+          "consideranda": "Partie en Droit / Considérants (Erwägungen) : C'EST LE CŒUR DE TON ANALYSE. Développe le raisonnement du TF avec une rigueur de thèse de doctorat. Sépare bien l'examen de la recevabilité (si pertinent), la règle de droit posée (Majeure avec rappel de la jurisprudence/doctrine) et l'application au cas d'espèce (Mineure). Inclus toutes les références légales et jurisprudentielles clés.",
+          "holding": "Dispositif (Dispositiv) : Le prononcé exact du Tribunal fédéral (admission, rejet, irrecevabilité, renvoi, frais).",
+          "pedagogical_takeaway": "Portée doctrinale et apprentissage (Bedeutung) : Une critique ou analyse de l'arrêt. Confirme-t-il une jurisprudence constante ? Constitue-t-il un revirement ? Quelle est la nuance dogmatique majeure que l'étudiant doit absolument retenir pour ses examens ?"
         }
       `;
     } else if (action === 'generate_subsumption') {
       prompt = `
-        Tu es un juriste suisse. Résous ce cas pratique en appliquant la méthode du syllogisme juridique (Subsumption).
-        Faits de l'espèce : ${payload.facts}
-        IMPORTANT : Tu dois renvoyer UNIQUEMENT un objet JSON valide avec ces clés exactes :
+        Tu es un Professeur de droit suisse, expert en méthodologie juridique.
+        Résous ce cas pratique avec un syllogisme juridique d'une rigueur absolue : ${payload.facts}
+        
+        Tu dois renvoyer UNIQUEMENT un objet JSON valide avec ces clés exactes :
         {
-          "major_premise": "Règle de droit applicable (Majeure)",
-          "minor_premise": "Application aux faits (Mineure)",
-          "conclusion": "Conclusion juridique du cas"
+          "major_premise": "Majeure (Règle de droit) : Expose exhaustivement les dispositions légales applicables, les conditions (cumulatives/alternatives) requises, ainsi que l'interprétation issue de la jurisprudence (ATF pertinents) et de la doctrine dominante.",
+          "minor_premise": "Mineure (Subsomption) : Applique de manière chirurgicale, condition par condition, la règle aux faits de l'espèce. Discute les points tangents et les potentiels arguments contraires.",
+          "conclusion": "Conclusion : Conséquence juridique définitive et univoque."
         }
       `;
     } else if (action === 'generate_mock_exam') {
+      // Prompt pour les examens gardé intact mais élevé en standard
       prompt = `
-        Tu es un professeur de droit en Suisse. Rédige un cas pratique d'examen de niveau universitaire sur le thème suivant : ${payload.topic}.
-        IMPORTANT : Tu dois renvoyer UNIQUEMENT un objet JSON valide avec ces clés exactes :
-        {
-          "facts": "L'énoncé complet et détaillé des faits de l'espèce.",
-          "legal_issue": "La question de droit précise à résoudre."
-        }
+        Tu es un professeur de droit dans une faculté suisse. Rédige un cas d'examen universitaire complexe sur : ${payload.topic}.
+        IMPORTANT : Tu dois renvoyer UNIQUEMENT un objet JSON valide avec ces clés : {"facts": "...", "legal_issue": "..."}
       `;
     } else {
       throw new Error("Action non reconnue.");
     }
 
-    // Liste des vrais modèles Google à tester en cascade (si l'un renvoie 503, on essaie le suivant)
-    const modelsToTry = [
-      'gemini-3.6-flash',
-      'gemini-2.5-flash',
-      'gemini-1.5-flash'
-    ];
-
+    const modelsToTry = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-1.5-flash'];
     let geminiResponse: Response | null = null;
     let lastErrorText = "";
 
@@ -84,19 +83,15 @@ export async function onRequest(context: { request: Request; env: { GEMINI_API_K
             generationConfig: { response_mime_type: "application/json" }
           })
         });
-
-        if (geminiResponse.ok) {
-          break; // Sort de la boucle dès qu'un modèle répond avec succès
-        } else {
-          lastErrorText = await geminiResponse.text();
-        }
+        if (geminiResponse.ok) break;
+        else lastErrorText = await geminiResponse.text();
       } catch (err: any) {
         lastErrorText = err.message;
       }
     }
 
     if (!geminiResponse || !geminiResponse.ok) {
-      throw new Error(`Tous les serveurs Google sont surchargés (503). Détail : ${lastErrorText}`);
+      throw new Error(`Erreur API: ${lastErrorText}`);
     }
 
     const data = await geminiResponse.json();
