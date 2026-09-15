@@ -5,11 +5,11 @@ import { AppLayout } from './components/layout/AppLayout';
 import { Dashboard } from './pages/Dashboard';
 import { Courses } from './pages/Courses';
 import { CourseDetail } from './pages/CourseDetail';
-import { DocumentImport } from './pages/DocumentImport';
+import { DocumentLibrary } from './pages/DocumentLibrary'; // <-- La future vraie bibliothèque
 import { Study } from './pages/Study';
 import { StudySession } from './pages/StudySession';
-import { NoteEditor } from './pages/NoteEditor'; 
-import { Profile } from './pages/Profile';
+import { NoteEditor } from './pages/NoteEditor';
+import { Profile } from './pages/Profile'; // <-- Notre nouveau centre d'identité
 import { AddCourse } from './pages/AddCourse';
 import { EditCourse } from './pages/EditCourse';
 import { Schedule } from './pages/Schedule';
@@ -21,7 +21,6 @@ import { CaseLawEditor } from './pages/CaseLawEditor';
 import { CaseStudyEditor } from './pages/CaseStudyEditor';
 import { ExamSimulator } from './pages/ExamSimulator';
 import { CreateFlashcardsBatch } from './pages/CreateFlashcardsBatch';
-import { Library } from './pages/Library';
 
 export default function App() {
   return (
@@ -30,7 +29,6 @@ export default function App() {
         <Routes>
           <Route path="/onboarding" element={<Onboarding />} />
           
-          {/* ROUTES CLASSIQUES (Avec la barre de navigation en bas) */}
           <Route path="/" element={<AppLayout />}>
             <Route index element={<Dashboard />} />
             <Route path="courses" element={<Courses />} />
@@ -39,27 +37,23 @@ export default function App() {
             <Route path="edit/course/:courseId" element={<EditCourse />} />
             <Route path="add/grade" element={<AddGrade />} />
             <Route path="add/document" element={<DocumentUpload />} />
-            <Route path="import" element={<DocumentImport />} />
+            
+            <Route path="documents" element={<DocumentLibrary />} /> {/* Nouvelle Bibliothèque */}
             
             <Route path="study" element={<Study />} />
             <Route path="schedule" element={<Schedule />} />
-            <Route path="profile" element={<Profile />} />
-            <Route path="library" element={<Library />} />
+            <Route path="profile" element={<Profile />} /> {/* Profil & Diplôme */}
             
             <Route path="add/flashcards/batch" element={<CreateFlashcardsBatch />} />
-            
             <Route path="cases/law" element={<CaseLawEditor />} />
             <Route path="cases/study" element={<CaseStudyEditor />} />
-            
-            {/* Raccourci d'URL pour le simulateur d'examen appelé par le FAB */}
             <Route path="exams" element={<ExamSimulator />} />
-            <Route path="exams/simulator" element={<Navigate to="/exams" replace />} />
           </Route>
           
-          {/* ROUTES PLEIN ÉCRAN (Hors du Layout pour un focus total : pas de barre de nav) */}
+          {/* ROUTES PLEIN ÉCRAN */}
           <Route path="/session/:deckId" element={<StudySession />} />
-          <Route path="/notes" element={<NoteEditor />} /> {/* Création nouvelle note (Mode Amphi) */}
-          <Route path="/notes/:noteId" element={<NoteEditor />} /> {/* Édition note existante */}
+          <Route path="/notes" element={<NoteEditor />} />
+          <Route path="/notes/:noteId" element={<NoteEditor />} />
           <Route path="/viewer/:docId" element={<DocumentViewer />} />
         </Routes>
       </BrowserRouter>
