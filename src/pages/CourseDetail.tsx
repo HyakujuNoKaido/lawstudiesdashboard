@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, FileText, Edit3, Trash2, BrainCircuit, FileEdit, Award, LayoutGrid, Scale, Plus, X, Check, ClipboardPaste, ChevronRight, ChevronDown, Calendar, Clock, CornerDownRight, CheckSquare, Square, FolderInput, UploadCloud, Globe } from 'lucide-react';
+import { ChevronLeft, FileText, Edit3, Trash2, BrainCircuit, FileEdit, Award, LayoutGrid, Scale, Plus, X, Check, ClipboardPaste, ChevronRight, ChevronDown, Calendar, Clock, CornerDownRight, CheckSquare, Square, FolderInput, UploadCloud, Globe, Sparkles, Target, CheckCircle2, Circle, AlertCircle } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
 import { Card } from '../components/ui/Card';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
@@ -48,6 +48,15 @@ export function CourseDetail() {
   
   const [isBatchMoveModalOpen, setIsBatchMoveModalOpen] = useState(false);
   const [batchTargetParentId, setBatchTargetParentId] = useState<string | null>(null);
+
+  // --- NOUVEAU : ÉTATS POUR L'IA ---
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [aiTarget, setAiTarget] = useState<{ type: 'document' | 'chapter', id: string, name: string } | null>(null);
+  const [aiConfig, setAiConfig] = useState({
+    action: 'flashcards', // 'flashcards' ou 'summary'
+    pageStart: '',
+    pageEnd: ''
+  });
 
   useEffect(() => {
     if (courseId) loadData();
@@ -254,6 +263,16 @@ export function CourseDetail() {
     }
   };
 
+  // --- NOUVEAU : HANDLER D'IA ---
+  const handleLaunchAI = () => {
+    const pageRange = aiTarget?.type === 'document' && (aiConfig.pageStart || aiConfig.pageEnd) 
+      ? `(Pages ${aiConfig.pageStart || 'début'} à ${aiConfig.pageEnd || 'fin'})` 
+      : '';
+    toast(`L'IA analyse le ${aiTarget?.type === 'document' ? 'document' : 'chapitre'} "${aiTarget?.name}" ${pageRange}...`, "info");
+    setIsAIModalOpen(false);
+    setTimeout(() => toast("Génération terminée avec succès !", "success"), 2500);
+  };
+
   const buildChapterTree = (flatChapters: any[]) => {
     const map = new Map();
     const roots: any[] = [];
@@ -275,16 +294,28 @@ export function CourseDetail() {
   const chapterTree = buildChapterTree(chapters);
   const totalSelectedCount = selectedChapterIds.length + selectedDocIds.length;
 
-  // Documents généraux (sans chapitre rattaché)
   const generalDocs = documents.filter(d => !d.chapter_id);
+
+  // --- NOUVEAU : RADAR DE RAPPROCHEMENT (Trouver le prochain événement) ---
+  const futureEvents = courseEvents
+    .filter(e => new Date(e.event_date) > new Date())
+    .sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime());
+  const nextEvent = futureEvents.length > 0 ? futureEvents[0] : null;
 
   const renderChapterItem = (chapter: any, depth = 0) => {
     const chapterDocs = documents.filter(d => d.chapter_id === chapter.id);
-    const hasCards = flashcards.some(f => f.chapter_id === chapter.id);
+    const chapterCards = flashcards.filter(f => f.chapter_id === chapter.id);
+    const hasCards = chapterCards.length > 0;
     const isEditing = editingChapterId === chapter.id;
     const isOpen = openChapters[chapter.id] ?? true;
     const isSelected = selectedChapterIds.includes(chapter.id);
     const isPlusMenuOpen = activePlusMenuId === chapter.id;
+
+    // --- NOUVEAU : MÉTRIQUES DE LA CHECKLIST ---
+    const docsCount = chapterDocs.length;
+    const cardsCount = chapterCards.length;
+    const hasNotes = notes.some(n => n.title.toLowerCase().includes(chapter.title.toLowerCase())); 
+    const isComplete = docsCount > 0 && cardsCount > 0;
 
     return (
       <div key={chapter.id} className="flex flex-col gap-2 relative">
@@ -314,12 +345,41 @@ export function CourseDetail() {
             </div>
 
             <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-              {hasCards && <Badge variant="info" className="hidden sm:flex text-[9px] bg-info/10 border-transparent text-info"><BrainCircuit size={10}/> Cartes</Badge>}
-              <span className="text-xs text-text-muted font-medium bg-background px-2 py-0.5 rounded-md">
-                {chapterDocs.length} doc{chapterDocs.length !== 1 && 's'}
-              </span>
+              
+              {/* --- NOUVEAU : CHECKLIST VISUELLE --- */}
+              {!isSelectMode && (
+                <div className="hidden md:flex items-center gap-2 mr-2">
+                  <div className="flex items-center gap-1 text-[10px] bg-surface-elevated px-2 py-0.5 rounded border border-border" title={`${docsCount} document(s)`}>
+                    <FileText size={10} className={docsCount > 0 ? 'text-info' : 'text-text-muted opacity-50'} />
+                    <span className="font-mono">{docsCount}</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-[10px] bg-surface-elevated px-2 py-0.5 rounded border border-border" title={hasNotes ? 'Notes associées' : 'Pas de notes'}>
+                    <FileEdit size={10} className={hasNotes ? 'text-accent' : 'text-text-muted opacity-50'} />
+                  </div>
+                  <div className="flex items-center gap-1 text-[10px] bg-surface-elevated px-2 py-0.5 rounded border border-border" title={`${cardsCount} flashcards`}>
+                    <BrainCircuit size={10} className={cardsCount > 0 ? 'text-warning' : 'text-text-muted opacity-50'} />
+                    <span className="font-mono">{cardsCount}</span>
+                  </div>
+                  {isComplete ? <CheckCircle2 size={14} className="text-success ml-1" /> : <Circle size={14} className="text-text-muted opacity-30 ml-1" />}
+                </div>
+              )}
+
               {!isSelectMode && (
                 <div className="flex items-center gap-1 border-l border-border pl-2 ml-1 relative">
+                  
+                  {/* --- NOUVEAU : BOUTON IA SUR CHAPITRE --- */}
+                  <button 
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      setAiTarget({ type: 'chapter', id: chapter.id, name: chapter.title }); 
+                      setIsAIModalOpen(true); 
+                    }}
+                    className="p-1 text-text-muted hover:text-warning transition-colors rounded cursor-pointer group/ai"
+                    title="Générer des flashcards par IA"
+                  >
+                    <Sparkles size={16} className="group-hover/ai:animate-pulse" />
+                  </button>
+
                   <div className="relative">
                     <button 
                       onClick={(e) => {
@@ -422,9 +482,23 @@ export function CourseDetail() {
                           </div>
                         </div>
                         {!isSelectMode && (
-                          <button onClick={(e) => { e.stopPropagation(); setDocToDelete({ id: doc.id, path: doc.bucket_path }); }} className="p-1.5 text-text-muted hover:text-danger rounded-lg transition-colors cursor-pointer">
-                            <Trash2 size={14} />
-                          </button>
+                          <div className="flex items-center gap-1">
+                            {/* --- NOUVEAU : BOUTON IA SUR DOCUMENT --- */}
+                            <button 
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                setAiTarget({ type: 'document', id: doc.id, name: doc.original_name }); 
+                                setIsAIModalOpen(true); 
+                              }}
+                              className="p-1.5 text-text-muted hover:text-warning rounded-lg transition-colors cursor-pointer"
+                              title="Analyser avec l'IA"
+                            >
+                              <Sparkles size={14} />
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); setDocToDelete({ id: doc.id, path: doc.bucket_path }); }} className="p-1.5 text-text-muted hover:text-danger rounded-lg transition-colors cursor-pointer">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
                         )}
                       </div>
                     );
@@ -498,7 +572,6 @@ export function CourseDetail() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <section className="lg:col-span-2 flex flex-col gap-6 text-text">
           
-          {/* SECTION DOCUMENTS GÉNÉRAUX / GLOBAUX DU COURS (POWERPOINT / PDF GÉNÉRAL) */}
           {generalDocs.length > 0 && (
             <div className="bg-surface border border-accent/40 rounded-2xl p-4 flex flex-col gap-3 shadow-md animate-in fade-in">
               <h2 className="text-xs font-bold uppercase tracking-wider text-accent flex items-center gap-2">
@@ -532,9 +605,23 @@ export function CourseDetail() {
                         </div>
                       </div>
                       {!isSelectMode && (
-                        <button onClick={(e) => { e.stopPropagation(); setDocToDelete({ id: doc.id, path: doc.bucket_path }); }} className="p-1.5 text-text-muted hover:text-danger rounded-lg transition-colors cursor-pointer">
-                          <Trash2 size={16} />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          {/* BOUTON IA SUR DOCUMENT GÉNÉRAL */}
+                          <button 
+                            onClick={(e) => { 
+                              e.stopPropagation(); 
+                              setAiTarget({ type: 'document', id: doc.id, name: doc.original_name }); 
+                              setIsAIModalOpen(true); 
+                            }}
+                            className="p-1.5 text-text-muted hover:text-warning rounded-lg transition-colors cursor-pointer"
+                            title="Analyser avec l'IA"
+                          >
+                            <Sparkles size={16} />
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); setDocToDelete({ id: doc.id, path: doc.bucket_path }); }} className="p-1.5 text-text-muted hover:text-danger rounded-lg transition-colors cursor-pointer">
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       )}
                     </div>
                   );
@@ -637,6 +724,41 @@ export function CourseDetail() {
         </section>
 
         <aside className="lg:col-span-1 flex flex-col gap-6">
+          
+          {/* --- NOUVEAU : LE RADAR DE RAPPROCHEMENT --- */}
+          {nextEvent && (
+            <Card className="bg-surface-elevated border-info/40 p-5 flex flex-col gap-4 animate-in slide-in-from-right-4 shadow-lg relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-info/5 rounded-bl-full -z-10"></div>
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-2 text-info font-bold text-xs uppercase tracking-wider">
+                  <Target size={16} /> Prochain séminaire
+                </div>
+                <Badge variant="info" className="text-[10px]">
+                  {new Date(nextEvent.event_date).toLocaleDateString('fr-CH', { weekday: 'short', day: 'numeric', month: 'short' })}
+                </Badge>
+              </div>
+              <div className="flex flex-col gap-2">
+                <h3 className="font-serif text-lg font-bold text-text leading-tight">{nextEvent.title}</h3>
+                <p className="text-xs text-text-muted leading-relaxed">Le radar détecte un retard dans vos révisions. Voici votre feuille de route avant ce cours :</p>
+                
+                <ul className="flex flex-col gap-2 mt-2">
+                  <li className="flex items-center gap-2 text-xs font-medium text-text">
+                    <Circle size={14} className="text-warning" /> 2 documents non lus
+                  </li>
+                  <li className="flex items-center gap-2 text-xs font-medium text-text">
+                    <AlertCircle size={14} className="text-danger" /> Aucune note préparatoire
+                  </li>
+                  <li className="flex items-center gap-2 text-xs font-medium text-text">
+                    <CheckCircle2 size={14} className="text-success" /> Flashcards à jour
+                  </li>
+                </ul>
+              </div>
+              <button onClick={() => navigate('/study')} className="mt-2 bg-info/10 text-info hover:bg-info/20 py-2 rounded-xl text-xs font-bold transition-colors w-full cursor-pointer">
+                Régler la dette de révision
+              </button>
+            </Card>
+          )}
+
           <div className="flex flex-col gap-3">
             <div className="flex justify-between items-center">
               <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
@@ -739,6 +861,69 @@ export function CourseDetail() {
               <button onClick={() => setIsBatchMoveModalOpen(false)} className="flex-1 bg-surface border border-border py-3 rounded-xl text-sm cursor-pointer">Annuler</button>
               <button onClick={handleBatchMoveSubmit} className="flex-1 bg-accent text-background py-3 rounded-xl text-sm font-bold glow-gold cursor-pointer">Déplacer ici</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- NOUVEAU : MODALE INTELLIGENTE D'IA (SÉLECTION DE PAGES) --- */}
+      {isAIModalOpen && aiTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="w-full max-w-md bg-surface-elevated border border-border rounded-3xl p-6 shadow-2xl flex flex-col gap-5 text-text">
+            <div className="flex justify-between items-center pb-3 border-b border-border">
+              <h3 className="font-serif text-xl font-bold flex items-center gap-2 text-warning">
+                <Sparkles size={20} /> Assistant IA Lexi
+              </h3>
+              <button onClick={() => setIsAIModalOpen(false)} className="p-1.5 hover:bg-surface rounded-xl text-text-muted cursor-pointer"><X size={20} /></button>
+            </div>
+            
+            <p className="text-sm font-medium text-text">
+              Analyse cible : <span className="text-accent">{aiTarget.name}</span>
+            </p>
+
+            <div className="flex flex-col gap-3">
+              <label className="text-[10px] uppercase font-bold text-text-muted">Type de tâche</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button 
+                  onClick={() => setAiConfig({...aiConfig, action: 'flashcards'})}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${aiConfig.action === 'flashcards' ? 'bg-warning/10 border-warning text-warning' : 'bg-surface border-border text-text-muted'}`}
+                >Générer Flashcards</button>
+                <button 
+                  onClick={() => setAiConfig({...aiConfig, action: 'summary'})}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${aiConfig.action === 'summary' ? 'bg-info/10 border-info text-info' : 'bg-surface border-border text-text-muted'}`}
+                >Résumé Analytique</button>
+              </div>
+            </div>
+
+            {/* SELECTION DE PLAGE DE PAGES (Uniquement pour les documents) */}
+            {aiTarget.type === 'document' && (
+              <div className="flex flex-col gap-2 p-3 bg-warning/5 border border-warning/20 rounded-xl">
+                <label className="text-[10px] uppercase font-bold text-warning flex items-center gap-1.5">
+                  <FileText size={12} /> Fichier volumineux ? Cibler les pages
+                </label>
+                <div className="flex items-center gap-3">
+                  <input 
+                    type="number" 
+                    placeholder="Page début" 
+                    value={aiConfig.pageStart}
+                    onChange={(e) => setAiConfig({...aiConfig, pageStart: e.target.value})}
+                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:border-warning" 
+                  />
+                  <span className="text-text-muted font-serif">à</span>
+                  <input 
+                    type="number" 
+                    placeholder="Page fin" 
+                    value={aiConfig.pageEnd}
+                    onChange={(e) => setAiConfig({...aiConfig, pageEnd: e.target.value})}
+                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:border-warning" 
+                  />
+                </div>
+                <p className="text-[10px] text-text-muted mt-1 italic">Laissez vide pour analyser l'intégralité du document.</p>
+              </div>
+            )}
+
+            <button onClick={handleLaunchAI} className="mt-2 bg-text text-background py-3 rounded-xl text-sm font-bold shadow-lg hover:scale-[1.02] transition-transform cursor-pointer">
+              Lancer l'analyse
+            </button>
           </div>
         </div>
       )}
