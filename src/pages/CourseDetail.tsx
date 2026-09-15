@@ -7,6 +7,8 @@ import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { fetchCourseById, fetchCourseChapters, fetchCourseDocuments, fetchCourseGrades, fetchNotes, fetchFlashcards, deleteDocument, createChapter, parseAndCreateChaptersFromSyllabus, fetchEvents, createEvent, updateChapterParent, batchMoveItems } from '../services/supabaseService';
 import { supabase } from '../lib/supabase';
 import { toast } from '../lib/toast';
+import { extractTextFromPDF, generateAIFlashcards, generateAISummary } from '../services/aiService';
+import { SOLO_USER_ID } from '../lib/constants';
 
 export function CourseDetail() {
   const { courseId } = useParams<{ courseId: string }>();
@@ -49,7 +51,7 @@ export function CourseDetail() {
   const [isBatchMoveModalOpen, setIsBatchMoveModalOpen] = useState(false);
   const [batchTargetParentId, setBatchTargetParentId] = useState<string | null>(null);
 
-  // --- NOUVEAU : ÉTATS POUR L'IA ---
+  // --- ÉTATS POUR L'IA ---
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [aiTarget, setAiTarget] = useState<{ type: 'document' | 'chapter', id: string, name: string } | null>(null);
   const [aiConfig, setAiConfig] = useState({
@@ -263,14 +265,62 @@ export function CourseDetail() {
     }
   };
 
-  // --- NOUVEAU : HANDLER D'IA ---
-  const handleLaunchAI = () => {
-    const pageRange = aiTarget?.type === 'document' && (aiConfig.pageStart || aiConfig.pageEnd) 
+  // --- NOUVEAU : HANDLER D'IA (VRAI APPEL VERS GEMINI) ---
+  const handleLaunchAI = async () => {
+    if (!aiTarget) return;
+    setIsAIModalOpen(false);
+    
+    const pageRange = aiTarget.type === 'document' && (aiConfig.pageStart || aiConfig.pageEnd) 
       ? `(Pages ${aiConfig.pageStart || 'début'} à ${aiConfig.pageEnd || 'fin'})` 
       : '';
-    toast(`L'IA analyse le ${aiTarget?.type === 'document' ? 'document' : 'chapitre'} "${aiTarget?.name}" ${pageRange}...`, "info");
-    setIsAIModalOpen(false);
-    setTimeout(() => toast("Génération terminée avec succès !", "success"), 2500);
+    
+    toast(`L'IA analyse le ${aiTarget.type === 'document' ? 'document' : 'chapitre'} ${pageRange}...`, "info");
+    
+    try {
+      let textToAnalyze = "";
+
+      if (aiTarget.type === 'document') {
+        const doc = documents.find(d => d.id === aiTarget.id);
+        if (!doc) throw new Error("Document introuvable");
+        
+        // On demande à Supabase un lien temporaire pour lire le PDF (1 minute)
+        const { data: urlData } = await supabase.storage.from('user-documents').createSignedUrl(doc.bucket_path, 60);
+        if (!urlData?.signedUrl) throw new Error("Impossible d'accéder au fichier dans le cloud.");
+
+        const startP = aiConfig.pageStart ? parseInt(aiConfig.pageStart) : undefined;
+        const endP = aiConfig.pageEnd ? parseInt(aiConfig.pageEnd) : undefined;
+        
+        // Extraction du texte via pdfjs-dist
+        textToAnalyze = await extractTextFromPDF(urlData.signedUrl, startP, endP);
+      } 
+      else if (aiTarget.type === 'chapter') {
+        // Pour un chapitre, on rassemble toutes les notes de l'étudiant
+        const chapterNotes = notes.filter(n => n.title.includes(aiTarget.name));
+        textToAnalyze = chapterNotes.map(n => n.content).join('\n\n');
+        if (!textToAnalyze) throw new Error("Aucune note trouvée dans ce chapitre pour générer du contenu.");
+      }
+
+      // Envoi à Gemini
+      if (aiConfig.action === 'flashcards') {
+        const count = await generateAIFlashcards(textToAnalyze, courseId!, aiTarget.type === 'chapter' ? aiTarget.id : undefined);
+        toast(`Magie ! ${count} flashcards générées avec succès !`, "success");
+        loadData();
+      } else if (aiConfig.action === 'summary') {
+        const summary = await generateAISummary(textToAnalyze);
+        // Sauvegarde automatique du résumé dans l'espace Notes
+        await supabase.from('notes').insert([{
+          user_id: SOLO_USER_ID,
+          course_id: courseId,
+          title: `Résumé IA : ${aiTarget.name}`,
+          content: summary
+        }]);
+        toast("Résumé généré et sauvegardé dans vos notes !", "success");
+        loadData();
+      }
+    } catch (error: any) {
+      console.error(error);
+      toast(error.message || "L'analyse IA a échoué. Vérifiez votre clé API.", "error");
+    }
   };
 
   const buildChapterTree = (flatChapters: any[]) => {
@@ -296,7 +346,7 @@ export function CourseDetail() {
 
   const generalDocs = documents.filter(d => !d.chapter_id);
 
-  // --- NOUVEAU : RADAR DE RAPPROCHEMENT (Trouver le prochain événement) ---
+  // RADAR DE RAPPROCHEMENT (Trouver le prochain événement)
   const futureEvents = courseEvents
     .filter(e => new Date(e.event_date) > new Date())
     .sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime());
@@ -311,7 +361,7 @@ export function CourseDetail() {
     const isSelected = selectedChapterIds.includes(chapter.id);
     const isPlusMenuOpen = activePlusMenuId === chapter.id;
 
-    // --- NOUVEAU : MÉTRIQUES DE LA CHECKLIST ---
+    // MÉTRIQUES DE LA CHECKLIST
     const docsCount = chapterDocs.length;
     const cardsCount = chapterCards.length;
     const hasNotes = notes.some(n => n.title.toLowerCase().includes(chapter.title.toLowerCase())); 
@@ -346,7 +396,7 @@ export function CourseDetail() {
 
             <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
               
-              {/* --- NOUVEAU : CHECKLIST VISUELLE --- */}
+              {/* CHECKLIST VISUELLE */}
               {!isSelectMode && (
                 <div className="hidden md:flex items-center gap-2 mr-2">
                   <div className="flex items-center gap-1 text-[10px] bg-surface-elevated px-2 py-0.5 rounded border border-border" title={`${docsCount} document(s)`}>
@@ -367,7 +417,7 @@ export function CourseDetail() {
               {!isSelectMode && (
                 <div className="flex items-center gap-1 border-l border-border pl-2 ml-1 relative">
                   
-                  {/* --- NOUVEAU : BOUTON IA SUR CHAPITRE --- */}
+                  {/* BOUTON IA SUR CHAPITRE */}
                   <button 
                     onClick={(e) => { 
                       e.stopPropagation(); 
@@ -483,7 +533,7 @@ export function CourseDetail() {
                         </div>
                         {!isSelectMode && (
                           <div className="flex items-center gap-1">
-                            {/* --- NOUVEAU : BOUTON IA SUR DOCUMENT --- */}
+                            {/* BOUTON IA SUR DOCUMENT */}
                             <button 
                               onClick={(e) => { 
                                 e.stopPropagation(); 
@@ -725,7 +775,7 @@ export function CourseDetail() {
 
         <aside className="lg:col-span-1 flex flex-col gap-6">
           
-          {/* --- NOUVEAU : LE RADAR DE RAPPROCHEMENT --- */}
+          {/* RADAR DE RAPPROCHEMENT */}
           {nextEvent && (
             <Card className="bg-surface-elevated border-info/40 p-5 flex flex-col gap-4 animate-in slide-in-from-right-4 shadow-lg relative overflow-hidden">
               <div className="absolute top-0 right-0 w-24 h-24 bg-info/5 rounded-bl-full -z-10"></div>
@@ -865,7 +915,7 @@ export function CourseDetail() {
         </div>
       )}
 
-      {/* --- NOUVEAU : MODALE INTELLIGENTE D'IA (SÉLECTION DE PAGES) --- */}
+      {/* MODALE INTELLIGENTE D'IA (SÉLECTION DE PAGES) */}
       {isAIModalOpen && aiTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="w-full max-w-md bg-surface-elevated border border-border rounded-3xl p-6 shadow-2xl flex flex-col gap-5 text-text">
