@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabase';
 import { SOLO_USER_ID } from '../lib/constants';
 
 export async function fetchCourses(semester?: string) {
-  let query = supabase.from('courses').select('*');
+  let query = supabase.from('courses').select('*, chapters(id), documents(id), course_schedules(day_of_week)');
   if (semester && semester !== 'Tous') {
     query = query.eq('semester', semester);
   }
