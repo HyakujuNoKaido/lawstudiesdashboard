@@ -1,4 +1,3 @@
-// src/services/supabaseService.ts
 import { supabase } from '../lib/supabase';
 import { SOLO_USER_ID } from '../lib/constants';
 
@@ -192,7 +191,6 @@ export async function parseAndCreateChaptersFromSyllabus(courseId: string, sylla
       level = 1;
     }
 
-    // Remonter dans la pile pour trouver le bon parent
     while (stack.length > 0 && stack[stack.length - 1].level >= level) {
       stack.pop();
     }
@@ -441,8 +439,9 @@ export async function searchGlobal(keyword: string) {
     caseLaws: caseLawsRes.data || [],
     caseStudies: caseStudiesRes.data || []
   };
+}
 
-  export async function batchMoveItems(chapterIds: string[], docIds: string[], targetChapterId: string | null) {
+export async function batchMoveItems(chapterIds: string[], docIds: string[], targetChapterId: string | null) {
   if (chapterIds.length > 0) {
     const { error } = await supabase
       .from('chapters')
@@ -457,6 +456,4 @@ export async function searchGlobal(keyword: string) {
       .in('id', docIds);
     if (error) throw error;
   }
-}
-  
 }
