@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, FileText, Edit3, Trash2, BrainCircuit, FileEdit, Award, LayoutGrid, Scale, Plus, X, Check, ClipboardPaste, ChevronRight, ChevronDown, Calendar, Clock, CornerDownRight } from 'lucide-react';
+import { ChevronLeft, FileText, Edit3, Trash2, BrainCircuit, FileEdit, Award, LayoutGrid, Scale, Plus, X, Check, ClipboardPaste, ChevronRight, ChevronDown, Calendar, Clock, CornerDownRight, CheckSquare, Square } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
 import { Card } from '../components/ui/Card';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
@@ -24,8 +24,7 @@ export function CourseDetail() {
   // Gestion des chapitres
   const [isAddingChapter, setIsAddingChapter] = useState(false);
   const [newChapterTitle, setNewChapterTitle] = useState('');
-  const [parentChapterId, setParentChapterId] = useState<string | null>(null); // Pour ajouter un sous-chapitre ciblé
-  
+  const [parentChapterId, setParentChapterId] = useState<string | null>(null);
   const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
   const [chapterToDelete, setChapterToDelete] = useState<string | null>(null);
@@ -41,6 +40,12 @@ export function CourseDetail() {
 
   // État plié/déplié des chapitres
   const [openChapters, setOpenChapters] = useState<Record<string, boolean>>({});
+
+  // NOUVEAU : État pour la sélection multiple (Batch Selection)
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [selectedChapterIds, setSelectedChapterIds] = useState<string[]>([]);
+  const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
+  const [isBatchDeleteModalOpen, setIsBatchDeleteModalOpen] = useState(false);
 
   useEffect(() => {
     if (courseId) loadData();
@@ -85,6 +90,59 @@ export function CourseDetail() {
     const newState: Record<string, boolean> = {};
     chapters.forEach(ch => { newState[ch.id] = open; });
     setOpenChapters(newState);
+  };
+
+  // Gestion de la sélection multiple
+  const toggleSelectChapter = (id: string) => {
+    setSelectedChapterIds(prev => 
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectDoc = (id: string) => {
+    setSelectedDocIds(prev => 
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedChapterIds.length === chapters.length && selectedDocIds.length === documents.length) {
+      setSelectedChapterIds([]);
+      setSelectedDocIds([]);
+    } else {
+      setSelectedChapterIds(chapters.map(c => c.id));
+      setSelectedDocIds(documents.map(d => d.id));
+    }
+  };
+
+  // Suppression en masse (Batch Delete)
+  const handleBatchDelete = async () => {
+    try {
+      if (selectedChapterIds.length > 0) {
+        const { error } = await supabase.from('chapters').delete().in('id', selectedChapterIds);
+        if (error) throw error;
+      }
+      if (selectedDocIds.length > 0) {
+        // Supprimer les fichiers physiques du storage avant de supprimer les lignes
+        for (const docId of selectedDocIds) {
+          const doc = documents.find(d => d.id === docId);
+          if (doc?.bucket_path) {
+            await supabase.storage.from('user-documents').remove([doc.bucket_path]);
+          }
+        }
+        const { error } = await supabase.from('documents').delete().in('id', selectedDocIds);
+        if (error) throw error;
+      }
+      toast("Éléments sélectionnés supprimés avec succès", "success");
+      setSelectedChapterIds([]);
+      setSelectedDocIds([]);
+      setIsSelectMode(false);
+      setIsBatchDeleteModalOpen(false);
+      loadData();
+    } catch (err) {
+      console.error(err);
+      toast("Erreur lors de la suppression groupée", "error");
+    }
   };
 
   const handleCreateChapter = async (e: React.FormEvent) => {
@@ -185,7 +243,6 @@ export function CourseDetail() {
     }
   };
 
-  // Organiser les chapitres en arbre hiérarchique (Chapitre -> Sous-chapitre -> Sous-sous-chapitre)
   const buildChapterTree = (flatChapters: any[]) => {
     const map = new Map();
     const roots: any[] = [];
@@ -205,23 +262,36 @@ export function CourseDetail() {
 
   const dueCardsCount = flashcards.filter(f => new Date(f.due_at) <= new Date()).length;
   const chapterTree = buildChapterTree(chapters);
+  const totalSelectedCount = selectedChapterIds.length + selectedDocIds.length;
 
-  // Fonction récursive pour afficher les chapitres et leurs sous-niveaux avec indentation
   const renderChapterItem = (chapter: any, depth = 0) => {
     const chapterDocs = documents.filter(d => d.chapter_id === chapter.id);
     const hasCards = flashcards.some(f => f.chapter_id === chapter.id);
     const isEditing = editingChapterId === chapter.id;
     const isOpen = openChapters[chapter.id] ?? true;
+    const isSelected = selectedChapterIds.includes(chapter.id);
     const indentClass = depth === 1 ? 'ml-6 border-l-2 border-accent/30 pl-2' : depth >= 2 ? 'ml-12 border-l-2 border-secondary/30 pl-2' : '';
 
     return (
       <div key={chapter.id} className={`flex flex-col gap-2 ${indentClass}`}>
-        <div className="bg-surface border border-border rounded-2xl overflow-hidden shadow-sm group">
+        <div className={`bg-surface border rounded-2xl overflow-hidden shadow-sm group transition-all ${isSelected ? 'border-accent bg-accent/5' : 'border-border'}`}>
           <div 
-            onClick={() => !isEditing && toggleChapter(chapter.id)}
+            onClick={() => {
+              if (isSelectMode) {
+                toggleSelectChapter(chapter.id);
+              } else if (!isEditing) {
+                toggleChapter(chapter.id);
+              }
+            }}
             className="p-3.5 flex items-center justify-between bg-surface hover:bg-surface-elevated transition-colors cursor-pointer select-none"
           >
             <div className="flex items-center gap-3 flex-1 min-w-0 pr-2">
+              {/* Checkbox en mode sélection */}
+              {isSelectMode && (
+                <div onClick={(e) => { e.stopPropagation(); toggleSelectChapter(chapter.id); }} className="text-accent cursor-pointer shrink-0">
+                  {isSelected ? <CheckSquare size={18} /> : <Square size={18} className="text-text-muted" />}
+                </div>
+              )}
               <div className="text-text-muted shrink-0">
                 {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
               </div>
@@ -234,55 +304,44 @@ export function CourseDetail() {
               <span className="text-xs text-text-muted font-medium bg-background px-2 py-0.5 rounded-md">
                 {chapterDocs.length} doc{chapterDocs.length !== 1 && 's'}
               </span>
-              <div className="flex items-center gap-1 border-l border-border pl-2 ml-1">
-                <button 
-                  onClick={() => { setParentChapterId(chapter.id); setIsAddingChapter(true); }}
-                  className="p-1 text-text-muted hover:text-accent transition-colors rounded cursor-pointer"
-                  title="Ajouter un sous-chapitre"
-                >
-                  <Plus size={14} />
-                </button>
-                <button 
-                  onClick={() => { setEditingChapterId(chapter.id); setEditingTitle(chapter.title); }}
-                  className="p-1 text-text-muted hover:text-accent transition-colors rounded cursor-pointer"
-                  title="Modifier"
-                >
-                  <Edit3 size={14} />
-                </button>
-                <button 
-                  onClick={() => setChapterToDelete(chapter.id)}
-                  className="p-1 text-text-muted hover:text-danger transition-colors rounded cursor-pointer"
-                  title="Supprimer"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
+              {!isSelectMode && (
+                <div className="flex items-center gap-1 border-l border-border pl-2 ml-1">
+                  <button onClick={() => { setParentChapterId(chapter.id); setIsAddingChapter(true); }} className="p-1 text-text-muted hover:text-accent transition-colors rounded cursor-pointer" title="Ajouter un sous-chapitre"><Plus size={14} /></button>
+                  <button onClick={() => { setEditingChapterId(chapter.id); setEditingTitle(chapter.title); }} className="p-1 text-text-muted hover:text-accent transition-colors rounded cursor-pointer" title="Modifier"><Edit3 size={14} /></button>
+                  <button onClick={() => setChapterToDelete(chapter.id)} className="p-1 text-text-muted hover:text-danger transition-colors rounded cursor-pointer" title="Supprimer"><Trash2 size={14} /></button>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Édition en ligne */}
           {isEditing && (
             <div className="p-3 bg-surface-elevated border-t border-border flex gap-2" onClick={(e) => e.stopPropagation()}>
-              <input 
-                type="text"
-                autoFocus
-                value={editingTitle}
-                onChange={(e) => setEditingTitle(e.target.value)}
-                className="bg-background border border-border rounded-lg px-3 py-1 text-sm text-text w-full focus:border-accent"
-              />
+              <input type="text" autoFocus value={editingTitle} onChange={(e) => setEditingTitle(e.target.value)} className="bg-background border border-border rounded-lg px-3 py-1 text-sm text-text w-full focus:border-accent" />
               <button onClick={() => handleUpdateChapter(chapter.id)} className="px-3 bg-success text-white rounded-lg text-xs font-bold cursor-pointer">OK</button>
               <button onClick={() => setEditingChapterId(null)} className="px-3 bg-surface border border-border rounded-lg text-xs cursor-pointer">Annuler</button>
             </div>
           )}
 
-          {/* Documents du chapitre */}
           {isOpen && chapterDocs.length > 0 && (
             <div className="border-t border-border/50 bg-background/50 flex flex-col divide-y divide-border/50">
               {chapterDocs.map(doc => {
                 const isPdf = doc.mime_type === 'application/pdf' || doc.original_name.endsWith('.pdf');
+                const isDocSelected = selectedDocIds.includes(doc.id);
                 return (
-                  <div key={doc.id} className="p-3 pl-12 flex items-center justify-between cursor-pointer hover:bg-surface transition-colors" onClick={() => navigate(`/viewer/${doc.id}`)}>
+                  <div 
+                    key={doc.id} 
+                    onClick={() => {
+                      if (isSelectMode) toggleSelectDoc(doc.id);
+                      else navigate(`/viewer/${doc.id}`);
+                    }} 
+                    className={`p-3 pl-12 flex items-center justify-between cursor-pointer transition-colors ${isDocSelected ? 'bg-accent/10' : 'hover:bg-surface'}`}
+                  >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
+                      {isSelectMode && (
+                        <div onClick={(e) => { e.stopPropagation(); toggleSelectDoc(doc.id); }} className="text-accent cursor-pointer shrink-0">
+                          {isDocSelected ? <CheckSquare size={16} /> : <Square size={16} className="text-text-muted" />}
+                        </div>
+                      )}
                       <div className={`p-1.5 rounded-lg shrink-0 ${isPdf ? 'bg-danger/10 text-danger' : 'bg-info/10 text-info'}`}>
                         <FileText size={14} />
                       </div>
@@ -290,12 +349,11 @@ export function CourseDetail() {
                         <p className="text-sm font-medium text-text truncate hover:text-accent transition-colors">{doc.original_name}</p>
                       </div>
                     </div>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); setDocToDelete({ id: doc.id, path: doc.bucket_path }); }}
-                      className="p-1.5 text-text-muted hover:text-danger rounded-lg transition-colors cursor-pointer"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    {!isSelectMode && (
+                      <button onClick={(e) => { e.stopPropagation(); setDocToDelete({ id: doc.id, path: doc.bucket_path }); }} className="p-1.5 text-text-muted hover:text-danger rounded-lg transition-colors cursor-pointer">
+                        <Trash2 size={14} />
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -303,7 +361,6 @@ export function CourseDetail() {
           )}
         </div>
 
-        {/* Rendu récursif des sous-chapitres et sous-sous-chapitres */}
         {chapter.children && chapter.children.length > 0 && (
           <div className="flex flex-col gap-2 mt-1">
             {chapter.children.map((child: any) => renderChapterItem(child, depth + 1))}
@@ -314,7 +371,7 @@ export function CourseDetail() {
   };
 
   return (
-    <div className="flex flex-col gap-8 pt-2 pb-16 animate-in fade-in duration-300">
+    <div className="flex flex-col gap-8 pt-2 pb-24 animate-in fade-in duration-300 relative">
       <header className="flex flex-col gap-6 text-text border-b border-border pb-6">
         <div className="flex items-center justify-between">
           <button onClick={() => navigate('/courses')} className="flex items-center gap-1 text-text-muted hover:text-text transition-colors -ml-2 p-2 cursor-pointer">
@@ -360,7 +417,7 @@ export function CourseDetail() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* COLONNE GAUCHE (Chapitres hiérarchiques) */}
+        {/* COLONNE GAUCHE (Chapitres hiérarchiques avec sélection multiple) */}
         <section className="lg:col-span-2 flex flex-col gap-4 text-text">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-2">
             <div className="flex items-center gap-3">
@@ -369,16 +426,46 @@ export function CourseDetail() {
               </h2>
             </div>
             <div className="flex items-center gap-2">
+              {/* Bouton de bascule du mode sélection */}
+              <button 
+                onClick={() => {
+                  setIsSelectMode(!isSelectMode);
+                  if (isSelectMode) { setSelectedChapterIds([]); setSelectedDocIds([]); }
+                }} 
+                className={`text-xs font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-colors cursor-pointer ${isSelectMode ? 'bg-accent text-background border-accent font-bold' : 'bg-surface border-border text-text'}`}
+              >
+                <CheckSquare size={14} /> {isSelectMode ? 'Mode sélection actif' : 'Sélectionner'}
+              </button>
               <button onClick={() => setShowBulkModal(true)} className="text-xs text-text font-semibold flex items-center gap-1 hover:border-accent/50 transition-colors cursor-pointer bg-surface px-3 py-1.5 rounded-lg border border-border">
                 <ClipboardPaste size={14} className="text-accent" /> Table des matières
               </button>
               <button onClick={() => { setParentChapterId(null); setIsAddingChapter(true); }} className="text-xs text-accent font-bold flex items-center gap-1 hover:underline cursor-pointer bg-accent/10 px-3 py-1.5 rounded-lg border border-accent/20">
-                <Plus size={14} /> Chapitre principal
+                <Plus size={14} /> Chapitre
               </button>
             </div>
           </div>
 
-          {/* Formulaire d'ajout de chapitre / sous-chapitre */}
+          {/* Barre d'outils flottante de sélection multiple */}
+          {isSelectMode && (
+            <div className="bg-surface-elevated border border-accent/40 px-4 py-3 rounded-2xl flex items-center justify-between shadow-lg animate-in fade-in duration-200">
+              <div className="flex items-center gap-3">
+                <button onClick={handleSelectAll} className="text-xs font-bold text-accent hover:underline cursor-pointer">
+                  {totalSelectedCount === chapters.length + documents.length ? 'Tout désélectionner' : 'Tout sélectionner'}
+                </button>
+                <span className="text-xs text-text-muted">|</span>
+                <span className="text-xs font-semibold text-text">{totalSelectedCount} élément(s) sélectionné(s)</span>
+              </div>
+              <button 
+                disabled={totalSelectedCount === 0}
+                onClick={() => setIsBatchDeleteModalOpen(true)}
+                className="bg-danger/10 text-danger border border-danger/30 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 hover:bg-danger/20 transition-colors cursor-pointer disabled:opacity-40"
+              >
+                <Trash2 size={14} /> Supprimer la sélection
+              </button>
+            </div>
+          )}
+
+          {/* Formulaire d'ajout */}
           {isAddingChapter && (
             <form onSubmit={handleCreateChapter} className="bg-surface border border-accent/40 p-4 rounded-2xl flex flex-col gap-3 animate-in fade-in duration-200">
               <span className="text-xs font-bold text-accent">
@@ -491,10 +578,22 @@ export function CourseDetail() {
         </div>
       )}
 
-      {/* Modales de suppression */}
+      {/* Modales de suppression unitaire */}
       <ConfirmModal isOpen={!!docToDelete} title="Supprimer le document ?" message="Ce document sera définitivement effacé." confirmText="Supprimer" cancelText="Annuler" isDanger={true} onConfirm={handleDeleteDocument} onClose={() => setDocToDelete(null)} />
       <ConfirmModal isOpen={!!chapterToDelete} title="Supprimer le chapitre ?" message="Attention, les sous-chapitres associés seront également supprimés." confirmText="Supprimer" cancelText="Annuler" isDanger={true} onConfirm={confirmDeleteChapter} onClose={() => setChapterToDelete(null)} />
       <ConfirmModal isOpen={!!eventToDelete} title="Supprimer le créneau ?" message="Supprimer cet événement du calendrier ?" confirmText="Supprimer" cancelText="Annuler" isDanger={true} onConfirm={confirmDeleteEvent} onClose={() => setEventToDelete(null)} />
+
+      {/* Modale de confirmation pour la suppression en masse */}
+      <ConfirmModal 
+        isOpen={isBatchDeleteModalOpen} 
+        title="Supprimer la sélection ?" 
+        message={`Voulez-vous vraiment supprimer les ${totalSelectedCount} éléments sélectionnés (chapitres et/ou documents) ?`} 
+        confirmText="Tout supprimer" 
+        cancelText="Annuler" 
+        isDanger={true} 
+        onConfirm={handleBatchDelete} 
+        onClose={() => setIsBatchDeleteModalOpen(false)} 
+      />
     </div>
   );
 }
