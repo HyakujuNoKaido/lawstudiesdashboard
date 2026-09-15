@@ -1,4 +1,3 @@
-
 export async function onRequest(context: { request: Request; env: { GEMINI_API_KEY: string } }) {
   if (context.request.method === 'OPTIONS') {
     return new Response(null, {
@@ -65,19 +64,35 @@ export async function onRequest(context: { request: Request; env: { GEMINI_API_K
       throw new Error("Action non reconnue.");
     }
 
-    // Utilisation du modèle le plus récent et stable (Gemini 3.8 Flash)
-    const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { response_mime_type: "application/json" }
-      })
-    });
+    // Fonction avec mécanisme de réessai automatique (Retry) en cas de 503
+    let geminiResponse: Response | null = null;
+    let attempts = 0;
+    const maxAttempts = 3;
 
-    if (!geminiResponse.ok) {
-      const errText = await geminiResponse.text();
-      throw new Error(`Erreur Gemini API (${geminiResponse.status}): ${errText}`);
+    while (attempts < maxAttempts) {
+      attempts++;
+      geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { response_mime_type: "application/json" }
+        })
+      });
+
+      if (geminiResponse.status !== 503) {
+        break; // Si ce n'est pas une erreur de surcharge, on sort de la boucle
+      }
+
+      if (attempts < maxAttempts) {
+        // Attendre 2 secondes avant de retenter (Backoff)
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+
+    if (!geminiResponse || !geminiResponse.ok) {
+      const errText = geminiResponse ? await geminiResponse.text() : "Pas de réponse";
+      throw new Error(`Erreur Gemini API: ${errText}`);
     }
 
     const data = await geminiResponse.json();
