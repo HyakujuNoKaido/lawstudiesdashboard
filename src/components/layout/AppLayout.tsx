@@ -132,9 +132,9 @@ export function AppLayout() {
                 <div className="w-10 h-10 rounded-xl bg-success/10 text-success flex items-center justify-center group-hover:scale-105 transition-transform"><GraduationCap size={20} /></div>
                 <div><p className="font-medium text-sm text-text">J'ajoute une matière</p><p className="text-xs text-text-muted">Mise à jour du plan d'études</p></div>
               </button>
-              <button onClick={() => { setIsActionMenuOpen(false); navigate('/notes'); }} className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-surface-elevated border border-border hover:border-accent/50 transition-all text-left group cursor-pointer">
+              <button onClick={() => { setIsActionMenuOpen(false); navigate('/library'); }} className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-surface-elevated border border-border hover:border-accent/50 transition-all text-left group cursor-pointer">
                 <div className="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center group-hover:scale-105 transition-transform"><LexiIcons.Note size={20} /></div>
-                <div><p className="font-medium text-sm text-text">Je prends des notes</p><p className="text-xs text-text-muted">Éditeur avec extraction automatique</p></div>
+                <div><p className="font-medium text-sm text-text">Je prends des notes</p><p className="text-xs text-text-muted">Bibliothèque et notes de cours</p></div>
               </button>
               <button onClick={() => { setIsActionMenuOpen(false); navigate('/import'); }} className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-surface-elevated border border-border hover:border-secondary/50 transition-all text-left group cursor-pointer">
                 <div className="w-10 h-10 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center group-hover:scale-105 transition-transform"><LexiIcons.Upload size={20} /></div>
