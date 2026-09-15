@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Maximize, Minimize, PanelRightOpen, PanelRightClose, Sparkles, FileText, Save, ExternalLink } from 'lucide-react';
+import { ChevronLeft, Maximize, Minimize, PanelRightOpen, PanelRightClose, Sparkles, FileText, Save, ExternalLink, FileEdit, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { toast } from '../lib/toast';
 
