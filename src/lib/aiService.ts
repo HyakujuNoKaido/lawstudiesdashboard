@@ -26,12 +26,13 @@ export async function extractTextFromPDF(fileUrl: string, startPage?: number, en
   }
 }
 
-// --- HELPER DE SÉCURITÉ : GESTION AUTOMATIQUE DES 503 (High Demand) ---
-async function callGeminiWithRetry(payload: any, retries = 3, delay = 2000): Promise<any> {
+// Fonction sécurisée avec réessai automatique pour supporter les pics du plan gratuit (503 / 429)
+async function callGeminiFreeTier(payload: any, retries = 3, delay = 2500): Promise<any> {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("Clé API Gemini introuvable.");
 
-  const url = `https://generativelanguage.googleapis.com/v1/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+  // Utilisation de gemini-1.5-flash, standard et performant sur le plan gratuit
+  const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
   for (let i = 0; i < retries; i++) {
     try {
@@ -47,9 +48,9 @@ async function callGeminiWithRetry(payload: any, retries = 3, delay = 2000): Pro
 
       const errText = await response.text();
       
-      // Si c'est une erreur 503 (Surcharge / High Demand) et qu'il reste des essais
-      if (response.status === 503 && i < retries - 1) {
-        console.warn(`Modèle Gemini surchargé (503). Nouvelle tentative (${i + 1}/${retries - 1}) dans ${delay / 1000}s...`);
+      // Si le plan gratuit est saturé (503 ou 429), on patiente et on réessaie
+      if ((response.status === 503 || response.status === 429) && i < retries - 1) {
+        console.warn(`Plan gratuit saturé (${response.status}). Nouvelle tentative (${i + 1}/${retries - 1}) dans ${delay / 1000}s...`);
         await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
         continue;
       }
@@ -57,11 +58,10 @@ async function callGeminiWithRetry(payload: any, retries = 3, delay = 2000): Pro
       throw new Error(`Erreur API Gemini (${response.status}): ${errText}`);
     } catch (err: any) {
       if (i === retries - 1) throw err;
-      // Pour les erreurs réseau ou 503 persistantes, on patiente et on réessaie
       await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
     }
   }
-  throw new Error("Le modèle est temporairement indisponible en raison d'une forte affluence. Veuillez réessayer dans un instant.");
+  throw new Error("Le serveur est temporairement occupé (quota du plan gratuit). Veuillez patienter quelques secondes et réessayer.");
 }
 
 export async function generateAIFlashcards(text: string, courseId: string, chapterId?: string) {
@@ -71,7 +71,7 @@ Renvoie UNIQUEMENT un tableau JSON valide au format strict : [{"question": "..."
 Texte :
 ${text.substring(0, 30000)}`;
 
-  const data = await callGeminiWithRetry({
+  const data = await callGeminiFreeTier({
     contents: [{ parts: [{ text: prompt }] }]
   });
 
@@ -99,7 +99,7 @@ ${text.substring(0, 30000)}`;
 export async function generateAISummary(text: string): Promise<string> {
   const prompt = `Tu es un juriste suisse. Résume le texte juridique fourni en Markdown :\n\n${text.substring(0, 30000)}`;
   
-  const data = await callGeminiWithRetry({
+  const data = await callGeminiFreeTier({
     contents: [{ parts: [{ text: prompt }] }]
   });
 
