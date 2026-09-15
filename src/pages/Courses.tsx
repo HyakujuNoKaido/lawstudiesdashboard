@@ -1,17 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, Plus, Trash2, ChevronRight, Scale, AlertTriangle, GraduationCap } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { fetchCourses, deleteCourse } from '../services/supabaseService';
+import { useApp } from '../context/AppContext';
+import { LexiIcons } from '../lib/icons';
+import { toast } from '../lib/toast';
 
 export function Courses() {
   const navigate = useNavigate();
-  const [courses, setCourses] = useState<any[]>([]);
+  const { settings, courses: contextCourses, refreshData } = useApp();
+  
+  const [courses, setCourses] = useState<any[]>(contextCourses);
   const [semesterFilter, setSemesterFilter] = useState('Tous');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [courseToDelete, setCourseToDelete] = useState<string | null>(null);
+
+  // Le fameux mode résumé demandé dans l'audit
+  const isCompact = settings.listDensity === 'compact';
 
   useEffect(() => {
     loadCourses();
@@ -23,7 +30,7 @@ export function Courses() {
       const data = await fetchCourses(semesterFilter);
       setCourses(data);
     } catch (err) {
-      console.error("Erreur chargement cours:", err);
+      toast("Erreur de chargement", "error");
     } finally {
       setLoading(false);
     }
@@ -34,31 +41,27 @@ export function Courses() {
     try {
       await deleteCourse(courseToDelete);
       setCourseToDelete(null);
+      toast("Cours retiré du plan d'études", "success");
       loadCourses();
+      refreshData(); // Met à jour le contexte global
     } catch (err) {
-      console.error("Erreur suppression cours:", err);
-      alert("Échec de la suppression du cours.");
+      toast("Échec de la suppression", "error");
     }
   };
 
-  // --- ANALYSE DU PLAN D'ÉTUDES ---
   const currentEcts = courses.reduce((sum, c) => sum + (Number(c.ects) || 0), 0);
   const validatedEcts = courses.filter(c => c.status === 'Validé').reduce((sum, c) => sum + (Number(c.ects) || 0), 0);
   
-  // Alertes de charge de travail (uniquement si un semestre spécifique est sélectionné)
   const isOverloaded = semesterFilter !== 'Tous' && currentEcts > 35;
   const isUnderloaded = semesterFilter !== 'Tous' && currentEcts > 0 && currentEcts < 15;
 
   return (
     <div className="flex flex-col gap-6 pt-2 pb-16 animate-in fade-in duration-300 text-text">
       
-      {/* HEADER */}
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 px-1 border-b border-border pb-6">
         <div>
           <h1 className="font-serif text-3xl md:text-4xl font-bold tracking-tight mb-2">Plan d'études</h1>
-          <p className="text-text-muted text-sm max-w-md">
-            Gérez vos modules, suivez l'acquisition de vos crédits ECTS et assurez-vous que votre semestre est équilibré.
-          </p>
+          <p className="text-text-muted text-sm max-w-md">Gérez vos modules et assurez-vous que votre semestre est équilibré.</p>
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <select 
@@ -75,18 +78,17 @@ export function Courses() {
             onClick={() => navigate('/add/course')}
             className="bg-accent text-background px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 glow-gold hover:bg-accent-strong transition-colors cursor-pointer"
           >
-            <Plus size={18} />
-            <span className="hidden sm:inline">Ajouter</span>
+            <LexiIcons.Add size={18} />
+            <span className="hidden sm:inline">Nouveau module</span>
           </button>
         </div>
       </header>
 
-      {/* DASHBOARD DU SEMESTRE */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card variant="editorial" className="md:col-span-2 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center shrink-0">
-              <GraduationCap size={24} />
+              <LexiIcons.Course size={24} />
             </div>
             <div>
               <p className="text-xs font-bold uppercase tracking-wider text-text-muted mb-0.5">
@@ -104,95 +106,67 @@ export function Courses() {
           </div>
         </Card>
 
-        {/* ALERTES INTELLIGENTES */}
         {isOverloaded && (
           <Card className="bg-warning/10 border-warning/30 flex flex-col justify-center">
-            <div className="flex items-center gap-2 text-warning mb-1">
-              <AlertTriangle size={16} />
-              <span className="text-xs font-bold uppercase">Surcharge</span>
-            </div>
-            <p className="text-[11px] text-text-muted leading-relaxed">
-              Plus de 35 ECTS. Assurez-vous d'avoir le temps nécessaire pour approfondir la jurisprudence.
-            </p>
+            <div className="flex items-center gap-2 text-warning mb-1"><LexiIcons.Warning size={16} /><span className="text-xs font-bold uppercase">Surcharge</span></div>
+            <p className="text-[11px] text-text-muted leading-relaxed">Plus de 35 ECTS. Assurez-vous d'avoir le temps nécessaire pour la jurisprudence.</p>
           </Card>
         )}
         {isUnderloaded && (
           <Card className="bg-info/10 border-info/30 flex flex-col justify-center">
-            <div className="flex items-center gap-2 text-info mb-1">
-              <AlertTriangle size={16} />
-              <span className="text-xs font-bold uppercase">Sous-charge</span>
-            </div>
-            <p className="text-[11px] text-text-muted leading-relaxed">
-              Moins de 15 ECTS. Un semestre standard cible 30 crédits. Vérifiez votre plan d'études.
-            </p>
+            <div className="flex items-center gap-2 text-info mb-1"><LexiIcons.Warning size={16} /><span className="text-xs font-bold uppercase">Sous-charge</span></div>
+            <p className="text-[11px] text-text-muted leading-relaxed">Moins de 15 ECTS. Un semestre cible 30 crédits. Vérifiez votre plan.</p>
           </Card>
         )}
         {!isOverloaded && !isUnderloaded && semesterFilter !== 'Tous' && currentEcts > 0 && (
            <Card className="bg-success/5 border-success/20 flex flex-col justify-center">
-           <div className="flex items-center gap-2 text-success mb-1">
-             <Scale size={16} />
-             <span className="text-xs font-bold uppercase">Équilibre</span>
-           </div>
-           <p className="text-[11px] text-text-muted leading-relaxed">
-             Charge académique optimale pour ce semestre. Vous êtes dans la norme.
-           </p>
+           <div className="flex items-center gap-2 text-success mb-1"><LexiIcons.Success size={16} /><span className="text-xs font-bold uppercase">Équilibre</span></div>
+           <p className="text-[11px] text-text-muted leading-relaxed">Charge académique optimale pour ce semestre.</p>
          </Card>
         )}
       </div>
 
-      {/* LISTE DES MATIÈRES */}
       <section>
         {loading ? (
           <div className="text-center py-12 text-text-muted text-sm font-mono animate-pulse">Chargement du plan d'études...</div>
         ) : courses.length === 0 ? (
           <div className="text-center py-16 border border-dashed border-border rounded-xl text-text-muted text-sm flex flex-col items-center gap-3">
-            <Scale size={32} className="text-text-muted opacity-30" />
+            <LexiIcons.Law size={32} className="text-text-muted opacity-30" />
             <p>Votre plan d'études est vide pour cette sélection.</p>
-            <button onClick={() => navigate('/import')} className="text-accent text-xs font-bold hover:underline">
-              Importer depuis un PDF
-            </button>
+            <button onClick={() => navigate('/import')} className="text-accent text-xs font-bold hover:underline">Importer depuis un PDF</button>
           </div>
         ) : (
-          <div className="flex flex-col gap-0 border border-border bg-surface rounded-2xl overflow-hidden shadow-sm">
+          <div className={`flex flex-col ${isCompact ? 'gap-0 border border-border bg-surface rounded-2xl overflow-hidden' : 'gap-3'}`}>
             {courses.map((course, index) => (
               <div 
                 key={course.id}
-                onClick={() => navigate(`/courses/${course.id}`)}
-                className={`flex items-center justify-between p-4 cursor-pointer hover:bg-surface-elevated transition-colors group ${
-                  index !== courses.length - 1 ? 'border-b border-border/50' : ''
+                onClick={() => navigate(`/courses/${course.id}`, { state: { from: '/courses' } })}
+                className={`flex items-center justify-between cursor-pointer group transition-colors ${
+                  isCompact 
+                    ? `p-3 hover:bg-surface-elevated ${index !== courses.length - 1 ? 'border-b border-border/50' : ''}` 
+                    : 'bg-surface border border-border rounded-xl p-4 hover:border-accent/40'
                 }`}
               >
                 <div className="flex items-center gap-4 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-surface-elevated border border-border text-text flex items-center justify-center shrink-0 group-hover:border-accent group-hover:text-accent transition-colors">
-                    <BookOpen size={18} />
+                  <div className={`rounded-xl bg-surface-elevated border border-border text-text flex items-center justify-center shrink-0 group-hover:border-accent group-hover:text-accent transition-colors ${isCompact ? 'w-8 h-8' : 'w-10 h-10'}`}>
+                    <LexiIcons.Course size={isCompact ? 14 : 18} />
                   </div>
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-0.5">
                       <p className="font-semibold text-sm text-text truncate group-hover:text-accent transition-colors">{course.title}</p>
                       {course.status === 'Validé' && <Badge variant="success" className="px-1.5 py-0 text-[9px]">Validé</Badge>}
                     </div>
                     <div className="flex items-center gap-2 text-xs text-text-muted font-mono">
                       <span className="text-secondary font-bold">{course.ects} ECTS</span>
-                      <span>•</span>
-                      <span>{course.course_code || 'Général'}</span>
-                      {semesterFilter === 'Tous' && (
-                        <>
-                          <span>•</span>
-                          <span className="hidden sm:inline">{course.semester}</span>
-                        </>
-                      )}
+                      <span>•</span><span>{course.course_code || 'Général'}</span>
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); setCourseToDelete(course.id); }}
-                    className="p-2 text-text-muted hover:text-danger hover:bg-danger/10 transition-colors rounded-lg cursor-pointer"
-                    title="Supprimer le cours"
-                  >
-                    <Trash2 size={16} />
+                  <button onClick={(e) => { e.stopPropagation(); setCourseToDelete(course.id); }} className="p-2 text-text-muted hover:text-danger hover:bg-danger/10 transition-colors rounded-lg">
+                    <LexiIcons.Delete size={16} />
                   </button>
-                  <ChevronRight size={18} className="text-text-muted group-hover:text-accent transition-colors ml-1" />
+                  <LexiIcons.Forward size={18} className="text-text-muted group-hover:text-accent transition-colors ml-1" />
                 </div>
               </div>
             ))}
@@ -200,11 +174,10 @@ export function Courses() {
         )}
       </section>
 
-      {/* MODALE DE SUPPRESSION */}
       <ConfirmModal 
         isOpen={!!courseToDelete}
         title="Retirer du plan d'études ?"
-        message="Attention : Cette action effacera également toutes les flashcards, notes, et documents liés à ce module."
+        message="Cette action effacera également toutes les flashcards, notes, et documents liés à ce module."
         confirmText="Supprimer définitivement"
         cancelText="Conserver"
         isDanger={true}
