@@ -31,6 +31,8 @@ export async function generateAIFlashcards(text: string, courseId: string, chapt
   if (!apiKey) throw new Error("Clé API Gemini introuvable.");
 
   const systemPrompt = `Tu es un assistant de faculté de droit en Suisse. Crée des flashcards de révision (SM-2).`;
+  
+  // Utilisation du modèle gemini-1.5-flash mis à jour
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -55,7 +57,12 @@ export async function generateAIFlashcards(text: string, courseId: string, chapt
     })
   });
 
-  if (!response.ok) throw new Error("Erreur lors de l'appel à Gemini.");
+  if (!response.ok) {
+    const errData = await response.text();
+    console.error("Détail erreur Gemini:", errData);
+    throw new Error("Erreur lors de l'appel à Gemini.");
+  }
+
   const data = await response.json();
   const flashcardsData = JSON.parse(data.candidates[0].content.parts[0].text);
 
@@ -74,6 +81,7 @@ export async function generateAISummary(text: string): Promise<string> {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("Clé API Gemini introuvable.");
   const systemPrompt = `Tu es un juriste suisse. Résume le texte juridique fourni en Markdown.`;
+  
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -83,6 +91,7 @@ export async function generateAISummary(text: string): Promise<string> {
       generationConfig: { temperature: 0.3 }
     })
   });
+  
   if (!response.ok) throw new Error("Erreur lors de l'appel à Gemini.");
   const data = await response.json();
   return data.candidates[0].content.parts[0].text;
