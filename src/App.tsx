@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import { AppLayout } from './components/layout/AppLayout';
 import { Dashboard } from './pages/Dashboard';
@@ -8,7 +8,7 @@ import { CourseDetail } from './pages/CourseDetail';
 import { DocumentImport } from './pages/DocumentImport';
 import { Study } from './pages/Study';
 import { StudySession } from './pages/StudySession';
-import { StudyNoteEditor } from './pages/StudyNoteEditor';
+import { NoteEditor } from './pages/NoteEditor'; 
 import { Profile } from './pages/Profile';
 import { AddCourse } from './pages/AddCourse';
 import { EditCourse } from './pages/EditCourse';
@@ -30,6 +30,7 @@ export default function App() {
         <Routes>
           <Route path="/onboarding" element={<Onboarding />} />
           
+          {/* ROUTES CLASSIQUES (Avec la barre de navigation en bas) */}
           <Route path="/" element={<AppLayout />}>
             <Route index element={<Dashboard />} />
             <Route path="courses" element={<Courses />} />
@@ -49,11 +50,16 @@ export default function App() {
             
             <Route path="cases/law" element={<CaseLawEditor />} />
             <Route path="cases/study" element={<CaseStudyEditor />} />
-            <Route path="exams/simulator" element={<ExamSimulator />} />
+            
+            {/* Raccourci d'URL pour le simulateur d'examen appelé par le FAB */}
+            <Route path="exams" element={<ExamSimulator />} />
+            <Route path="exams/simulator" element={<Navigate to="/exams" replace />} />
           </Route>
           
+          {/* ROUTES PLEIN ÉCRAN (Hors du Layout pour un focus total : pas de barre de nav) */}
           <Route path="/session/:deckId" element={<StudySession />} />
-          <Route path="/editor/:noteId" element={<StudyNoteEditor />} />
+          <Route path="/notes" element={<NoteEditor />} /> {/* Création nouvelle note (Mode Amphi) */}
+          <Route path="/notes/:noteId" element={<NoteEditor />} /> {/* Édition note existante */}
           <Route path="/viewer/:docId" element={<DocumentViewer />} />
         </Routes>
       </BrowserRouter>
