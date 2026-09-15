@@ -5,11 +5,11 @@ import { AppLayout } from './components/layout/AppLayout';
 import { Dashboard } from './pages/Dashboard';
 import { Courses } from './pages/Courses';
 import { CourseDetail } from './pages/CourseDetail';
-import { DocumentLibrary } from './pages/DocumentLibrary'; // <-- La future vraie bibliothèque
+import { DocumentImport } from './pages/DocumentImport';
 import { Study } from './pages/Study';
 import { StudySession } from './pages/StudySession';
-import { NoteEditor } from './pages/NoteEditor';
-import { Profile } from './pages/Profile'; // <-- Notre nouveau centre d'identité
+import { StudyNoteEditor } from './pages/StudyNoteEditor'; // Si tu l'as renommé NoteEditor, change ici
+import { Profile } from './pages/Profile';
 import { AddCourse } from './pages/AddCourse';
 import { EditCourse } from './pages/EditCourse';
 import { Schedule } from './pages/Schedule';
@@ -21,6 +21,11 @@ import { CaseLawEditor } from './pages/CaseLawEditor';
 import { CaseStudyEditor } from './pages/CaseStudyEditor';
 import { ExamSimulator } from './pages/ExamSimulator';
 import { CreateFlashcardsBatch } from './pages/CreateFlashcardsBatch';
+import { Library } from './pages/Library';
+
+// Pour préparer la suite, on importe la future vue DocumentLibrary. 
+// (Crée un fichier vide exportant un composant basique dans /pages/DocumentLibrary.tsx pour que ça ne plante pas)
+import { DocumentLibrary } from './pages/DocumentLibrary';
 
 export default function App() {
   return (
@@ -29,6 +34,7 @@ export default function App() {
         <Routes>
           <Route path="/onboarding" element={<Onboarding />} />
           
+          {/* ROUTES CLASSIQUES (Dans le layout principal avec barre de nav) */}
           <Route path="/" element={<AppLayout />}>
             <Route index element={<Dashboard />} />
             <Route path="courses" element={<Courses />} />
@@ -37,23 +43,26 @@ export default function App() {
             <Route path="edit/course/:courseId" element={<EditCourse />} />
             <Route path="add/grade" element={<AddGrade />} />
             <Route path="add/document" element={<DocumentUpload />} />
+            <Route path="import" element={<DocumentImport />} />
             
-            <Route path="documents" element={<DocumentLibrary />} /> {/* Nouvelle Bibliothèque */}
+            {/* L'ancienne Library (Diplôme) et la nouvelle Bibliothèque (Documents) */}
+            <Route path="library" element={<Library />} /> 
+            <Route path="documents" element={<DocumentLibrary />} /> 
             
             <Route path="study" element={<Study />} />
             <Route path="schedule" element={<Schedule />} />
-            <Route path="profile" element={<Profile />} /> {/* Profil & Diplôme */}
+            <Route path="profile" element={<Profile />} />
             
             <Route path="add/flashcards/batch" element={<CreateFlashcardsBatch />} />
+            
             <Route path="cases/law" element={<CaseLawEditor />} />
             <Route path="cases/study" element={<CaseStudyEditor />} />
-            <Route path="exams" element={<ExamSimulator />} />
+            <Route path="exams/simulator" element={<ExamSimulator />} />
           </Route>
           
-          {/* ROUTES PLEIN ÉCRAN */}
+          {/* ROUTES PLEIN ÉCRAN (Hors du AppLayout pour prendre 100% de l'espace) */}
           <Route path="/session/:deckId" element={<StudySession />} />
-          <Route path="/notes" element={<NoteEditor />} />
-          <Route path="/notes/:noteId" element={<NoteEditor />} />
+          <Route path="/editor/:noteId" element={<StudyNoteEditor />} />
           <Route path="/viewer/:docId" element={<DocumentViewer />} />
         </Routes>
       </BrowserRouter>
