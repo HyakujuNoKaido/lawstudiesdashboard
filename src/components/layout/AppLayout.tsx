@@ -17,6 +17,7 @@ export function AppLayout() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const [localFocus, setLocalFocus] = useState(settings.focusMode);
   const [toast, setToast] = useState<{ message: string; type: string; id: number } | null>(null);
 
   const isActive = (paths: string[]) => paths.some(path => location.pathname === path || location.pathname.startsWith(path + '/'));
@@ -59,7 +60,7 @@ export function AppLayout() {
   };
 
   return (
-    <div className={`min-h-screen bg-background text-text flex flex-col antialiased selection:bg-accent/30 selection:text-accent relative overflow-x-hidden ${settings.focusMode ? 'grayscale-[0.2] contrast-125' : ''}`}>
+    <div className={`min-h-screen bg-background text-text flex flex-col antialiased selection:bg-accent/30 selection:text-accent relative overflow-x-hidden ${localFocus ? 'grayscale-[0.2] contrast-125' : ''}`}>
       
       {/* HEADER GLOBAL */}
       {!isViewer && (
@@ -155,10 +156,10 @@ export function AppLayout() {
               <div className="flex justify-between items-center py-2 border-b border-border/50">
                 <span>Mode Focus juriste</span>
                 <button 
-                  onClick={() => setSettings({ ...settings, focusMode: !settings.focusMode })}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border cursor-pointer ${settings.focusMode ? 'bg-accent text-background border-accent' : 'bg-surface-elevated text-text-muted border-border'}`}
+                  onClick={() => setLocalFocus(!localFocus)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border cursor-pointer ${localFocus ? 'bg-accent text-background border-accent' : 'bg-surface-elevated text-text-muted border-border'}`}
                 >
-                  {settings.focusMode ? 'Activé' : 'Désactivé'}
+                  {localFocus ? 'Activé' : 'Désactivé'}
                 </button>
               </div>
               <div className="flex justify-between items-center py-2">
