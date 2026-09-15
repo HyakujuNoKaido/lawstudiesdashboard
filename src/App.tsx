@@ -19,7 +19,8 @@ import { AddGrade } from './pages/AddGrade';
 import { CaseLawEditor } from './pages/CaseLawEditor';
 import { CaseStudyEditor } from './pages/CaseStudyEditor';
 import { ExamSimulator } from './pages/ExamSimulator';
-import { CreateFlashcardsBatch } from './pages/CreateFlashcardsBatch'; // <-- NOUVEL IMPORT
+import { CreateFlashcardsBatch } from './pages/CreateFlashcardsBatch';
+import { Library } from './pages/Library'; // <-- NOUVEL IMPORT
 
 export default function App() {
   return (
@@ -38,11 +39,12 @@ export default function App() {
           <Route path="add/grade" element={<AddGrade />} />
           <Route path="add/document" element={<DocumentUpload />} />
           <Route path="import" element={<DocumentImport />} />
+          
           <Route path="study" element={<Study />} />
           <Route path="schedule" element={<Schedule />} />
           <Route path="profile" element={<Profile />} />
+          <Route path="library" element={<Library />} /> {/* <-- NOUVELLE ROUTE */}
           
-          {/* NOUVEAU: Création de flashcards en lot */}
           <Route path="add/flashcards/batch" element={<CreateFlashcardsBatch />} />
           
           {/* Outils juridiques */}
