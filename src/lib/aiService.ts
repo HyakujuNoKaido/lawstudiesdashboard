@@ -26,32 +26,55 @@ export async function extractTextFromPDF(fileUrl: string, startPage?: number, en
   }
 }
 
-export async function generateAIFlashcards(text: string, courseId: string, chapterId?: string) {
+// --- HELPER DE SÉCURITÉ : GESTION AUTOMATIQUE DES 503 (High Demand) ---
+async function callGeminiWithRetry(payload: any, retries = 3, delay = 2000): Promise<any> {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("Clé API Gemini introuvable.");
 
+  const url = `https://generativelanguage.googleapis.com/v1/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+
+      const errText = await response.text();
+      
+      // Si c'est une erreur 503 (Surcharge / High Demand) et qu'il reste des essais
+      if (response.status === 503 && i < retries - 1) {
+        console.warn(`Modèle Gemini surchargé (503). Nouvelle tentative (${i + 1}/${retries - 1}) dans ${delay / 1000}s...`);
+        await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
+        continue;
+      }
+
+      throw new Error(`Erreur API Gemini (${response.status}): ${errText}`);
+    } catch (err: any) {
+      if (i === retries - 1) throw err;
+      // Pour les erreurs réseau ou 503 persistantes, on patiente et on réessaie
+      await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
+    }
+  }
+  throw new Error("Le modèle est temporairement indisponible en raison d'une forte affluence. Veuillez réessayer dans un instant.");
+}
+
+export async function generateAIFlashcards(text: string, courseId: string, chapterId?: string) {
   const prompt = `Tu es un assistant de faculté de droit en Suisse. Génère une liste de flashcards de révision (SM-2) basées sur le texte juridique ci-dessous. 
 Renvoie UNIQUEMENT un tableau JSON valide au format strict : [{"question": "...", "answer": "..."}]. Pas de texte additionnel, pas de markdown autour, juste le JSON brut.
 
 Texte :
 ${text.substring(0, 30000)}`;
 
-  // Utilisation de gemini-3.6-flash sur l'endpoint v1
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-3.6-flash:generateContent?key=${apiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }]
-    })
+  const data = await callGeminiWithRetry({
+    contents: [{ parts: [{ text: prompt }] }]
   });
 
-  if (!response.ok) {
-    const errData = await response.text();
-    console.error("Détail erreur Gemini:", errData);
-    throw new Error("Erreur lors de l'appel à Gemini.");
-  }
-
-  const data = await response.json();
   let rawText = data.candidates[0].content.parts[0].text.trim();
 
   if (rawText.startsWith('```json')) {
@@ -74,21 +97,12 @@ ${text.substring(0, 30000)}`;
 }
 
 export async function generateAISummary(text: string): Promise<string> {
-  const apiKey = getApiKey();
-  if (!apiKey) throw new Error("Clé API Gemini introuvable.");
-  
   const prompt = `Tu es un juriste suisse. Résume le texte juridique fourni en Markdown :\n\n${text.substring(0, 30000)}`;
   
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-3.6-flash:generateContent?key=${apiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }]
-    })
+  const data = await callGeminiWithRetry({
+    contents: [{ parts: [{ text: prompt }] }]
   });
-  
-  if (!response.ok) throw new Error("Erreur lors de l'appel à Gemini.");
-  const data = await response.json();
+
   return data.candidates[0].content.parts[0].text;
 }
 
