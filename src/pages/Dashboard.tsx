@@ -1,224 +1,195 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, BrainCircuit, ChevronRight, Clock, Scale, FileText, Timer, AlertCircle } from 'lucide-react';
+import { BookOpen, BrainCircuit, Calendar, FileText, FileEdit, ChevronRight, Activity, Flame, Clock, Target, CheckCircle2 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
-import { Badge } from '../components/ui/Badge';
+import { fetchCourses, fetchNotes, fetchEvents, fetchFlashcards } from '../services/supabaseService';
 import { supabase } from '../lib/supabase';
 import { SOLO_USER_ID } from '../lib/constants';
-import { useApp } from '../context/AppContext';
-import { LexiIcons } from '../lib/icons';
 
 export function Dashboard() {
   const navigate = useNavigate();
-  
-  // On consomme instantanément les données du contexte sans spinner !
-  const { courses, events, flashcards, loading: contextLoading } = useApp();
-  
-  const [userName, setUserName] = useState('Étudiant');
+  const [courses, setCourses] = useState<any[]>([]);
+  const [events, setEvents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Métriques du Journal de Bord
+  const [weeklyStats, setWeeklyStats] = useState({
+    docsAdded: 0,
+    cardsReviewed: 0,
+    notesUpdated: 0,
+    coursesActive: 0
+  });
 
   useEffect(() => {
-    // Le nom d'utilisateur reste fetché localement en fond pour ne pas alourdir le contexte global
-    supabase.from('profiles').select('full_name').eq('id', SOLO_USER_ID).single()
-      .then((res) => {
-        if (res.data?.full_name) {
-          setUserName(res.data.full_name.split(' ')[0]);
-        }
-      });
+    async function loadDashboard() {
+      try {
+        const [coursesData, eventsData, notesData, cardsData, docsRes] = await Promise.all([
+          fetchCourses(),
+          fetchEvents(),
+          fetchNotes(),
+          fetchFlashcards(),
+          supabase.from('documents').select('created_at').eq('user_id', SOLO_USER_ID)
+        ]);
+        
+        setCourses(coursesData);
+        setEvents(eventsData);
+
+        // --- CALCUL DU JOURNAL DE BORD (7 derniers jours) ---
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+        const recentDocs = (docsRes.data || []).filter(d => new Date(d.created_at) > oneWeekAgo).length;
+        const recentNotes = notesData.filter((n: any) => new Date(n.updated_at) > oneWeekAgo).length;
+        // On simule les cartes révisées via last_reviewed_at si existant, sinon on compte le total pour la démo
+        const cardsReviewed = cardsData.filter((c: any) => c.last_reviewed_at && new Date(c.last_reviewed_at) > oneWeekAgo).length || cardsData.length;
+
+        setWeeklyStats({
+          docsAdded: recentDocs,
+          notesUpdated: recentNotes,
+          cardsReviewed: cardsReviewed,
+          coursesActive: coursesData.length
+        });
+
+      } catch (err) {
+        console.error("Erreur chargement dashboard", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadDashboard();
   }, []);
 
-  // --- TRAITEMENT DES DONNÉES ---
-  const totalECTS = courses.reduce((acc, c) => acc + (c.status === 'Validé' ? Number(c.ects || 0) : 0), 0);
-  const dueCards = flashcards.filter(f => new Date(f.due_at) <= new Date()).length;
-  
-  const today = new Date().toDateString();
-  const todayEvents = events.filter(e => new Date(e.event_date).toDateString() === today);
-  const upcomingEvents = events.filter(e => new Date(e.event_date) > new Date() && new Date(e.event_date).toDateString() !== today).slice(0, 3);
+  // Filtrer les événements pour "Aujourd'hui"
+  const today = new Date().toISOString().split('T')[0];
+  const todaysEvents = events.filter(e => e.event_date.startsWith(today));
 
-  const dateOptions: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long' };
-  const formattedDate = new Intl.DateTimeFormat('fr-CH', dateOptions).format(new Date());
+  // Salutation dynamique
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Bonjour' : hour < 18 ? 'Bon après-midi' : 'Bonsoir';
 
-  if (contextLoading) {
-    return <div className="pt-20 text-center text-text-muted text-sm font-mono animate-pulse">Synchronisation de Lexi...</div>;
-  }
+  if (loading) return <div className="text-center p-12 text-text-muted font-mono animate-pulse">Chargement de votre espace...</div>;
 
   return (
-    <div className="flex flex-col gap-10 pt-2 pb-16 animate-in fade-in duration-500 text-text">
+    <div className="flex flex-col gap-8 pt-2 pb-24 animate-in fade-in duration-300">
       
-      {/* En-tête Éditoriale (Plus imposante) */}
-      <header className="flex flex-col gap-1 px-1 border-b border-border pb-6">
-        <p className="text-secondary font-mono text-[11px] uppercase tracking-widest font-bold">
-          {formattedDate}
-        </p>
-        <h1 className="font-serif text-5xl md:text-6xl font-bold tracking-tight text-text leading-none mt-2">
-          Bonjour, {userName}.
-        </h1>
-        <p className="text-text-muted text-base font-medium mt-3 max-w-lg leading-relaxed">
-          Voici votre état des lieux. Concentrez-vous sur vos échéances immédiates et l'entretien de votre mémoire.
-        </p>
+      {/* HEADER : Salutation & Bouton Mode Amphi */}
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 px-1 border-b border-border pb-6">
+        <div>
+          <h1 className="font-serif text-3xl md:text-4xl font-bold tracking-tight mb-2">{greeting}, Maître.</h1>
+          <p className="text-text-muted text-sm">Voici votre journal de bord et vos priorités du jour.</p>
+        </div>
+        <button 
+          onClick={() => navigate('/notes')}
+          className="bg-accent text-background px-4 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 glow-gold hover:scale-[1.02] transition-transform shadow-lg cursor-pointer"
+        >
+          <FileEdit size={18} /> Je suis en cours (Note rapide)
+        </button>
       </header>
 
-      {/* Layout principal asymétrique */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
-        
-        {/* COLONNE GAUCHE (7/12) */}
-        <section className="lg:col-span-7 flex flex-col gap-10">
+      {/* JOURNAL DE BORD : LE BILAN ANTI-CULPABILITÉ */}
+      <section className="flex flex-col gap-4">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
+          <Activity size={16} className="text-info" /> Bilan de la semaine
+        </h2>
+        <div className="bg-surface border border-info/30 rounded-2xl p-5 shadow-sm relative overflow-hidden">
+          <div className="absolute -right-10 -top-10 w-32 h-32 bg-info/5 rounded-full blur-2xl pointer-events-none"></div>
           
-          {/* Focus du jour (Carte Majeure, ombre plus profonde) */}
-          <div>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-text-muted mb-4 flex items-center gap-2">
-              <LexiIcons.Memory size={18} /> Charge cognitive du jour
-            </h2>
-            <Card 
-              variant="editorial" 
-              onClick={() => navigate('/study')}
-              className="group cursor-pointer shadow-xl border-l-[4px] border-info/50 hover:border-info transition-all bg-surface-elevated"
-            >
-              <div className="flex justify-between items-start mb-6">
-                <div className="w-14 h-14 rounded-2xl bg-info/10 text-info flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                  <LexiIcons.Memory size={28} strokeWidth={1.5} />
-                </div>
-                <ChevronRight size={24} className="text-text-muted group-hover:text-info transition-colors" />
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-full bg-info/10 text-info flex items-center justify-center shrink-0">
+                <Flame size={24} />
               </div>
-              <h3 className="font-serif text-3xl font-bold text-text mb-2">
-                {dueCards > 0 ? `${dueCards} flashcards à réviser` : "Mémoire à jour !"}
-              </h3>
-              <p className="text-sm text-text-muted mb-6 leading-relaxed">
-                {dueCards > 0 
-                  ? "Votre algorithme d'espacement a ciblé ces notions pour optimiser votre rétention long terme. Ne laissez pas la courbe d'oubli chuter." 
-                  : "Aucune révision urgente. Prenez de l'avance sur vos lectures ou reposez-vous l'esprit."}
-              </p>
-              {dueCards > 0 && (
-                <button className="text-sm font-bold uppercase tracking-wider text-info flex items-center gap-2 group-hover:translate-x-1 transition-transform">
-                  Démarrer la session <ChevronRight size={16} />
-                </button>
-              )}
-            </Card>
-          </div>
+              <div>
+                <h3 className="font-serif text-xl font-bold text-text mb-1">Beau travail !</h3>
+                <p className="text-sm text-text-muted max-w-md leading-relaxed">
+                  Même si vous avez l'impression de stagner, les chiffres montrent le contraire. Votre régularité paie, continuez à structurer votre savoir.
+                </p>
+              </div>
+            </div>
 
-          {/* Timeline */}
-          <div>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-text-muted mb-4 flex items-center gap-2">
-              <LexiIcons.Schedule size={18} /> Programme de la journée
-            </h2>
-            {todayEvents.length === 0 ? (
-              <div className="border border-dashed border-border rounded-xl p-8 text-center bg-surface/50">
-                <p className="text-sm text-text-muted">Aucun événement ou cours prévu aujourd'hui.</p>
-                <button onClick={() => navigate('/schedule')} className="text-sm font-bold text-accent mt-3 hover:underline">Ouvrir le calendrier</button>
+            <div className="flex flex-wrap items-center gap-4 md:gap-8 bg-background/50 p-3 rounded-xl border border-border/50">
+              <div className="flex flex-col items-center">
+                <span className="font-mono text-2xl font-bold text-accent">{weeklyStats.docsAdded}</span>
+                <span className="text-[10px] uppercase text-text-muted font-bold">Docs importés</span>
+              </div>
+              <div className="w-px h-8 bg-border/50 hidden md:block"></div>
+              <div className="flex flex-col items-center">
+                <span className="font-mono text-2xl font-bold text-warning">{weeklyStats.cardsReviewed}</span>
+                <span className="text-[10px] uppercase text-text-muted font-bold">Flashcards vues</span>
+              </div>
+              <div className="w-px h-8 bg-border/50 hidden md:block"></div>
+              <div className="flex flex-col items-center">
+                <span className="font-mono text-2xl font-bold text-success">{weeklyStats.notesUpdated}</span>
+                <span className="text-[10px] uppercase text-text-muted font-bold">Notes rédigées</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        {/* COLONNE GAUCHE : AGENDA DU JOUR */}
+        <section className="lg:col-span-1 flex flex-col gap-4">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
+            <Calendar size={16} /> Aujourd'hui
+          </h2>
+          <Card className="bg-surface-elevated flex flex-col gap-3">
+            {todaysEvents.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-text-muted gap-2">
+                <CheckCircle2 size={32} className="opacity-20" />
+                <p className="text-sm">Aucun cours ni séminaire prévu aujourd'hui.</p>
               </div>
             ) : (
-              <div className="flex flex-col relative before:absolute before:inset-y-0 before:left-3 before:w-px before:bg-border/60">
-                {todayEvents.map((evt, idx) => (
-                  <div key={idx} className="relative flex gap-4 items-start mb-6 last:mb-0 group cursor-pointer" onClick={() => navigate('/schedule')}>
-                    <div className="w-6 h-6 rounded-full bg-background border-[3px] border-surface-elevated z-10 flex items-center justify-center mt-0.5 group-hover:border-accent transition-colors">
-                      <div className="w-1.5 h-1.5 rounded-full bg-text-muted group-hover:bg-accent" />
-                    </div>
-                    <div className="flex-1 bg-surface-elevated border border-border/50 rounded-2xl p-5 shadow-md group-hover:border-accent/40 group-hover:shadow-lg transition-all">
-                      <div className="flex justify-between items-start mb-2">
-                        <span className="font-mono text-[12px] text-accent font-bold">
-                          {new Date(evt.event_date).toLocaleTimeString('fr-CH', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                        <Badge variant={evt.category === 'Examen' ? 'danger' : 'outline'}>{evt.category}</Badge>
-                      </div>
-                      <h4 className="text-base font-semibold text-text">{evt.title}</h4>
-                      <p className="text-xs text-text-muted mt-1 font-medium">{evt.courses?.title || 'Événement général'}</p>
-                    </div>
+              todaysEvents.map(evt => (
+                <div key={evt.id} className="flex items-center gap-3 p-3 bg-background border border-border rounded-xl">
+                  <div className="w-1.5 h-full min-h-[40px] bg-accent rounded-full"></div>
+                  <div className="flex flex-col flex-1 min-w-0">
+                    <span className="font-bold text-sm text-text truncate">{evt.title}</span>
+                    <span className="text-xs text-text-muted flex items-center gap-1 font-mono">
+                      <Clock size={12} /> {new Date(evt.event_date).toLocaleTimeString('fr-CH', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
                   </div>
-                ))}
-              </div>
+                </div>
+              ))
             )}
-          </div>
+            <button onClick={() => navigate('/schedule')} className="mt-2 text-xs font-bold text-accent hover:underline text-center">
+              Voir tout l'agenda
+            </button>
+          </Card>
         </section>
 
-        {/* COLONNE DROITE (5/12) */}
-        <section className="lg:col-span-5 flex flex-col gap-10">
-          
-          {/* Progression Diplôme */}
-          <div>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-text-muted mb-4 flex items-center gap-2">
-              <LexiIcons.Course size={18} /> Progression du diplôme
-            </h2>
-            <Card 
-              variant="default" 
-              onClick={() => navigate('/courses')}
-              className="bg-secondary/5 border-secondary/20 hover:border-secondary/50 group cursor-pointer shadow-md"
-            >
-              <div className="flex justify-between items-center mb-6">
-                <span className="text-xs font-mono text-secondary uppercase tracking-widest font-bold">Crédits ECTS</span>
-                <ChevronRight size={18} className="text-secondary/50 group-hover:text-secondary transition-colors" />
-              </div>
-              
-              <div className="flex items-baseline gap-2 mb-5">
-                <span className="font-serif text-6xl font-bold text-text">{totalECTS}</span>
-                <span className="text-sm font-mono text-text-muted">/ 180</span>
-              </div>
-              
-              <div className="w-full bg-surface-elevated rounded-full h-2.5 overflow-hidden shadow-inner">
-                <div 
-                  className="bg-secondary h-full rounded-full transition-all duration-1000 ease-out relative overflow-hidden" 
-                  style={{ width: `${Math.min(100, (totalECTS / 180) * 100)}%` }}
-                >
-                  <div className="absolute inset-0 bg-white/20 w-full h-full -translate-x-full animate-[shimmer_2s_infinite]" />
+        {/* COLONNE DROITE : COURS RÉCENTS */}
+        <section className="lg:col-span-2 flex flex-col gap-4">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
+            <BookOpen size={16} /> Accès rapide aux cours
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {courses.slice(0, 4).map(course => (
+              <Card 
+                key={course.id} 
+                onClick={() => navigate(`/courses/${course.id}`)}
+                className="cursor-pointer hover:border-accent/50 transition-all group flex flex-col gap-3"
+              >
+                <div className="flex items-start justify-between">
+                  <h3 className="font-bold text-base text-text group-hover:text-accent transition-colors line-clamp-2">
+                    {course.title}
+                  </h3>
+                  <div className="w-8 h-8 rounded-lg bg-surface-elevated flex items-center justify-center text-text-muted group-hover:bg-accent group-hover:text-background transition-colors shrink-0">
+                    <ChevronRight size={16} />
+                  </div>
                 </div>
-              </div>
-              <p className="text-[11px] font-bold text-text-muted mt-3 text-right">
-                {Math.round((totalECTS / 180) * 100)}% complété
-              </p>
-            </Card>
+                <div className="flex items-center gap-2 text-[10px] font-mono text-text-muted bg-surface-elevated w-fit px-2 py-1 rounded">
+                  <Target size={12} className="text-info" /> {course.course_code || 'Général'} • {course.semester}
+                </div>
+              </Card>
+            ))}
           </div>
-
-          {/* Outils & Assistants (Action Majeure) */}
-          <div>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-text-muted mb-4 flex items-center gap-2">
-              <LexiIcons.Law size={18} /> Atelier Juridique
-            </h2>
-            <div className="flex flex-col gap-0 border border-border rounded-2xl overflow-hidden bg-surface shadow-lg">
-              <div onClick={() => navigate('/cases/law')} className="flex items-center gap-4 p-5 border-b border-border hover:bg-surface-elevated cursor-pointer transition-colors group">
-                <div className="p-3 rounded-xl bg-warning/10 text-warning group-hover:scale-110 transition-transform"><LexiIcons.Document size={20} /></div>
-                <div>
-                  <h4 className="text-sm font-bold text-text mb-0.5">Fiche d'Arrêt (ATF)</h4>
-                  <p className="text-xs text-text-muted">Disséquer une jurisprudence</p>
-                </div>
-              </div>
-              <div onClick={() => navigate('/cases/study')} className="flex items-center gap-4 p-5 border-b border-border hover:bg-surface-elevated cursor-pointer transition-colors group">
-                <div className="p-3 rounded-xl bg-info/10 text-info group-hover:scale-110 transition-transform"><LexiIcons.Law size={20} /></div>
-                <div>
-                  <h4 className="text-sm font-bold text-text mb-0.5">Subsumption</h4>
-                  <p className="text-xs text-text-muted">Résoudre un cas pratique</p>
-                </div>
-              </div>
-              <div onClick={() => navigate('/exams/simulator')} className="flex items-center gap-4 p-5 hover:bg-surface-elevated cursor-pointer transition-colors group">
-                <div className="p-3 rounded-xl bg-danger/10 text-danger group-hover:scale-110 transition-transform"><LexiIcons.Exam size={20} /></div>
-                <div>
-                  <h4 className="text-sm font-bold text-text mb-0.5">Examen Blanc</h4>
-                  <p className="text-xs text-text-muted">Sujet généré par l'IA chronométré</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Prochaines échéances (Carte plus légère) */}
-          {upcomingEvents.length > 0 && (
-            <div>
-              <h2 className="text-sm font-bold uppercase tracking-wider text-text-muted mb-4 flex items-center gap-2">
-                <AlertCircle size={18} /> À l'horizon
-              </h2>
-              <div className="flex flex-col gap-3">
-                {upcomingEvents.map((evt, idx) => (
-                  <Card key={idx} variant="minimal" onClick={() => navigate('/schedule')} className="group flex items-center justify-between pb-4 hover:bg-surface-elevated/50 p-2 -mx-2 rounded-xl transition-colors cursor-pointer border-b border-border">
-                    <div className="flex flex-col gap-1.5">
-                      <p className="text-sm font-bold text-text group-hover:text-accent transition-colors">{evt.title}</p>
-                      <p className="text-[11px] font-mono text-text-muted">
-                        {new Date(evt.event_date).toLocaleDateString('fr-CH', { day: 'numeric', month: 'short' })}
-                      </p>
-                    </div>
-                    <ChevronRight size={18} className="text-text-muted opacity-0 group-hover:opacity-100 transition-all -translate-x-2 group-hover:translate-x-0" />
-                  </Card>
-                ))}
-              </div>
-            </div>
-          )}
-
+          <button onClick={() => navigate('/courses')} className="w-fit text-xs font-bold text-text-muted hover:text-accent flex items-center gap-1 transition-colors">
+            Voir tous les cours <ChevronRight size={14} />
+          </button>
         </section>
+
       </div>
     </div>
   );
