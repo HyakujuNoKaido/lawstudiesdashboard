@@ -1,15 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BrainCircuit, Plus, Trash2, Edit3, Play, X, Save, Layers, Activity, CalendarClock } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { fetchFlashcards, fetchCourses, createFlashcard, updateFlashcard, deleteFlashcard } from '../services/supabaseService';
+import { useApp } from '../context/AppContext';
+import { LexiIcons } from '../lib/icons';
+import { toast } from '../lib/toast';
 
 export function Study() {
   const navigate = useNavigate();
-  const [cards, setCards] = useState<any[]>([]);
-  const [courses, setCourses] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  
+  // On récupère les données pré-chargées et les réglages depuis notre "cerveau" global
+  const { settings, flashcards: contextCards, courses: contextCourses } = useApp();
+  
+  const [cards, setCards] = useState<any[]>(contextCards);
+  const [courses, setCourses] = useState<any[]>(contextCourses);
+  const [loading, setLoading] = useState(false);
 
   // Modal State pour Ajout / Édition d'une carte unique
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -20,11 +26,18 @@ export function Study() {
     course_id: ''
   });
 
+  // Le mode résumé dynamique
+  const isCompact = settings.listDensity === 'compact';
+
   useEffect(() => {
-    loadData();
+    // Si le contexte est vide (ex: rafraîchissement forcé), on recharge
+    if (cards.length === 0) {
+      loadData();
+    }
   }, []);
 
   async function loadData() {
+    setLoading(true);
     try {
       const [cardsData, coursesData] = await Promise.all([
         fetchFlashcards(),
@@ -37,6 +50,7 @@ export function Study() {
       }
     } catch (err) {
       console.error("Erreur chargement révisions:", err);
+      toast("Erreur lors du chargement des cartes", "error");
     } finally {
       setLoading(false);
     }
@@ -64,9 +78,11 @@ export function Study() {
     if (!confirm("Voulez-vous vraiment supprimer cette flashcard ?")) return;
     try {
       await deleteFlashcard(id);
+      toast("Flashcard supprimée avec succès", "success");
       loadData();
     } catch (err) {
       console.error("Erreur suppression flashcard:", err);
+      toast("Impossible de supprimer la carte", "error");
     }
   };
 
@@ -76,14 +92,16 @@ export function Study() {
     try {
       if (editingId) {
         await updateFlashcard(editingId, form);
+        toast("Flashcard mise à jour", "success");
       } else {
         await createFlashcard(form);
+        toast("Nouvelle flashcard ajoutée", "success");
       }
       setIsModalOpen(false);
       loadData();
     } catch (err) {
       console.error("Erreur sauvegarde flashcard:", err);
-      alert("Échec de l'enregistrement de la flashcard.");
+      toast("Échec de l'enregistrement", "error");
     }
   };
 
@@ -91,7 +109,6 @@ export function Study() {
   const dueCards = cards.filter(f => new Date(f.due_at) <= new Date());
   const dueCardsCount = dueCards.length;
   
-  // Calcul de la "Santé" de la mémoire (Moyenne de l'ease_factor. > 2.5 = bien, < 2.0 = difficulté)
   const averageEase = cards.length > 0 
     ? cards.reduce((acc, c) => acc + (Number(c.ease_factor) || 2.5), 0) / cards.length 
     : 2.5;
@@ -113,14 +130,14 @@ export function Study() {
             onClick={handleOpenAdd}
             className="bg-surface border border-border text-text px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 hover:border-accent/50 transition-colors cursor-pointer"
           >
-            <Plus size={16} className="text-text-muted" />
+            <LexiIcons.Add size={16} className="text-text-muted" />
             <span className="hidden sm:inline">Carte unique</span>
           </button>
           <button 
             onClick={() => navigate('/add/flashcards/batch')}
             className="bg-surface-elevated border border-border text-text px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:border-accent/50 transition-colors cursor-pointer"
           >
-            <Layers size={16} className="text-accent" />
+            <LexiIcons.Memory size={16} className="text-accent" />
             <span>Créer un lot</span>
           </button>
         </div>
@@ -133,7 +150,7 @@ export function Study() {
         <Card variant="editorial" className="md:col-span-7 flex flex-col justify-center">
           <div className="flex items-center gap-3 mb-2">
             <div className={`p-2 rounded-lg ${dueCardsCount > 0 ? 'bg-info/10 text-info' : 'bg-success/10 text-success'}`}>
-              <BrainCircuit size={20} />
+              <LexiIcons.Memory size={20} />
             </div>
             <h2 className="text-sm font-bold uppercase tracking-wider text-text-muted">Session du jour</h2>
           </div>
@@ -143,8 +160,9 @@ export function Study() {
             <span className="text-sm font-medium text-text-muted pb-1">cartes en attente</span>
           </div>
           
+          {/* Smart Back : On passe la route actuelle pour que la session sache où revenir */}
           <button 
-            onClick={() => navigate('/session/all')}
+            onClick={() => navigate('/session/all', { state: { from: '/study' } })}
             disabled={dueCardsCount === 0}
             className={`w-full py-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all duration-300 ${
               dueCardsCount > 0 
@@ -152,7 +170,7 @@ export function Study() {
                 : 'bg-surface-elevated border border-border text-text-muted cursor-not-allowed'
             }`}
           >
-            <Play size={18} />
+            <LexiIcons.Forward size={18} />
             {dueCardsCount > 0 ? 'Démarrer la révision' : 'Aucune révision pour le moment'}
           </button>
         </Card>
@@ -162,7 +180,7 @@ export function Study() {
           <Card className="flex-1 bg-surface flex flex-col justify-center p-4">
             <div className="flex justify-between items-start mb-1">
               <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Cartes Actives</span>
-              <Layers size={14} className="text-text-muted" />
+              <LexiIcons.Memory size={14} className="text-text-muted" />
             </div>
             <span className="font-serif text-2xl font-bold text-text">{cards.length}</span>
           </Card>
@@ -170,7 +188,7 @@ export function Study() {
           <Card className="flex-1 bg-surface flex flex-col justify-center p-4">
             <div className="flex justify-between items-start mb-1">
               <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Santé de la mémoire</span>
-              <Activity size={14} className={memoryHealthScore > 75 ? 'text-success' : memoryHealthScore > 50 ? 'text-warning' : 'text-danger'} />
+              <LexiIcons.Success size={14} className={memoryHealthScore > 75 ? 'text-success' : memoryHealthScore > 50 ? 'text-warning' : 'text-danger'} />
             </div>
             <div className="flex items-baseline gap-2">
               <span className="font-serif text-2xl font-bold text-text">{memoryHealthScore}%</span>
@@ -188,39 +206,44 @@ export function Study() {
           <div className="text-center py-12 text-text-muted text-sm font-mono animate-pulse">Chargement de la base de connaissances...</div>
         ) : cards.length === 0 ? (
           <div className="text-center py-16 border border-dashed border-border rounded-xl text-text-muted text-sm flex flex-col items-center gap-3">
-            <BrainCircuit size={32} className="text-text-muted opacity-30" />
+            <LexiIcons.Memory size={32} className="text-text-muted opacity-30" />
             <p>Votre mémoire est vide. Créez des flashcards à partir de vos cours.</p>
           </div>
         ) : (
-          <div className="flex flex-col gap-0 border border-border bg-surface rounded-2xl overflow-hidden shadow-sm">
+          <div className={`flex flex-col ${isCompact ? 'border border-border bg-surface rounded-2xl overflow-hidden shadow-sm' : 'gap-3'}`}>
             {cards.map((card, index) => {
               const isDue = new Date(card.due_at) <= new Date();
               return (
                 <div 
                   key={card.id}
-                  className={`flex flex-col md:flex-row md:items-center justify-between p-4 gap-4 transition-colors group ${
-                    index !== cards.length - 1 ? 'border-b border-border/50' : ''
-                  } hover:bg-surface-elevated`}
+                  className={`flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors group hover:bg-surface-elevated ${
+                    isCompact 
+                      ? `p-3 ${index !== cards.length - 1 ? 'border-b border-border/50' : ''}` 
+                      : 'bg-surface border border-border p-4 rounded-xl'
+                  }`}
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center gap-2 mb-1.5">
                       <Badge variant="outline" className="text-[9px]">{card.courses?.title || 'Matière générale'}</Badge>
                       {isDue && <Badge variant="warning" className="px-1.5 py-0 text-[9px] bg-warning/10 text-warning border-transparent">À réviser</Badge>}
                     </div>
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-0.5">
                       <p className="font-medium text-sm text-text truncate">
                         <span className="text-text-muted mr-2">Q:</span>{card.front}
                       </p>
-                      <p className="text-sm text-text-muted truncate">
-                        <span className="text-text-muted opacity-50 mr-2">R:</span>{card.back}
-                      </p>
+                      {/* En mode compact, on masque le verso pour aérer la liste */}
+                      {!isCompact && (
+                        <p className="text-sm text-text-muted truncate">
+                          <span className="text-text-muted opacity-50 mr-2">R:</span>{card.back}
+                        </p>
+                      )}
                     </div>
                   </div>
 
                   <div className="flex items-center justify-between md:justify-end gap-6 shrink-0 md:pl-4 md:border-l md:border-border/50">
                     <div className="flex flex-col text-right">
-                      <span className="text-[10px] text-text-muted uppercase font-bold tracking-wider mb-0.5 flex items-center gap-1 justify-end">
-                        <CalendarClock size={10} /> Prochaine
+                      <span className="text-[10px] text-text-muted uppercase font-bold tracking-wider mb-0.5">
+                        Prochaine
                       </span>
                       <span className="text-xs font-mono text-text">
                         {new Date(card.due_at).toLocaleDateString('fr-CH', { day: '2-digit', month: '2-digit', year: '2-digit' })}
@@ -233,14 +256,14 @@ export function Study() {
                         className="p-2 text-text-muted hover:text-accent transition-colors rounded-lg cursor-pointer"
                         title="Modifier"
                       >
-                        <Edit3 size={16} />
+                        <LexiIcons.Edit size={16} />
                       </button>
                       <button 
                         onClick={(e) => handleDelete(card.id, e)}
                         className="p-2 text-text-muted hover:text-danger hover:bg-danger/10 transition-colors rounded-lg cursor-pointer"
                         title="Supprimer"
                       >
-                        <Trash2 size={16} />
+                        <LexiIcons.Delete size={16} />
                       </button>
                     </div>
                   </div>
@@ -258,7 +281,7 @@ export function Study() {
             <div className="flex justify-between items-center mb-6">
               <h2 className="font-serif text-xl font-bold">{editingId ? "Modifier la carte" : "Nouvelle carte"}</h2>
               <button onClick={() => setIsModalOpen(false)} className="text-text-muted hover:text-text p-1">
-                <X size={18} />
+                <LexiIcons.Delete size={18} />
               </button>
             </div>
             
@@ -312,7 +335,7 @@ export function Study() {
                   type="submit" 
                   className="flex-1 bg-accent text-background py-3.5 rounded-xl text-sm font-bold glow-gold hover:bg-accent-strong flex items-center justify-center gap-2"
                 >
-                  <Save size={16} />
+                  <LexiIcons.Edit size={16} />
                   <span>{editingId ? 'Mettre à jour' : 'Enregistrer'}</span>
                 </button>
               </div>
