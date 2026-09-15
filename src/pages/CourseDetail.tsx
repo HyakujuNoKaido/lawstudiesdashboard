@@ -7,7 +7,7 @@ import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { fetchCourseById, fetchCourseChapters, fetchCourseDocuments, fetchCourseGrades, fetchNotes, fetchFlashcards, deleteDocument, createChapter, parseAndCreateChaptersFromSyllabus, fetchEvents, createEvent, updateChapterParent, batchMoveItems } from '../services/supabaseService';
 import { supabase } from '../lib/supabase';
 import { toast } from '../lib/toast';
-import { extractTextFromPDF, generateAIFlashcards, generateAISummary } from '../services/aiService';
+import { extractTextFromPDF, generateAIFlashcards, generateAISummary } from '../lib/aiService';
 import { SOLO_USER_ID } from '../lib/constants';
 
 export function CourseDetail() {
