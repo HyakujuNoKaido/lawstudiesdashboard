@@ -64,35 +64,39 @@ export async function onRequest(context: { request: Request; env: { GEMINI_API_K
       throw new Error("Action non reconnue.");
     }
 
-    // Fonction avec mécanisme de réessai automatique (Retry) en cas de 503
+    // Liste des vrais modèles Google à tester en cascade (si l'un renvoie 503, on essaie le suivant)
+    const modelsToTry = [
+      'gemini-3.6-flash',
+      'gemini-2.5-flash',
+      'gemini-1.5-flash'
+    ];
+
     let geminiResponse: Response | null = null;
-    let attempts = 0;
-    const maxAttempts = 3;
+    let lastErrorText = "";
 
-    while (attempts < maxAttempts) {
-      attempts++;
-      geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { response_mime_type: "application/json" }
-        })
-      });
+    for (const model of modelsToTry) {
+      try {
+        geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { response_mime_type: "application/json" }
+          })
+        });
 
-      if (geminiResponse.status !== 503) {
-        break; // Si ce n'est pas une erreur de surcharge, on sort de la boucle
-      }
-
-      if (attempts < maxAttempts) {
-        // Attendre 2 secondes avant de retenter (Backoff)
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        if (geminiResponse.ok) {
+          break; // Sort de la boucle dès qu'un modèle répond avec succès
+        } else {
+          lastErrorText = await geminiResponse.text();
+        }
+      } catch (err: any) {
+        lastErrorText = err.message;
       }
     }
 
     if (!geminiResponse || !geminiResponse.ok) {
-      const errText = geminiResponse ? await geminiResponse.text() : "Pas de réponse";
-      throw new Error(`Erreur Gemini API: ${errText}`);
+      throw new Error(`Tous les serveurs Google sont surchargés (503). Détail : ${lastErrorText}`);
     }
 
     const data = await geminiResponse.json();
