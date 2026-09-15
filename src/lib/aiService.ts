@@ -26,18 +26,22 @@ export async function extractTextFromPDF(fileUrl: string, startPage?: number, en
   }
 }
 
+// Utilisation de l'endpoint stable /v1/ avec gemini-1.5-flash
 export async function generateAIFlashcards(text: string, courseId: string, chapterId?: string) {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("Clé API Gemini introuvable.");
 
-  const systemPrompt = `Tu es un assistant de faculté de droit en Suisse. Génère une liste de flashcards de révision (SM-2) basées sur le texte juridique. Renvoie UNIQUEMENT un tableau JSON valide au format strict : [{"question": "...", "answer": "..."}]. Pas de texte additionnel, pas d'introduction.`;
-  
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+  const prompt = `Tu es un assistant de faculté de droit en Suisse. Génère une liste de flashcards de révision (SM-2) basées sur le texte juridique ci-dessous. 
+Renvoie UNIQUEMENT un tableau JSON valide au format strict : [{"question": "...", "answer": "..."}]. Pas de texte additionnel, pas de markdown autour, juste le JSON brut.
+
+Texte :
+${text.substring(0, 30000)}`;
+
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      systemInstruction: { parts: [{ text: systemPrompt }] },
-      contents: [{ parts: [{ text: `Génère les flashcards à partir de ce texte :\n\n${text.substring(0, 60000)}` }] }],
+      contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
         temperature: 0.3
       }
@@ -53,7 +57,7 @@ export async function generateAIFlashcards(text: string, courseId: string, chapt
   const data = await response.json();
   let rawText = data.candidates[0].content.parts[0].text.trim();
 
-  // Nettoyage automatique du markdown
+  // Nettoyage automatique du markdown si l'IA en ajoute
   if (rawText.startsWith('```json')) {
     rawText = rawText.replace(/^```json/, '').replace(/```$/, '').trim();
   } else if (rawText.startsWith('```')) {
@@ -76,14 +80,14 @@ export async function generateAIFlashcards(text: string, courseId: string, chapt
 export async function generateAISummary(text: string): Promise<string> {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("Clé API Gemini introuvable.");
-  const systemPrompt = `Tu es un juriste suisse. Résume le texte juridique fourni en Markdown.`;
   
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+  const prompt = `Tu es un juriste suisse. Résume le texte juridique fourni en Markdown :\n\n${text.substring(0, 30000)}`;
+  
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      systemInstruction: { parts: [{ text: systemPrompt }] },
-      contents: [{ parts: [{ text: text.substring(0, 60000) }] }],
+      contents: [{ parts: [{ text: prompt }] }],
       generationConfig: { temperature: 0.3 }
     })
   });
