@@ -1,6 +1,5 @@
 
 export async function onRequest(context: { request: Request; env: { GEMINI_API_KEY: string } }) {
-  // Gestion CORS
   if (context.request.method === 'OPTIONS') {
     return new Response(null, {
       headers: {
@@ -18,7 +17,13 @@ export async function onRequest(context: { request: Request; env: { GEMINI_API_K
   try {
     const { action, payload } = await context.request.json();
     const apiKey = context.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("Clé API Gemini manquante dans les secrets Cloudflare.");
+    
+    if (!apiKey) {
+      return new Response(JSON.stringify({ error: "Clé API Gemini manquante dans les variables Cloudflare (GEMINI_API_KEY)." }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      });
+    }
 
     let prompt = "";
 
@@ -60,7 +65,7 @@ export async function onRequest(context: { request: Request; env: { GEMINI_API_K
       throw new Error("Action non reconnue.");
     }
 
-    const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`, {
+    const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -71,7 +76,7 @@ export async function onRequest(context: { request: Request; env: { GEMINI_API_K
 
     if (!geminiResponse.ok) {
       const errText = await geminiResponse.text();
-      throw new Error(`Erreur Gemini: ${errText}`);
+      throw new Error(`Erreur Gemini API: ${errText}`);
     }
 
     const data = await geminiResponse.json();
