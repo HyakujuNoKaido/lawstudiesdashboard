@@ -21,7 +21,6 @@ export function CourseDetail() {
   const [loading, setLoading] = useState(true);
   const [docToDelete, setDocToDelete] = useState<{id: string, path: string} | null>(null);
 
-  // Gestion des chapitres
   const [isAddingChapter, setIsAddingChapter] = useState(false);
   const [newChapterTitle, setNewChapterTitle] = useState('');
   const [parentChapterId, setParentChapterId] = useState<string | null>(null);
@@ -32,25 +31,20 @@ export function CourseDetail() {
   
   const [chapterToDelete, setChapterToDelete] = useState<string | null>(null);
 
-  // Import en masse
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkSyllabusText, setBulkSyllabusText] = useState('');
 
-  // Planning du cours
   const [isAddingEvent, setIsAddingEvent] = useState(false);
   const [eventForm, setEventForm] = useState({ title: '', event_date: '', category: 'Cours' });
   const [eventToDelete, setEventToDelete] = useState<string | null>(null);
 
-  // État plié/déplié des chapitres
   const [openChapters, setOpenChapters] = useState<Record<string, boolean>>({});
 
-  // Sélection multiple & Actions groupées
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedChapterIds, setSelectedChapterIds] = useState<string[]>([]);
   const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
   const [isBatchDeleteModalOpen, setIsBatchDeleteModalOpen] = useState(false);
   
-  // NOUVEAU : Modale de déplacement groupé
   const [isBatchMoveModalOpen, setIsBatchMoveModalOpen] = useState(false);
   const [batchTargetParentId, setBatchTargetParentId] = useState<string | null>(null);
 
@@ -144,7 +138,6 @@ export function CourseDetail() {
     }
   };
 
-  // Exécution du déplacement groupé vers une Partie / Chapitre cible
   const handleBatchMoveSubmit = async () => {
     try {
       await batchMoveItems(selectedChapterIds, selectedDocIds, batchTargetParentId);
@@ -440,7 +433,6 @@ export function CourseDetail() {
         </div>
       </header>
 
-      {/* Raccourcis rapides */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card variant="minimal" onClick={() => navigate('/add/document')} className="cursor-pointer bg-surface p-4 flex items-center gap-3 hover:border-accent/50 transition-colors border">
           <div className="w-10 h-10 rounded-lg bg-surface-elevated flex items-center justify-center text-text-muted"><FileText size={18} /></div>
@@ -494,7 +486,6 @@ export function CourseDetail() {
             </div>
           </div>
 
-          {/* BARRE D'OUTILS FLOTTANTE AVEC OPTIONS DE DÉPLACEMENT GROUPÉ */}
           {isSelectMode && (
             <div className="bg-surface-elevated border border-accent/40 px-4 py-3 rounded-2xl flex flex-col sm:flex-row items-center justify-between shadow-lg gap-3 animate-in fade-in duration-200">
               <div className="flex items-center gap-3">
@@ -554,7 +545,6 @@ export function CourseDetail() {
           )}
         </section>
 
-        {/* COLONNE DROITE */}
         <aside className="lg:col-span-1 flex flex-col gap-6">
           <div className="flex flex-col gap-3">
             <div className="flex justify-between items-center">
@@ -631,7 +621,7 @@ export function CourseDetail() {
         </div>
       )}
 
-      {/* MODALE DE DÉPLACEMENT GROUPÉ (BATCH MOVE) */}
+      {/* MODALE DE DÉPLACEMENT GROUPÉ */}
       {isBatchMoveModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="w-full max-w-md bg-surface-elevated border border-border rounded-3xl p-6 shadow-2xl flex flex-col gap-4 text-text">
