@@ -26,7 +26,6 @@ export async function extractTextFromPDF(fileUrl: string, startPage?: number, en
   }
 }
 
-// Utilisation de l'endpoint stable /v1/ avec gemini-1.5-flash
 export async function generateAIFlashcards(text: string, courseId: string, chapterId?: string) {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("Clé API Gemini introuvable.");
@@ -37,6 +36,7 @@ Renvoie UNIQUEMENT un tableau JSON valide au format strict : [{"question": "..."
 Texte :
 ${text.substring(0, 30000)}`;
 
+  // Utilisation obligatoire de l'endpoint stable /v1/
   const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -57,7 +57,6 @@ ${text.substring(0, 30000)}`;
   const data = await response.json();
   let rawText = data.candidates[0].content.parts[0].text.trim();
 
-  // Nettoyage automatique du markdown si l'IA en ajoute
   if (rawText.startsWith('```json')) {
     rawText = rawText.replace(/^```json/, '').replace(/```$/, '').trim();
   } else if (rawText.startsWith('```')) {
