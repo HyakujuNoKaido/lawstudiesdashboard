@@ -65,6 +65,7 @@ export async function onRequest(context: { request: Request; env: { GEMINI_API_K
       throw new Error("Action non reconnue.");
     }
 
+    // Utilisation du modèle le plus récent et stable (Gemini 3.8 Flash)
     const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -76,7 +77,7 @@ export async function onRequest(context: { request: Request; env: { GEMINI_API_K
 
     if (!geminiResponse.ok) {
       const errText = await geminiResponse.text();
-      throw new Error(`Erreur Gemini API: ${errText}`);
+      throw new Error(`Erreur Gemini API (${geminiResponse.status}): ${errText}`);
     }
 
     const data = await geminiResponse.json();
