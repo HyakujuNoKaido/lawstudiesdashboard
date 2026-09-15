@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, FileText, Edit3, Trash2, BrainCircuit, FileEdit, Award, LayoutGrid, Scale, Plus, X, Check, ClipboardPaste, ChevronRight } from 'lucide-react';
+import { ChevronLeft, FileText, Edit3, Trash2, BrainCircuit, FileEdit, Award, LayoutGrid, Scale, Plus, X, Check, ClipboardPaste, ChevronRight, ChevronDown } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
 import { Card } from '../components/ui/Card';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
@@ -35,6 +35,10 @@ export function CourseDetail() {
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkSyllabusText, setBulkSyllabusText] = useState('');
 
+  // NOUVEAU : État pour gérer les chapitres ouverts/fermés (pliés/dépliés)
+  // Par défaut, tous les chapitres sont ouverts (true)
+  const [openChapters, setOpenChapters] = useState<Record<string, boolean>>({});
+
   useEffect(() => {
     if (courseId) loadData();
   }, [courseId]);
@@ -56,6 +60,13 @@ export function CourseDetail() {
       setGrades(gradesData);
       setNotes(notesData.filter((n: any) => n.course_id === courseId));
       setFlashcards(flashcardsData);
+
+      // Initialiser tous les chapitres comme ouverts par défaut
+      const initialOpenState: Record<string, boolean> = {};
+      chaptersData.forEach((ch: any) => {
+        initialOpenState[ch.id] = true;
+      });
+      setOpenChapters(initialOpenState);
     } catch (err) {
       console.error("Erreur chargement:", err);
       toast("Erreur de chargement du cours", "error");
@@ -63,6 +74,23 @@ export function CourseDetail() {
       setLoading(false);
     }
   }
+
+  // Basculer l'état plié/déplié d'un chapitre
+  const toggleChapter = (chapterId: string) => {
+    setOpenChapters(prev => ({
+      ...prev,
+      [chapterId]: !prev[chapterId]
+    }));
+  };
+
+  // Tout plier / Tout déplier
+  const handleToggleAll = (open: boolean) => {
+    const newState: Record<string, boolean> = {};
+    chapters.forEach(ch => {
+      newState[ch.id] = open;
+    });
+    setOpenChapters(newState);
+  };
 
   // Création d'un chapitre unitaire
   const handleCreateChapter = async (e: React.FormEvent) => {
@@ -200,9 +228,18 @@ export function CourseDetail() {
         {/* COLONNE GAUCHE (Documents & Chapitres) */}
         <section className="lg:col-span-2 flex flex-col gap-4 text-text">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-2">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
-              <LayoutGrid size={16} /> Contenu du cours & Chapitres
-            </h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
+                <LayoutGrid size={16} /> Chapitres ({chapters.length})
+              </h2>
+              {chapters.length > 0 && (
+                <div className="flex items-center gap-1 text-[11px] text-text-muted font-mono">
+                  <button onClick={() => handleToggleAll(true)} className="hover:text-accent cursor-pointer">Déplier tout</button>
+                  <span>•</span>
+                  <button onClick={() => handleToggleAll(false)} className="hover:text-accent cursor-pointer">Plier tout</button>
+                </div>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               <button 
                 onClick={() => setShowBulkModal(true)}
@@ -249,16 +286,24 @@ export function CourseDetail() {
                 const chapterDocs = documents.filter(d => d.chapter_id === chapter.id);
                 const hasCards = flashcards.some(f => f.chapter_id === chapter.id);
                 const isEditing = editingChapterId === chapter.id;
+                const isOpen = openChapters[chapter.id] ?? true; // Déplié par défaut
 
                 return (
                   <div key={chapter.id} className="bg-surface border border-border rounded-2xl overflow-hidden shadow-sm group">
-                    <div className="p-4 flex items-center justify-between bg-surface hover:bg-surface-elevated transition-colors">
+                    {/* EN-TÊTE DU CHAPITRE (Cliquable pour plier/déplier) */}
+                    <div 
+                      onClick={() => !isEditing && toggleChapter(chapter.id)}
+                      className="p-4 flex items-center justify-between bg-surface hover:bg-surface-elevated transition-colors cursor-pointer select-none"
+                    >
                       <div className="flex items-center gap-3 flex-1 min-w-0 pr-2">
-                        <div className="w-8 h-8 rounded-lg bg-background border border-border text-text-muted flex items-center justify-center font-bold text-xs shrink-0">
+                        <div className="text-text-muted shrink-0">
+                          {isOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                        </div>
+                        <div className="w-7 h-7 rounded-lg bg-background border border-border text-text-muted flex items-center justify-center font-bold text-xs shrink-0">
                           {chapter.order_index}
                         </div>
                         {isEditing ? (
-                          <div className="flex items-center gap-2 flex-1">
+                          <div className="flex items-center gap-2 flex-1" onClick={(e) => e.stopPropagation()}>
                             <input 
                               type="text"
                               autoFocus
@@ -266,31 +311,31 @@ export function CourseDetail() {
                               onChange={(e) => setEditingTitle(e.target.value)}
                               className="bg-background border border-border rounded-lg px-2.5 py-1 text-sm text-text w-full focus:border-accent"
                             />
-                            <button onClick={() => handleUpdateChapter(chapter.id)} className="p-1.5 text-success hover:bg-success/10 rounded"><Check size={16}/></button>
-                            <button onClick={() => setEditingChapterId(null)} className="p-1.5 text-text-muted hover:bg-surface rounded"><X size={16}/></button>
+                            <button onClick={() => handleUpdateChapter(chapter.id)} className="p-1.5 text-success hover:bg-success/10 rounded cursor-pointer"><Check size={16}/></button>
+                            <button onClick={() => setEditingChapterId(null)} className="p-1.5 text-text-muted hover:bg-surface rounded cursor-pointer"><X size={16}/></button>
                           </div>
                         ) : (
                           <h3 className="font-semibold text-sm text-text truncate">{chapter.title}</h3>
                         )}
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
                         {hasCards && <Badge variant="info" className="hidden sm:flex text-[9px] bg-info/10 border-transparent text-info"><BrainCircuit size={10}/> Cartes</Badge>}
-                        <span className="text-xs text-text-muted font-medium bg-background px-2 py-1 rounded-md hidden sm:inline">
+                        <span className="text-xs text-text-muted font-medium bg-background px-2 py-1 rounded-md">
                           {chapterDocs.length} doc{chapterDocs.length !== 1 && 's'}
                         </span>
                         {!isEditing && (
                           <div className="flex items-center gap-1 border-l border-border pl-2 ml-1">
                             <button 
                               onClick={() => { setEditingChapterId(chapter.id); setEditingTitle(chapter.title); }}
-                              className="p-1.5 text-text-muted hover:text-accent transition-colors rounded"
+                              className="p-1.5 text-text-muted hover:text-accent transition-colors rounded cursor-pointer"
                               title="Modifier le chapitre"
                             >
                               <Edit3 size={15} />
                             </button>
                             <button 
                               onClick={() => setChapterToDelete(chapter.id)}
-                              className="p-1.5 text-text-muted hover:text-danger transition-colors rounded"
+                              className="p-1.5 text-text-muted hover:text-danger transition-colors rounded cursor-pointer"
                               title="Supprimer le chapitre"
                             >
                               <Trash2 size={15} />
@@ -300,33 +345,41 @@ export function CourseDetail() {
                       </div>
                     </div>
 
-                    {chapterDocs.length > 0 && (
-                      <div className="border-t border-border/50 bg-background/50 flex flex-col divide-y divide-border/50">
-                        {chapterDocs.map(doc => {
-                          const isPdf = doc.mime_type === 'application/pdf' || doc.original_name.endsWith('.pdf');
-                          return (
-                            <div key={doc.id} className="p-3 flex items-center justify-between cursor-pointer hover:bg-surface transition-colors" onClick={() => navigate(`/viewer/${doc.id}`)}>
-                              <div className="flex items-center gap-3 min-w-0 flex-1">
-                                <div className={`p-2 rounded-lg shrink-0 ${isPdf ? 'bg-danger/10 text-danger' : 'bg-info/10 text-info'}`}>
-                                  <FileText size={16} />
-                                </div>
-                                <div className="min-w-0 pr-2">
-                                  <p className="text-sm font-medium text-text truncate hover:text-accent transition-colors">{doc.original_name}</p>
-                                  <div className="flex items-center gap-2 mt-1 text-[10px] font-mono text-text-muted">
-                                    <span className="uppercase">{doc.document_type}</span>
-                                    {doc.atf_ref && <span className="text-warning bg-warning/10 px-1 rounded">{doc.atf_ref}</span>}
+                    {/* CONTENU DU CHAPITRE (S'affiche uniquement si déplié / isOpen === true) */}
+                    {isOpen && (
+                      <div className="border-t border-border/50 bg-background/50 flex flex-col divide-y divide-border/50 animate-in fade-in duration-200">
+                        {chapterDocs.length === 0 ? (
+                          <div className="p-4 text-center text-xs text-text-muted italic">
+                            Aucun document rattaché à ce chapitre pour le moment.
+                          </div>
+                        ) : (
+                          chapterDocs.map(doc => {
+                            const isPdf = doc.mime_type === 'application/pdf' || doc.original_name.endsWith('.pdf');
+                            return (
+                              <div key={doc.id} className="p-3 pl-10 flex items-center justify-between cursor-pointer hover:bg-surface transition-colors" onClick={() => navigate(`/viewer/${doc.id}`)}>
+                                <div className="flex items-center gap-3 min-w-0 flex-1">
+                                  <div className={`p-2 rounded-lg shrink-0 ${isPdf ? 'bg-danger/10 text-danger' : 'bg-info/10 text-info'}`}>
+                                    <FileText size={16} />
+                                  </div>
+                                  <div className="min-w-0 pr-2">
+                                    <p className="text-sm font-medium text-text truncate hover:text-accent transition-colors">{doc.original_name}</p>
+                                    <div className="flex items-center gap-2 mt-1 text-[10px] font-mono text-text-muted">
+                                      <span className="uppercase">{doc.document_type}</span>
+                                      {doc.atf_ref && <span className="text-warning bg-warning/10 px-1 rounded">{doc.atf_ref}</span>}
+                                    </div>
                                   </div>
                                 </div>
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); setDocToDelete({ id: doc.id, path: doc.bucket_path }); }}
+                                  className="p-2 text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors cursor-pointer"
+                                  title="Supprimer le document"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
                               </div>
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); setDocToDelete({ id: doc.id, path: doc.bucket_path }); }}
-                                className="p-2 text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            </div>
-                          )
-                        })}
+                            );
+                          })
+                        )}
                       </div>
                     )}
                   </div>
@@ -379,7 +432,7 @@ export function CourseDetail() {
           <div className="w-full max-w-xl bg-surface-elevated border border-border rounded-3xl p-6 shadow-2xl flex flex-col gap-4 text-text">
             <div className="flex justify-between items-center pb-2 border-b border-border">
               <h3 className="font-serif text-xl font-bold">Coller la table des matières</h3>
-              <button onClick={() => setShowBulkModal(false)} className="p-1.5 hover:bg-surface rounded-xl text-text-muted"><X size={20} /></button>
+              <button onClick={() => setShowBulkModal(false)} className="p-1.5 hover:bg-surface rounded-xl text-text-muted cursor-pointer"><X size={20} /></button>
             </div>
             <p className="text-xs text-text-muted leading-relaxed">
               Copiez-collez le plan de votre cours ou votre table des matières (PDF, Word, syllabus). L'intelligence de l'application détectera automatiquement les chapitres par ligne.
@@ -392,8 +445,8 @@ export function CourseDetail() {
               className="w-full h-48 bg-surface border border-border rounded-xl p-4 text-sm focus:border-accent resize-none font-serif"
             />
             <div className="flex gap-2 mt-2">
-              <button onClick={() => setShowBulkModal(false)} className="flex-1 bg-surface border border-border py-3 rounded-xl text-sm font-medium hover:bg-surface/80">Annuler</button>
-              <button onClick={handleBulkImport} className="flex-1 bg-accent text-background py-3 rounded-xl text-sm font-bold glow-gold hover:bg-accent-strong">Importer les chapitres</button>
+              <button onClick={() => setShowBulkModal(false)} className="flex-1 bg-surface border border-border py-3 rounded-xl text-sm font-medium hover:bg-surface/80 cursor-pointer">Annuler</button>
+              <button onClick={handleBulkImport} className="flex-1 bg-accent text-background py-3 rounded-xl text-sm font-bold glow-gold hover:bg-accent-strong cursor-pointer">Importer les chapitres</button>
             </div>
           </div>
         </div>
