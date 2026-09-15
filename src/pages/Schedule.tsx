@@ -89,33 +89,63 @@ export function Schedule() {
   const handleImportICS = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
+    
     const reader = new FileReader();
     reader.onload = async (event) => {
       const text = event.target?.result as string;
       if (!text) return;
 
-      const summaryMatch = text.match(/SUMMARY:(.*)/g);
-      const dtstartMatch = text.match(/DTSTART:(.*)/g);
+      // Découper le fichier ICS bloc par bloc (chaque événement)
+      const eventBlocks = text.split('BEGIN:VEVENT');
+      let importedCount = 0;
 
-      if (summaryMatch && dtstartMatch) {
-        try {
-          for (let i = 0; i < summaryMatch.length; i++) {
-            const title = summaryMatch[i].replace('SUMMARY:', '').trim();
-            let rawDate = dtstartMatch[i]?.replace('DTSTART:', '').trim();
-            if (rawDate && rawDate.length >= 15) {
-              const formattedDate = `${rawDate.substring(0,4)}-${rawDate.substring(4,6)}-${rawDate.substring(6,8)}T${rawDate.substring(9,11)}:${rawDate.substring(11,13)}`;
-              await createEvent({ title, event_date: formattedDate, category: 'Cours' });
+      try {
+        for (const block of eventBlocks) {
+          if (!block.includes('END:VEVENT')) continue;
+
+          // Extraction robuste gérant les paramètres optionnels (ex: SUMMARY;LANG=fr:... ou DTSTART;TZID=...)
+          const summaryMatch = block.match(/SUMMARY(?:;[^:]*)?:([^\r\n]*)/i);
+          const dtstartMatch = block.match(/DTSTART(?:;[^:]*)?:([^\r\n]*)/i);
+
+          if (summaryMatch && dtstartMatch) {
+            const title = summaryMatch[1].trim();
+            const rawDate = dtstartMatch[1].trim(); // Format attendu ex: 20260915T100000Z ou 20260915
+
+            if (rawDate.length >= 8) {
+              const year = rawDate.substring(0, 4);
+              const month = rawDate.substring(4, 6);
+              const day = rawDate.substring(6, 8);
+              
+              let formattedDate = '';
+              // Si l'heure est présente (ex: format ISO avec T)
+              if (rawDate.includes('T') && rawDate.length >= 13) {
+                const hour = rawDate.substring(9, 11);
+                const minute = rawDate.substring(11, 13);
+                formattedDate = `${year}-${month}-${day}T${hour}:${minute}`;
+              } else {
+                // Si c'est juste une date (jour entier), on met 08:00 par défaut
+                formattedDate = `${year}-${month}-${day}T08:00`;
+              }
+
+              await createEvent({ 
+                title, 
+                event_date: formattedDate, 
+                category: 'Cours' 
+              });
+              importedCount++;
             }
           }
-          toast("Calendrier ICS importé avec succès !", "success");
-          loadData();
-        } catch (err) {
-          console.error("Erreur parsing ICS:", err);
-          toast("Erreur lors de l'importation du fichier ICS.", "error");
         }
-      } else {
-        toast("Format ICS non reconnu ou fichier vide.", "warning");
+
+        if (importedCount > 0) {
+          toast(`${importedCount} événement(s) importé(s) avec succès !`, "success");
+          loadData();
+        } else {
+          toast("Aucun événement valide trouvé dans ce fichier ICS.", "warning");
+        }
+      } catch (err) {
+        console.error("Erreur parsing ICS:", err);
+        toast("Erreur lors de l'importation du fichier ICS.", "error");
       }
     };
     reader.readAsText(file);
