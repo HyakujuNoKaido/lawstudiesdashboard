@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, BrainCircuit, Calendar, FileText, FileEdit, ChevronRight, Activity, Flame, Clock, Target, CheckCircle2 } from 'lucide-react';
+import { BookOpen, BrainCircuit, Calendar, FileText, FileEdit, ChevronRight, Activity, Flame, Clock, Target, CheckCircle2, Circle, AlertCircle, FolderOpen } from 'lucide-react';
 import { Card } from '../components/ui/Card';
+import { Badge } from '../components/ui/Badge';
 import { fetchCourses, fetchNotes, fetchEvents, fetchFlashcards } from '../services/supabaseService';
 import { supabase } from '../lib/supabase';
 import { SOLO_USER_ID } from '../lib/constants';
@@ -10,6 +11,7 @@ export function Dashboard() {
   const navigate = useNavigate();
   const [courses, setCourses] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
+  const [recentDocs, setRecentDocs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Métriques du Journal de Bord
@@ -28,23 +30,23 @@ export function Dashboard() {
           fetchEvents(),
           fetchNotes(),
           fetchFlashcards(),
-          supabase.from('documents').select('created_at').eq('user_id', SOLO_USER_ID)
+          supabase.from('documents').select('*, courses(title)').eq('user_id', SOLO_USER_ID).order('created_at', { ascending: false }).limit(5)
         ]);
         
         setCourses(coursesData);
         setEvents(eventsData);
+        setRecentDocs(docsRes.data || []);
 
         // --- CALCUL DU JOURNAL DE BORD (7 derniers jours) ---
         const oneWeekAgo = new Date();
         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-        const recentDocs = (docsRes.data || []).filter(d => new Date(d.created_at) > oneWeekAgo).length;
+        const docsCount = (docsRes.data || []).filter((d: any) => new Date(d.created_at) > oneWeekAgo).length;
         const recentNotes = notesData.filter((n: any) => new Date(n.updated_at) > oneWeekAgo).length;
-        // On simule les cartes révisées via last_reviewed_at si existant, sinon on compte le total pour la démo
         const cardsReviewed = cardsData.filter((c: any) => c.last_reviewed_at && new Date(c.last_reviewed_at) > oneWeekAgo).length || cardsData.length;
 
         setWeeklyStats({
-          docsAdded: recentDocs,
+          docsAdded: docsCount,
           notesUpdated: recentNotes,
           cardsReviewed: cardsReviewed,
           coursesActive: coursesData.length
@@ -153,41 +155,58 @@ export function Dashboard() {
                 </div>
               ))
             )}
-            <button onClick={() => navigate('/schedule')} className="mt-2 text-xs font-bold text-accent hover:underline text-center">
+            <button onClick={() => navigate('/schedule')} className="mt-2 text-xs font-bold text-accent hover:underline text-center cursor-pointer">
               Voir tout l'agenda
             </button>
           </Card>
         </section>
 
-        {/* COLONNE DROITE : COURS RÉCENTS */}
+        {/* COLONNE DROITE : DOCUMENTS RÉCENTS & À TRAITER */}
         <section className="lg:col-span-2 flex flex-col gap-4">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
-            <BookOpen size={16} /> Accès rapide aux cours
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {courses.slice(0, 4).map(course => (
-              <Card 
-                key={course.id} 
-                onClick={() => navigate(`/courses/${course.id}`)}
-                className="cursor-pointer hover:border-accent/50 transition-all group flex flex-col gap-3"
-              >
-                <div className="flex items-start justify-between">
-                  <h3 className="font-bold text-base text-text group-hover:text-accent transition-colors line-clamp-2">
-                    {course.title}
-                  </h3>
-                  <div className="w-8 h-8 rounded-lg bg-surface-elevated flex items-center justify-center text-text-muted group-hover:bg-accent group-hover:text-background transition-colors shrink-0">
-                    <ChevronRight size={16} />
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 text-[10px] font-mono text-text-muted bg-surface-elevated w-fit px-2 py-1 rounded">
-                  <Target size={12} className="text-info" /> {course.course_code || 'Général'} • {course.semester}
-                </div>
-              </Card>
-            ))}
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
+              <FolderOpen size={16} /> Documents récents & Bibliothèque
+            </h2>
+            <button onClick={() => navigate('/documents')} className="text-xs font-bold text-accent hover:underline flex items-center gap-1 cursor-pointer">
+              Voir toute la bibliothèque <ChevronRight size={14} />
+            </button>
           </div>
-          <button onClick={() => navigate('/courses')} className="w-fit text-xs font-bold text-text-muted hover:text-accent flex items-center gap-1 transition-colors">
-            Voir tous les cours <ChevronRight size={14} />
-          </button>
+
+          <div className="flex flex-col gap-3">
+            {recentDocs.length === 0 ? (
+              <div className="text-center py-8 text-text-muted border border-dashed border-border rounded-2xl text-sm">
+                Aucun document importé pour l'instant.
+              </div>
+            ) : (
+              recentDocs.map(doc => {
+                const isPdf = doc.mime_type === 'application/pdf' || doc.original_name.toLowerCase().endsWith('.pdf');
+                return (
+                  <div 
+                    key={doc.id}
+                    onClick={() => navigate(`/viewer/${doc.id}`)}
+                    className="bg-surface border border-border p-3.5 rounded-2xl flex items-center justify-between cursor-pointer hover:border-accent/50 transition-colors group shadow-sm"
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1 pr-2">
+                      <div className={`p-2.5 rounded-xl shrink-0 ${isPdf ? 'bg-danger/10 text-danger' : 'bg-info/10 text-info'}`}>
+                        <FileText size={18} />
+                      </div>
+                      <div className="min-w-0 flex flex-col">
+                        <p className="font-bold text-sm text-text truncate group-hover:text-accent transition-colors">
+                          {doc.original_name}
+                        </p>
+                        <span className="text-xs text-text-muted truncate">
+                          {doc.courses?.title || 'Fichier global'} • {new Date(doc.created_at).toLocaleDateString('fr-CH', { day: 'numeric', month: 'short' })}
+                        </span>
+                      </div>
+                    </div>
+                    <Badge variant="warning" className="text-[10px] bg-warning/10 text-warning border-transparent shrink-0">
+                      À lire
+                    </Badge>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </section>
 
       </div>
