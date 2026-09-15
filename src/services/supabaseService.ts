@@ -1,3 +1,4 @@
+// src/services/supabaseService.ts
 import { supabase } from '../lib/supabase';
 import { SOLO_USER_ID } from '../lib/constants';
 
@@ -64,17 +65,14 @@ export async function updateDocumentMetadata(docId: string, updates: { original_
 }
 
 export async function replaceDocumentFile(docId: string, file: File, oldBucketPath: string) {
-  // 1. Upload du nouveau fichier
   const fileExt = file.name.split('.').pop();
   const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
   const newFilePath = `${SOLO_USER_ID}/${fileName}`;
-
   const { error: uploadError } = await supabase.storage
     .from('user-documents')
     .upload(newFilePath, file);
   if (uploadError) throw uploadError;
 
-  // 2. Mise à jour de la base de données
   const { data, error: dbError } = await supabase
     .from('documents')
     .update({
@@ -87,9 +85,7 @@ export async function replaceDocumentFile(docId: string, file: File, oldBucketPa
     .select();
   if (dbError) throw dbError;
 
-  // 3. Suppression de l'ancien fichier (asynchrone, on n'attend pas)
   supabase.storage.from('user-documents').remove([oldBucketPath]).catch(e => console.error("Échec nettoyage ancien fichier", e));
-
   return data[0];
 }
 
@@ -100,8 +96,6 @@ export async function deleteDocument(docId: string, bucketPath?: string) {
   const { error } = await supabase.from('documents').delete().eq('id', docId);
   if (error) throw error;
 }
-
-// --- SUITE DES SERVICES EXISTANTS ---
 
 export async function createCourseWithSchedule(
   courseData: { title: string; course_code?: string; ects: number; status: string; teacher_name?: string; semester?: string },
@@ -120,9 +114,7 @@ export async function createCourseWithSchedule(
     }])
     .select();
   if (courseErr) throw courseErr;
-  
   const courseId = courseRes[0].id;
-  
   if (schedules.length > 0) {
     const formattedSchedules = schedules.map(s => ({
       course_id: courseId,
@@ -131,11 +123,9 @@ export async function createCourseWithSchedule(
       end_time: s.end_time
     }));
     await supabase.from('course_schedules').insert(formattedSchedules);
-    
     const dayMap: Record<string, number> = { 'Lundi': 1, 'Mardi': 2, 'Mercredi': 3, 'Jeudi': 4, 'Vendredi': 5, 'Samedi': 6, 'Dimanche': 0 };
     const generatedEvents = [];
     const startDate = new Date();
-    
     for (let week = 0; week < 14; week++) {
       for (const sched of schedules) {
         const targetDayNum = dayMap[sched.day_of_week];
@@ -143,7 +133,6 @@ export async function createCourseWithSchedule(
         const currentDayNum = eventDate.getDay();
         const distance = (targetDayNum + 7 - currentDayNum) % 7;
         eventDate.setDate(eventDate.getDate() + distance + (week * 7));
-        
         const dateStr = eventDate.toISOString().split('T')[0];
         generatedEvents.push({
           user_id: SOLO_USER_ID,
@@ -184,7 +173,6 @@ export async function parseAndCreateChaptersFromSyllabus(courseId: string, sylla
   const lines = syllabusText.split('\n').map(l => l.trim()).filter(l => l.length > 3);
   let index = 1;
   const createdChapters = [];
-  
   for (const line of lines) {
     if (/^(chapitre|semaine|module|partie|\d+[\.\-\)]|[ivx]+\.)/i.test(line)) {
       try {
@@ -322,28 +310,24 @@ export async function createEvent(eventData: { title: string; event_date: string
   return data;
 }
 
-// Upload mis à jour pour intégrer un nom de document interne
 export async function uploadCourseDocument(file: File, courseId: string, documentType: string, chapterId?: string, atfRef?: string, internalName?: string) {
   const fileExt = file.name.split('.').pop();
   const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
   const filePath = `${SOLO_USER_ID}/${fileName}`;
-  
   const { error: uploadError } = await supabase.storage.from('user-documents').upload(filePath, file);
   if (uploadError) throw uploadError;
-  
   const { data, error: dbError } = await supabase.from('documents').insert([{
     user_id: SOLO_USER_ID,
     course_id: courseId ? courseId : null,
     chapter_id: chapterId || null,
     bucket_path: filePath,
-    original_name: internalName || file.name, // Nom défini par l'utilisateur ou par défaut
+    original_name: internalName || file.name,
     mime_type: file.type,
     size_bytes: file.size,
     document_type: documentType,
     atf_ref: atfRef || null,
     processing_status: 'completed'
   }]).select();
-  
   if (dbError) throw dbError;
   return data;
 }
@@ -364,10 +348,10 @@ export async function saveCaseLaw(caseLaw: {
   atf_citation: string; 
   facts: string; 
   procedure: string; 
-  legal_issues?: string;       // <-- Nouveau champ
+  legal_issues?: string; 
   consideranda: string; 
   holding: string;
-  pedagogical_takeaway?: string; // <-- Nouveau champ
+  pedagogical_takeaway?: string;
 }) {
   if (caseLaw.id) {
     const { data, error } = await supabase.from('case_laws').update(caseLaw).eq('id', caseLaw.id).select();
@@ -378,7 +362,6 @@ export async function saveCaseLaw(caseLaw: {
     if (error) throw error;
     return data;
   }
-}
 }
 
 export async function saveCaseStudy(study: { course_id: string; title: string; legal_issue: string; major_premise: string; minor_premise: string; conclusion: string }) {
