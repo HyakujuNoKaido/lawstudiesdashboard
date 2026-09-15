@@ -1,25 +1,32 @@
-import { supabase } from './supabase';
-
 export async function generateCaseLaw(atfCitation: string) {
-  const { data, error } = await supabase.functions.invoke('gemini-proxy', {
-    body: { action: 'generate_case_law', payload: { citation: atfCitation } }
+  const response = await fetch('/api/gemini-proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'generate_case_law', payload: { citation: atfCitation } })
   });
-  if (error) throw new Error("L'IA n'a pas pu générer la fiche d'arrêt.");
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Erreur de l'IA");
   return data;
 }
 
 export async function generateSubsumption(factsAndLegalIssue: string) {
-  const { data, error } = await supabase.functions.invoke('gemini-proxy', {
-    body: { action: 'generate_subsumption', payload: { facts: factsAndLegalIssue } }
+  const response = await fetch('/api/gemini-proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'generate_subsumption', payload: { facts: factsAndLegalIssue } })
   });
-  if (error) throw new Error("L'IA n'a pas pu générer la subsumption.");
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Erreur de l'IA");
   return data;
 }
 
 export async function generateMockExam(topic: string) {
-  const { data, error } = await supabase.functions.invoke('gemini-proxy', {
-    body: { action: 'generate_mock_exam', payload: { topic } }
+  const response = await fetch('/api/gemini-proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'generate_mock_exam', payload: { topic } })
   });
-  if (error) throw new Error("L'IA n'a pas pu générer l'examen blanc.");
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Erreur de l'IA");
   return data;
 }
