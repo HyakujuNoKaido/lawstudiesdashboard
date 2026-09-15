@@ -31,18 +31,25 @@ export function Onboarding() {
   const handleFinish = async () => {
     setLoading(true);
     try {
+      // Enregistrement des colonnes de base garanties dans la table profiles de Supabase
       const { error } = await supabase
         .from('profiles')
         .upsert({
           id: SOLO_USER_ID,
           full_name: form.fullName,
           university: form.university,
-          current_semester: form.currentSemester,
-          passing_grade: Number(form.passingGrade),
-          target_ects: Number(form.targetECTS),
           updated_at: new Date().toISOString()
         });
+      
       if (error) throw error;
+
+      // Sauvegarde des préférences académiques en local pour l'interface
+      localStorage.setItem('lexi_academic_prefs', JSON.stringify({
+        currentSemester: form.currentSemester,
+        passingGrade: form.passingGrade,
+        targetECTS: form.targetECTS
+      }));
+
       navigate('/');
     } catch (err) {
       console.error("Erreur enregistrement onboarding:", err);
@@ -94,7 +101,7 @@ export function Onboarding() {
                 autoFocus
                 value={form.fullName}
                 onChange={(e) => setForm({ ...form, fullName: e.target.value })}
-                placeholder="ex: Jean Dupont"
+                placeholder="ex: Aniss Bahaji"
                 className="w-full bg-background border border-border rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-secondary transition-colors"
               />
             </div>
@@ -105,8 +112,8 @@ export function Onboarding() {
                 onChange={(e) => setForm({ ...form, university: e.target.value })}
                 className="w-full bg-background border border-border rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-secondary appearance-none cursor-pointer transition-colors"
               >
-                <option value="Université de Lausanne (UNIL)">Université de Lausanne (UNIL)</option>
                 <option value="Université de Genève (UNIGE)">Université de Genève (UNIGE)</option>
+                <option value="Université de Lausanne (UNIL)">Université de Lausanne (UNIL)</option>
                 <option value="Université de Fribourg (UNIFR)">Université de Fribourg (UNIFR)</option>
                 <option value="Université de Berne (UNIBE)">Université de Berne (UNIBE)</option>
                 <option value="Université de Zurich (UZH)">Université de Zurich (UZH)</option>
