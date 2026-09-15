@@ -36,15 +36,12 @@ Renvoie UNIQUEMENT un tableau JSON valide au format strict : [{"question": "..."
 Texte :
 ${text.substring(0, 30000)}`;
 
-  // Utilisation obligatoire de l'endpoint stable /v1/
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+  // Utilisation de gemini-3.6-flash sur l'endpoint v1
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-3.6-flash:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.3
-      }
+      contents: [{ parts: [{ text: prompt }] }]
     })
   });
 
@@ -82,12 +79,11 @@ export async function generateAISummary(text: string): Promise<string> {
   
   const prompt = `Tu es un juriste suisse. Résume le texte juridique fourni en Markdown :\n\n${text.substring(0, 30000)}`;
   
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-3.6-flash:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.3 }
+      contents: [{ parts: [{ text: prompt }] }]
     })
   });
   
