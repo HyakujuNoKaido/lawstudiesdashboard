@@ -81,7 +81,7 @@ export function Dashboard() {
           <p className="text-text-muted text-sm">Voici votre journal de bord et vos priorités du jour.</p>
         </div>
         <button 
-          onClick={() => navigate('/notes')}
+          onClick={() => navigate('/editor/new')}
           className="bg-accent text-background px-4 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 glow-gold hover:scale-[1.02] transition-transform shadow-lg cursor-pointer"
         >
           <FileEdit size={18} /> Je suis en cours (Note rapide)
@@ -100,12 +100,10 @@ export function Dashboard() {
         </div>
 
         <div className="bg-surface border border-border/80 rounded-3xl p-6 shadow-sm relative overflow-hidden group hover:border-accent/30 transition-all">
-          {/* Effet de lueur subtil en arrière-plan */}
           <div className="absolute -right-20 -top-20 w-48 h-48 bg-accent/5 rounded-full blur-3xl pointer-events-none"></div>
 
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
             
-            {/* Message d'encouragement pro */}
             <div className="flex items-start gap-4 max-w-lg">
               <div className="w-12 h-12 rounded-2xl bg-accent/10 border border-accent/20 text-accent flex items-center justify-center shrink-0 shadow-inner">
                 <Flame size={22} />
@@ -119,7 +117,6 @@ export function Dashboard() {
               </div>
             </div>
 
-            {/* Statistiques sous forme de mini-cartes épurées */}
             <div className="grid grid-cols-3 gap-3 w-full lg:w-auto shrink-0">
               <div className="bg-surface-elevated border border-border/60 rounded-2xl p-4 text-center flex flex-col items-center justify-center min-w-[95px] shadow-sm">
                 <span className="font-serif text-2xl md:text-3xl font-bold text-accent mb-0.5">{weeklyStats.docsAdded}</span>
