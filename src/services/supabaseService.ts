@@ -161,26 +161,33 @@ export async function fetchCourseChapters(courseId: string) {
 }
 
 export async function createChapter(chapter: { course_id: string; title: string; order_index?: number; description?: string }) {
+  // Correction : suppression de user_id qui n'existe pas dans la table chapters
   const { data, error } = await supabase
     .from('chapters')
-    .insert([{ user_id: SOLO_USER_ID, ...chapter }])
+    .insert([chapter])
     .select();
   if (error) throw error;
   return data;
 }
 
 export async function parseAndCreateChaptersFromSyllabus(courseId: string, syllabusText: string) {
-  const lines = syllabusText.split('\n').map(l => l.trim()).filter(l => l.length > 3);
+  // On découpe le texte ligne par ligne en conservant la structure et l'indentation
+  const lines = syllabusText.split('\n').map(l => l.trim()).filter(l => l.length > 1);
   let index = 1;
   const createdChapters = [];
+
   for (const line of lines) {
-    if (/^(chapitre|semaine|module|partie|\d+[\.\-\)]|[ivx]+\.)/i.test(line)) {
-      try {
-        const res = await createChapter({ course_id: courseId, title: line, order_index: index++ });
-        if (res) createdChapters.push(res[0]);
-      } catch (err) {
-        console.error("Erreur insertion chapitre auto:", err);
-      }
+    try {
+      // On accepte désormais toutes les lignes significatives de la table des matières
+      // (chiffres romains I, II, III, arabes 1, 2, 3, lettres A, B, tirets, etc.)
+      const res = await createChapter({ 
+        course_id: courseId, 
+        title: line, // Conserve le texte exact avec sa numérotation (ex: "I. Introduction", "  1. Sous-chapitre")
+        order_index: index++ 
+      });
+      if (res) createdChapters.push(res[0]);
+    } catch (err) {
+      console.error("Erreur insertion chapitre auto:", err);
     }
   }
   return createdChapters;
