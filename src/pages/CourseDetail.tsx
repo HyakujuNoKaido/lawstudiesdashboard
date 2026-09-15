@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, FileText, Edit3, Trash2, BrainCircuit, FileEdit, Award, LayoutGrid, Scale, Plus, X, Check, ClipboardPaste, ChevronRight, ChevronDown, Calendar, Clock, CornerDownRight, CheckSquare, Square } from 'lucide-react';
+import { ChevronLeft, FileText, Edit3, Trash2, BrainCircuit, FileEdit, Award, LayoutGrid, Scale, Plus, X, Check, ClipboardPaste, ChevronRight, ChevronDown, Calendar, Clock, CornerDownRight, CheckSquare, Square, FolderInput } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
 import { Card } from '../components/ui/Card';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
-import { fetchCourseById, fetchCourseChapters, fetchCourseDocuments, fetchCourseGrades, fetchNotes, fetchFlashcards, deleteDocument, createChapter, parseAndCreateChaptersFromSyllabus, fetchEvents, createEvent, updateChapterParent } from '../services/supabaseService';
+import { fetchCourseById, fetchCourseChapters, fetchCourseDocuments, fetchCourseGrades, fetchNotes, fetchFlashcards, deleteDocument, createChapter, parseAndCreateChaptersFromSyllabus, fetchEvents, createEvent, updateChapterParent, batchMoveItems } from '../services/supabaseService';
 import { supabase } from '../lib/supabase';
 import { toast } from '../lib/toast';
 
@@ -26,7 +26,6 @@ export function CourseDetail() {
   const [newChapterTitle, setNewChapterTitle] = useState('');
   const [parentChapterId, setParentChapterId] = useState<string | null>(null);
   
-  // États d'édition enrichis (Titre + Parent)
   const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
   const [editingParentId, setEditingParentId] = useState<string | null>(null);
@@ -45,11 +44,15 @@ export function CourseDetail() {
   // État plié/déplié des chapitres
   const [openChapters, setOpenChapters] = useState<Record<string, boolean>>({});
 
-  // Sélection multiple
+  // Sélection multiple & Actions groupées
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedChapterIds, setSelectedChapterIds] = useState<string[]>([]);
   const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
   const [isBatchDeleteModalOpen, setIsBatchDeleteModalOpen] = useState(false);
+  
+  // NOUVEAU : Modale de déplacement groupé
+  const [isBatchMoveModalOpen, setIsBatchMoveModalOpen] = useState(false);
+  const [batchTargetParentId, setBatchTargetParentId] = useState<string | null>(null);
 
   useEffect(() => {
     if (courseId) loadData();
@@ -141,6 +144,22 @@ export function CourseDetail() {
     }
   };
 
+  // Exécution du déplacement groupé vers une Partie / Chapitre cible
+  const handleBatchMoveSubmit = async () => {
+    try {
+      await batchMoveItems(selectedChapterIds, selectedDocIds, batchTargetParentId);
+      toast("Éléments déplacés avec succès !", "success");
+      setSelectedChapterIds([]);
+      setSelectedDocIds([]);
+      setIsSelectMode(false);
+      setIsBatchMoveModalOpen(false);
+      setBatchTargetParentId(null);
+      loadData();
+    } catch (err) {
+      toast("Erreur lors du déplacement groupé", "error");
+    }
+  };
+
   const handleCreateChapter = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newChapterTitle.trim() || !courseId) return;
@@ -161,19 +180,15 @@ export function CourseDetail() {
     }
   };
 
-  // Mise à jour complète (Titre + Parent pour fusionner/déplacer)
   const handleUpdateChapter = async (chapterId: string) => {
     if (!editingTitle.trim()) return;
     try {
-      // 1. Mettre à jour le titre
       const { error: titleError } = await supabase.from('chapters').update({ title: editingTitle.trim() }).eq('id', chapterId);
       if (titleError) throw titleError;
-
-      // 2. Mettre à jour le parent (déplacement hiérarchique)
       await updateChapterParent(chapterId, editingParentId);
 
       setEditingChapterId(null);
-      toast("Chapitre mis à jour avec succès", "success");
+      toast("Chapitre mis à jour", "success");
       loadData();
     } catch (err) {
       toast("Erreur lors de la modification", "error");
@@ -315,17 +330,11 @@ export function CourseDetail() {
             </div>
           </div>
 
-          {/* FORMULAIRE DE MODIFICATION AVEC SÉLECTEUR DE DÉPLACEMENT DE PARENT */}
           {isEditing && (
             <div className="p-4 bg-surface-elevated border-t border-border flex flex-col gap-3 animate-in fade-in" onClick={(e) => e.stopPropagation()}>
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] uppercase font-bold text-text-muted">Intitulé du chapitre</label>
-                <input 
-                  type="text" 
-                  value={editingTitle} 
-                  onChange={(e) => setEditingTitle(e.target.value)} 
-                  className="bg-background border border-border rounded-lg px-3 py-1.5 text-sm text-text w-full focus:border-accent" 
-                />
+                <input type="text" value={editingTitle} onChange={(e) => setEditingTitle(e.target.value)} className="bg-background border border-border rounded-lg px-3 py-1.5 text-sm text-text w-full focus:border-accent" />
               </div>
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] uppercase font-bold text-accent">Rattachement / Partie parente</label>
@@ -335,12 +344,9 @@ export function CourseDetail() {
                   className="bg-background border border-border rounded-lg px-3 py-1.5 text-xs text-text w-full focus:border-accent"
                 >
                   <option value="">(Aucun parent / Chapitre principal / Partie I)</option>
-                  {chapters
-                    .filter(c => c.id !== chapter.id) // Empêcher de s'auto-sélectionner
-                    .map(c => (
-                      <option key={c.id} value={c.id}>{c.title}</option>
-                    ))
-                  }
+                  {chapters.filter(c => c.id !== chapter.id).map(c => (
+                    <option key={c.id} value={c.id}>{c.title}</option>
+                  ))}
                 </select>
               </div>
               <div className="flex justify-end gap-2 mt-1">
@@ -488,22 +494,32 @@ export function CourseDetail() {
             </div>
           </div>
 
+          {/* BARRE D'OUTILS FLOTTANTE AVEC OPTIONS DE DÉPLACEMENT GROUPÉ */}
           {isSelectMode && (
-            <div className="bg-surface-elevated border border-accent/40 px-4 py-3 rounded-2xl flex items-center justify-between shadow-lg animate-in fade-in duration-200">
+            <div className="bg-surface-elevated border border-accent/40 px-4 py-3 rounded-2xl flex flex-col sm:flex-row items-center justify-between shadow-lg gap-3 animate-in fade-in duration-200">
               <div className="flex items-center gap-3">
                 <button onClick={handleSelectAll} className="text-xs font-bold text-accent hover:underline cursor-pointer">
                   {totalSelectedCount === chapters.length + documents.length ? 'Tout désélectionner' : 'Tout sélectionner'}
                 </button>
                 <span className="text-xs text-text-muted">|</span>
-                <span className="text-xs font-semibold text-text">{totalSelectedCount} élément(s) sélectionné(s)</span>
+                <span className="text-xs font-semibold text-text">{totalSelectedCount} sélectionné(s)</span>
               </div>
-              <button 
-                disabled={totalSelectedCount === 0}
-                onClick={() => setIsBatchDeleteModalOpen(true)}
-                className="bg-danger/10 text-danger border border-danger/30 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 hover:bg-danger/20 transition-colors cursor-pointer disabled:opacity-40"
-              >
-                <Trash2 size={14} /> Supprimer la sélection
-              </button>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button 
+                  disabled={totalSelectedCount === 0}
+                  onClick={() => setIsBatchMoveModalOpen(true)}
+                  className="flex-1 sm:flex-none bg-info/15 text-info border border-info/30 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-info/25 transition-colors cursor-pointer disabled:opacity-40"
+                >
+                  <FolderInput size={14} /> Déplacer vers...
+                </button>
+                <button 
+                  disabled={totalSelectedCount === 0}
+                  onClick={() => setIsBatchDeleteModalOpen(true)}
+                  className="flex-1 sm:flex-none bg-danger/10 text-danger border border-danger/30 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-danger/20 transition-colors cursor-pointer disabled:opacity-40"
+                >
+                  <Trash2 size={14} /> Supprimer
+                </button>
+              </div>
             </div>
           )}
 
@@ -610,6 +626,38 @@ export function CourseDetail() {
             <div className="flex gap-2 mt-2">
               <button onClick={() => setShowBulkModal(false)} className="flex-1 bg-surface border border-border py-3 rounded-xl text-sm">Annuler</button>
               <button onClick={handleBulkImport} className="flex-1 bg-accent text-background py-3 rounded-xl text-sm font-bold glow-gold">Lancer l'import</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODALE DE DÉPLACEMENT GROUPÉ (BATCH MOVE) */}
+      {isBatchMoveModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="w-full max-w-md bg-surface-elevated border border-border rounded-3xl p-6 shadow-2xl flex flex-col gap-4 text-text">
+            <div className="flex justify-between items-center pb-2 border-b border-border">
+              <h3 className="font-serif text-xl font-bold">Déplacer la sélection</h3>
+              <button onClick={() => setIsBatchMoveModalOpen(false)} className="p-1.5 hover:bg-surface rounded-xl text-text-muted"><X size={20} /></button>
+            </div>
+            <p className="text-xs text-text-muted leading-relaxed">
+              Choisissez le chapitre parent ou la partie où vous souhaitez regrouper les {totalSelectedCount} éléments sélectionnés :
+            </p>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] uppercase font-bold text-accent">Chapitre ou Partie de destination</label>
+              <select 
+                value={batchTargetParentId || ''} 
+                onChange={(e) => setBatchTargetParentId(e.target.value ? e.target.value : null)}
+                className="bg-surface border border-border rounded-xl px-3.5 py-2.5 text-sm text-text w-full focus:border-accent"
+              >
+                <option value="">(Racine du cours / Aucun parent direct)</option>
+                {chapters.map(c => (
+                  <option key={c.id} value={c.id}>{c.title}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-2 mt-2">
+              <button onClick={() => setIsBatchMoveModalOpen(false)} className="flex-1 bg-surface border border-border py-3 rounded-xl text-sm cursor-pointer">Annuler</button>
+              <button onClick={handleBatchMoveSubmit} className="flex-1 bg-accent text-background py-3 rounded-xl text-sm font-bold glow-gold cursor-pointer">Déplacer ici</button>
             </div>
           </div>
         </div>
