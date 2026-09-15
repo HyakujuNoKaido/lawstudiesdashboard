@@ -17,6 +17,7 @@ export function Profile() {
   const [courses, setCourses] = useState<any[]>([]);
   const [grades, setGrades] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [localFocus, setLocalFocus] = useState(settings.focusMode);
 
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -239,12 +240,12 @@ export function Profile() {
                   </div>
                   <button 
                     onClick={() => {
-                      setSettings({ ...settings, focusMode: !settings.focusMode });
+                      setLocalFocus(!localFocus);
                       toast("Mode Focus mis à jour", "success");
                     }}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer border ${settings.focusMode ? 'bg-accent text-background border-accent' : 'bg-surface-elevated text-text-muted border-border'}`}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer border ${localFocus ? 'bg-accent text-background border-accent' : 'bg-surface-elevated text-text-muted border-border'}`}
                   >
-                    {settings.focusMode ? 'Activé' : 'Désactivé'}
+                    {localFocus ? 'Activé' : 'Désactivé'}
                   </button>
                 </div>
               </div>
