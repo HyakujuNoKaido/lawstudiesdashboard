@@ -458,6 +458,11 @@ export async function batchMoveItems(chapterIds: string[], docIds: string[], tar
   }
  
   
+// ... tes autres fonctions ...
+
+/**
+ * MET À JOUR UNE FLASHCARD APRÈS RÉVISION (Algorithme SM-2)
+ */
 export async function updateFlashcardReview(id: string, q: number, currentCard: any) {
   let { repetitions = 0, ease_factor = 2.5, interval_days = 0 } = currentCard;
 
@@ -465,7 +470,6 @@ export async function updateFlashcardReview(id: string, q: number, currentCard: 
     repetitions = 0;
     interval_days = 1;
   } else {
-
     if (repetitions === 0) {
       interval_days = 1;
     } else if (repetitions === 1) {
@@ -491,4 +495,4 @@ export async function updateFlashcardReview(id: string, q: number, currentCard: 
   }).eq('id', id);
 
   if (error) throw error;
-}
+} // <-- Bien vérifier cette accolade fermante de la fonction !
