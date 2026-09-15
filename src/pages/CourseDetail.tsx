@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, FileText, Edit3, Trash2, BrainCircuit, FileEdit, Award, LayoutGrid, Scale, Plus, X, Check, ClipboardPaste, ChevronRight, ChevronDown, Calendar, Clock, CornerDownRight, CheckSquare, Square, FolderInput } from 'lucide-react';
+import { ChevronLeft, FileText, Edit3, Trash2, BrainCircuit, FileEdit, Award, LayoutGrid, Scale, Plus, X, Check, ClipboardPaste, ChevronRight, ChevronDown, Calendar, Clock, CornerDownRight, CheckSquare, Square, FolderInput, UploadCloud } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
 import { Card } from '../components/ui/Card';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
@@ -39,6 +39,9 @@ export function CourseDetail() {
   const [eventToDelete, setEventToDelete] = useState<string | null>(null);
 
   const [openChapters, setOpenChapters] = useState<Record<string, boolean>>({});
+
+  // NOUVEAU : État pour ouvrir/fermer le menu contextuel du bouton "+" d'un chapitre
+  const [activePlusMenuId, setActivePlusMenuId] = useState<string | null>(null);
 
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedChapterIds, setSelectedChapterIds] = useState<string[]>([]);
@@ -280,9 +283,10 @@ export function CourseDetail() {
     const isEditing = editingChapterId === chapter.id;
     const isOpen = openChapters[chapter.id] ?? true;
     const isSelected = selectedChapterIds.includes(chapter.id);
+    const isPlusMenuOpen = activePlusMenuId === chapter.id;
 
     return (
-      <div key={chapter.id} className="flex flex-col gap-2">
+      <div key={chapter.id} className="flex flex-col gap-2 relative">
         <div className={`bg-surface border rounded-2xl overflow-hidden shadow-sm group transition-all ${isSelected ? 'border-accent bg-accent/5' : 'border-border'}`}>
           
           <div 
@@ -314,8 +318,49 @@ export function CourseDetail() {
                 {chapterDocs.length} doc{chapterDocs.length !== 1 && 's'}
               </span>
               {!isSelectMode && (
-                <div className="flex items-center gap-1 border-l border-border pl-2 ml-1">
-                  <button onClick={() => { setParentChapterId(chapter.id); setIsAddingChapter(true); }} className="p-1 text-text-muted hover:text-accent transition-colors rounded cursor-pointer" title="Ajouter un sous-chapitre"><Plus size={14} /></button>
+                <div className="flex items-center gap-1 border-l border-border pl-2 ml-1 relative">
+                  
+                  {/* BOUTON "+" AVEC MENU DÉROULANT INSTINCTIF */}
+                  <div className="relative">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActivePlusMenuId(isPlusMenuOpen ? null : chapter.id);
+                      }} 
+                      className="p-1 text-text-muted hover:text-accent transition-colors rounded cursor-pointer" 
+                      title="Ajouter..."
+                    >
+                      <Plus size={16} />
+                    </button>
+
+                    {/* Menu contextuel au clic sur "+" */}
+                    {isPlusMenuOpen && (
+                      <div className="absolute right-0 top-full mt-1.5 w-52 bg-surface-elevated border border-border rounded-xl shadow-2xl z-50 py-1.5 animate-in fade-in duration-150 text-left">
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActivePlusMenuId(null);
+                            setParentChapterId(chapter.id);
+                            setIsAddingChapter(true);
+                          }}
+                          className="w-full px-3.5 py-2 text-xs text-text hover:bg-surface flex items-center gap-2.5 cursor-pointer"
+                        >
+                          <Plus size={14} className="text-accent" /> Ajouter un sous-chapitre
+                        </button>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActivePlusMenuId(null);
+                            navigate('/add/document', { state: { courseId, chapterId: chapter.id } });
+                          }}
+                          className="w-full px-3.5 py-2 text-xs text-text hover:bg-surface flex items-center gap-2.5 cursor-pointer"
+                        >
+                          <UploadCloud size={14} className="text-info" /> Ajouter un document ici
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
                   <button onClick={() => { setEditingChapterId(chapter.id); setEditingTitle(chapter.title); setEditingParentId(chapter.parent_id || null); }} className="p-1 text-text-muted hover:text-accent transition-colors rounded cursor-pointer" title="Modifier / Déplacer"><Edit3 size={14} /></button>
                   <button onClick={() => setChapterToDelete(chapter.id)} className="p-1 text-text-muted hover:text-danger transition-colors rounded cursor-pointer" title="Supprimer"><Trash2 size={14} /></button>
                 </div>
@@ -621,7 +666,6 @@ export function CourseDetail() {
         </div>
       )}
 
-      {/* MODALE DE DÉPLACEMENT GROUPÉ */}
       {isBatchMoveModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="w-full max-w-md bg-surface-elevated border border-border rounded-3xl p-6 shadow-2xl flex flex-col gap-4 text-text">
