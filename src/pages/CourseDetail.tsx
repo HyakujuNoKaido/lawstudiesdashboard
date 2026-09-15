@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, FileText, Edit3, Trash2, BrainCircuit, FileEdit, Award, LayoutGrid, Scale, Plus, X, Check, ClipboardPaste } from 'lucide-react';
+import { ChevronLeft, FileText, Edit3, Trash2, BrainCircuit, FileEdit, Award, LayoutGrid, Scale, Plus, X, Check, ClipboardPaste, ChevronRight } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
 import { Card } from '../components/ui/Card';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
