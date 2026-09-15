@@ -9,12 +9,14 @@ import { LexiIcons } from '../../lib/icons';
 export function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isOffline, settings } = useApp();
+  const { isOffline, settings, setSettings } = useApp();
   
   // États
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
   const [isAvatarMenuOpen, setIsAvatarMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: string; id: number } | null>(null);
 
   const isActive = (paths: string[]) => paths.some(path => location.pathname === path || location.pathname.startsWith(path + '/'));
@@ -22,21 +24,21 @@ export function AppLayout() {
   // Sécurité : masquer les barres de navigation quand on lit un PDF plein écran
   const isViewer = location.pathname.includes('/viewer');
 
-  // Transitions intelligentes selon la route (Logique conservée)
+  // Transitions intelligentes selon la route
   const getTransitionClass = () => {
     const path = location.pathname;
     const baseSpeed = settings.animationSpeed === 'fast' ? 'duration-150' : settings.animationSpeed === 'none' ? 'duration-0' : 'duration-400';
     
     if (path.includes('/cases/') || path.includes('/editor') || path.includes('/viewer')) {
-      return `animate-in fade-in zoom-in-[0.98] ${baseSpeed} ease-out`; // Savoir : Zoom doux
+      return `animate-in fade-in zoom-in-[0.98] ${baseSpeed} ease-out`;
     }
     if (path.includes('/session') || path.includes('/add') || path.includes('/import') || path.includes('/exams')) {
-      return `animate-in slide-in-from-right-8 fade-in ${baseSpeed} ease-out`; // Action : Slide dynamique
+      return `animate-in slide-in-from-right-8 fade-in ${baseSpeed} ease-out`;
     }
-    return `animate-in fade-in ${baseSpeed} ease-in-out`; // Pilotage : Fondu calme
+    return `animate-in fade-in ${baseSpeed} ease-in-out`;
   };
 
-  // Gestionnaire de Toasts (Logique conservée)
+  // Gestionnaire de Toasts
   useEffect(() => {
     const handleToast = (e: Event) => {
       const customEvent = e as CustomEvent<ToastEventDetail>;
@@ -50,10 +52,16 @@ export function AppLayout() {
     return () => window.removeEventListener('lexi-toast', handleToast);
   }, []);
 
+  const handleLogout = () => {
+    if (window.confirm("Êtes-vous sûr de vouloir vous déconnecter ?")) {
+      navigate('/onboarding');
+    }
+  };
+
   return (
     <div className={`min-h-screen bg-background text-text flex flex-col antialiased selection:bg-accent/30 selection:text-accent relative overflow-x-hidden ${settings.focusMode ? 'grayscale-[0.2] contrast-125' : ''}`}>
       
-      {/* HEADER GLOBAL (Refondu avec Navigation Desktop et Avatar) */}
+      {/* HEADER GLOBAL */}
       {!isViewer && (
         <header className="sticky top-0 z-30 bg-background/90 backdrop-blur-md border-b border-border px-4 py-3 shrink-0">
           <div className="max-w-5xl mx-auto flex justify-between items-center relative">
@@ -74,7 +82,7 @@ export function AppLayout() {
               )}
             </div>
             
-            {/* NAVIGATION DESKTOP (Masquée sur mobile) */}
+            {/* NAVIGATION DESKTOP */}
             <nav className="hidden md:flex items-center gap-6 lg:gap-8 absolute left-1/2 -translate-x-1/2">
               <NavLink to="/" className={({ isActive }) => `text-sm font-bold transition-colors ${isActive ? 'text-accent' : 'text-text-muted hover:text-text'}`}>Aujourd'hui</NavLink>
               <NavLink to="/courses" className={({ isActive }) => `text-sm font-bold transition-colors ${isActive ? 'text-accent' : 'text-text-muted hover:text-text'}`}>Cours</NavLink>
@@ -83,7 +91,7 @@ export function AppLayout() {
               <NavLink to="/study" className={({ isActive }) => `text-sm font-bold transition-colors ${isActive ? 'text-accent' : 'text-text-muted hover:text-text'}`}>Révisions</NavLink>
             </nav>
 
-            {/* Outils & Avatar (Droite) */}
+            {/* Outils & Avatar */}
             <div className="flex items-center gap-3 md:gap-4">
               <button 
                 onClick={() => setIsSearchOpen(true)}
@@ -113,11 +121,11 @@ export function AppLayout() {
                         <p className="text-xs text-text-muted">Étudiant · Droit</p>
                       </div>
                       <button onClick={() => { setIsAvatarMenuOpen(false); navigate('/profile'); }} className="w-full px-4 py-2 text-sm text-text hover:bg-surface flex items-center gap-3 cursor-pointer"><GraduationCap size={16} className="text-accent" /> Profil & Diplôme</button>
-                      <button onClick={() => { setIsAvatarMenuOpen(false); /* Gérer l'ouverture des paramètres plus tard */ }} className="w-full px-4 py-2 text-sm text-text hover:bg-surface flex items-center gap-3 cursor-pointer"><Settings size={16} className="text-text-muted" /> Paramètres</button>
+                      <button onClick={() => { setIsAvatarMenuOpen(false); setIsSettingsModalOpen(true); }} className="w-full px-4 py-2 text-sm text-text hover:bg-surface flex items-center gap-3 cursor-pointer"><Settings size={16} className="text-text-muted" /> Paramètres</button>
                       <div className="h-px bg-border/50 my-1"></div>
-                      <button onClick={() => setIsAvatarMenuOpen(false)} className="w-full px-4 py-2 text-sm text-text hover:bg-surface flex items-center gap-3 cursor-pointer"><HelpCircle size={16} className="text-text-muted" /> Aide et raccourcis</button>
+                      <button onClick={() => { setIsAvatarMenuOpen(false); setIsHelpModalOpen(true); }} className="w-full px-4 py-2 text-sm text-text hover:bg-surface flex items-center gap-3 cursor-pointer"><HelpCircle size={16} className="text-text-muted" /> Aide et raccourcis</button>
                       <div className="h-px bg-border/50 my-1"></div>
-                      <button onClick={() => setIsAvatarMenuOpen(false)} className="w-full px-4 py-2 text-sm text-danger hover:bg-danger/10 flex items-center gap-3 cursor-pointer"><LogOut size={16} /> Se déconnecter</button>
+                      <button onClick={() => { setIsAvatarMenuOpen(false); handleLogout(); }} className="w-full px-4 py-2 text-sm text-danger hover:bg-danger/10 flex items-center gap-3 cursor-pointer"><LogOut size={16} /> Se déconnecter</button>
                     </div>
                   </>
                 )}
@@ -127,15 +135,61 @@ export function AppLayout() {
         </header>
       )}
 
-      {/* CONTENU PRINCIPAL AVEC TRANSITIONS */}
+      {/* CONTENU PRINCIPAL */}
       <main key={location.pathname} className={`flex-1 w-full max-w-5xl mx-auto p-4 md:p-6 relative ${isViewer ? '' : 'pb-28'} ${getTransitionClass()}`}>
         <Outlet />
       </main>
 
-      {/* Command Menu (Logique conservée) */}
+      {/* Command Menu */}
       <CommandMenu isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
 
-      {/* SYSTÈME DE TOASTS (Logique conservée) */}
+      {/* MODALE PARAMÈTRES */}
+      {isSettingsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="w-full max-w-md bg-surface border border-border rounded-3xl p-6 shadow-2xl flex flex-col gap-4 text-text">
+            <div className="flex justify-between items-center border-b border-border/50 pb-3">
+              <h3 className="font-serif font-bold text-lg flex items-center gap-2"><Settings size={18} className="text-accent"/> Paramètres rapides</h3>
+              <button onClick={() => setIsSettingsModalOpen(false)} className="p-1 text-text-muted hover:text-text rounded-full bg-surface-elevated cursor-pointer"><X size={16}/></button>
+            </div>
+            <div className="flex flex-col gap-4 text-sm">
+              <div className="flex justify-between items-center py-2 border-b border-border/50">
+                <span>Mode Focus juriste</span>
+                <button 
+                  onClick={() => setSettings({ ...settings, focusMode: !settings.focusMode })}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border cursor-pointer ${settings.focusMode ? 'bg-accent text-background border-accent' : 'bg-surface-elevated text-text-muted border-border'}`}
+                >
+                  {settings.focusMode ? 'Activé' : 'Désactivé'}
+                </button>
+              </div>
+              <div className="flex justify-between items-center py-2">
+                <span>Stockage cloud (Supabase)</span>
+                <span className="text-xs font-bold text-success bg-success/10 px-2.5 py-1 rounded-lg">Connecté</span>
+              </div>
+            </div>
+            <button onClick={() => setIsSettingsModalOpen(false)} className="mt-2 w-full py-2.5 bg-accent text-background rounded-xl font-bold text-xs cursor-pointer">Fermer</button>
+          </div>
+        </div>
+      )}
+
+      {/* MODALE AIDE & RACCOURCIS */}
+      {isHelpModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="w-full max-w-md bg-surface border border-border rounded-3xl p-6 shadow-2xl flex flex-col gap-4 text-text">
+            <div className="flex justify-between items-center border-b border-border/50 pb-3">
+              <h3 className="font-serif font-bold text-lg flex items-center gap-2"><HelpCircle size={18} className="text-accent"/> Aide & Raccourcis</h3>
+              <button onClick={() => setIsHelpModalOpen(false)} className="p-1 text-text-muted hover:text-text rounded-full bg-surface-elevated cursor-pointer"><X size={16}/></button>
+            </div>
+            <div className="flex flex-col gap-3 text-xs leading-relaxed text-text-muted">
+              <p><strong className="text-text">Recherche globale :</strong> Appuyez sur <kbd className="bg-surface-elevated px-1.5 py-0.5 rounded border border-border font-mono text-text">Cmd+K</kbd> (ou Ctrl+K) n'importe où pour ouvrir la palette de commandes.</p>
+              <p><strong className="text-text">Mode Amphi :</strong> Le bouton "Je suis en cours" permet de consigner vos notes en direct avec sauvegarde instantanée.</p>
+              <p><strong className="text-text">Révisions SM-2 :</strong> L'algorithme ajuste automatiquement vos flashcards selon votre niveau de maîtrise.</p>
+            </div>
+            <button onClick={() => setIsHelpModalOpen(false)} className="mt-2 w-full py-2.5 bg-accent text-background rounded-xl font-bold text-xs cursor-pointer">Compris</button>
+          </div>
+        </div>
+      )}
+
+      {/* SYSTÈME DE TOASTS */}
       {toast && (
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300 pointer-events-none">
           <div className={`flex items-center gap-2 px-4 py-3 rounded-2xl shadow-xl border backdrop-blur-md text-sm font-medium
@@ -153,7 +207,7 @@ export function AppLayout() {
         </div>
       )}
 
-      {/* MENU D'ACTIONS RAPIDES (Le FAB restructuré) */}
+      {/* MENU D'ACTIONS RAPIDES (FAB) */}
       {!isViewer && isActionMenuOpen && (
         <>
           <div className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm animate-in fade-in" onClick={() => setIsActionMenuOpen(false)}></div>
@@ -169,7 +223,7 @@ export function AppLayout() {
             <div className="flex flex-col gap-1 max-h-[60vh] overflow-y-auto custom-scrollbar">
               <span className="text-[10px] uppercase font-bold text-text-muted px-4 py-1.5 tracking-wider mt-1">Créer</span>
               <button onClick={() => { setIsActionMenuOpen(false); navigate('/add/course'); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface rounded-xl cursor-pointer"><BookOpen size={16} className="text-accent" /> Nouveau cours</button>
-              <button onClick={() => { setIsActionMenuOpen(false); navigate('/notes'); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface rounded-xl cursor-pointer"><FileEdit size={16} className="text-success" /> Nouvelle note</button>
+              <button onClick={() => { setIsActionMenuOpen(false); navigate('/editor/new'); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface rounded-xl cursor-pointer"><FileEdit size={16} className="text-success" /> Nouvelle note</button>
               <button onClick={() => { setIsActionMenuOpen(false); navigate('/add/document'); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-text hover:bg-surface rounded-xl cursor-pointer"><FileText size={16} className="text-info" /> Ajouter un document</button>
               
               <div className="h-px bg-border/50 my-1 mx-2"></div>
@@ -189,7 +243,7 @@ export function AppLayout() {
         </>
       )}
 
-      {/* BOTTOM NAV MOBILE (Symétrie Parfaite) */}
+      {/* BOTTOM NAV MOBILE */}
       {!isViewer && (
         <nav aria-label="Navigation principale" className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-surface/95 backdrop-blur-xl border-t border-border px-2 py-2 pb-safe">
           <div className="max-w-md mx-auto flex items-center justify-between relative px-2">
