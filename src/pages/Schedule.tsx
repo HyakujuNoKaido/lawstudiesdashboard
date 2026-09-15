@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { CalendarDays, Plus, Trash2, Edit3, ChevronLeft, ChevronRight, Clock, Download, Upload } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { CalendarDays, Plus, Trash2, Edit3, ChevronLeft, ChevronRight, Clock, Download, Upload, BookOpen, Timer, Scale, FileText, BrainCircuit, ArrowRight } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { fetchEvents, createEvent, fetchCourses } from '../services/supabaseService';
 import { supabase } from '../lib/supabase';
+import { toast } from '../lib/toast';
 
 export function Schedule() {
+  const navigate = useNavigate();
   const [events, setEvents] = useState<any[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,13 +46,25 @@ export function Schedule() {
       }
     } catch (err) {
       console.error("Erreur chargement planning:", err);
+      toast("Erreur lors du chargement", "error");
     } finally {
       setLoading(false);
     }
   }
 
+  // --- Helpers d'UI pour le code couleur ---
+  const getCategoryStyles = (category: string) => {
+    switch (category) {
+      case 'Examen': return { bg: 'bg-danger/10', text: 'text-danger', border: 'border-danger/30', icon: Timer };
+      case 'Séminaire': return { bg: 'bg-success/10', text: 'text-success', border: 'border-success/30', icon: Scale };
+      case 'Rendu': return { bg: 'bg-secondary/10', text: 'text-secondary', border: 'border-secondary/30', icon: FileText };
+      case 'Révision': return { bg: 'bg-warning/10', text: 'text-warning', border: 'border-warning/30', icon: BrainCircuit };
+      default: return { bg: 'bg-info/10', text: 'text-info', border: 'border-info/30', icon: BookOpen };
+    }
+  };
+
   const handleExportICS = () => {
-    let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//SwissLaw Study//Calendar//FR\n";
+    let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Lexi Suisse//Calendar//FR\n";
     events.forEach(ev => {
       const dtStart = new Date(ev.event_date).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
       icsContent += "BEGIN:VEVENT\n";
@@ -64,10 +79,11 @@ export function Schedule() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', 'swisslaw_schedule.ics');
+    link.setAttribute('download', 'lexi_schedule.ics');
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    toast("Planning exporté en ICS", "success");
   };
 
   const handleImportICS = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -92,14 +108,14 @@ export function Schedule() {
               await createEvent({ title, event_date: formattedDate, category: 'Cours' });
             }
           }
-          alert("Calendrier ICS importé avec succès !");
+          toast("Calendrier ICS importé avec succès !", "success");
           loadData();
         } catch (err) {
           console.error("Erreur parsing ICS:", err);
-          alert("Erreur lors de l'importation du fichier ICS.");
+          toast("Erreur lors de l'importation du fichier ICS.", "error");
         }
       } else {
-        alert("Format ICS non reconnu ou fichier vide.");
+        toast("Format ICS non reconnu ou fichier vide.", "warning");
       }
     };
     reader.readAsText(file);
@@ -137,8 +153,10 @@ export function Schedule() {
           })
           .eq('id', editingId);
         if (error) throw error;
+        toast("Événement mis à jour", "success");
       } else {
         await createEvent(form);
+        toast("Événement ajouté au planning", "success");
       }
       
       setIsModalOpen(false);
@@ -147,7 +165,7 @@ export function Schedule() {
       loadData();
     } catch (err) {
       console.error("Erreur enregistrement événement:", err);
-      alert("Échec de l'enregistrement de l'événement.");
+      toast("Échec de l'enregistrement de l'événement.", "error");
     }
   };
 
@@ -157,9 +175,11 @@ export function Schedule() {
       const { error } = await supabase.from('events').delete().eq('id', eventToDelete);
       if (error) throw error;
       setEventToDelete(null);
+      toast("Événement supprimé", "success");
       loadData();
     } catch (err) {
       console.error("Erreur suppression événement:", err);
+      toast("Erreur lors de la suppression", "error");
     }
   };
 
@@ -210,10 +230,10 @@ export function Schedule() {
   return (
     <div className="flex flex-col gap-6 pt-2 pb-16 animate-in fade-in duration-300 text-text">
       
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-1">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-1 border-b border-border pb-6">
         <div>
           <h1 className="font-serif text-3xl font-bold">Mon planning</h1>
-          <p className="text-text-muted text-xs">Calendrier interactif et synchronisation iCalendar (ICS).</p>
+          <p className="text-text-muted text-sm mt-1">Gérez votre emploi du temps et vos échéances.</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -223,22 +243,22 @@ export function Schedule() {
             title="Exporter en fichier .ics"
           >
             <Download size={15} className="text-accent" />
-            <span>Export ICS</span>
+            <span className="hidden sm:inline">Export ICS</span>
           </button>
 
           <label className="bg-surface border border-border px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 hover:border-accent/50 transition-colors cursor-pointer">
             <Upload size={15} className="text-info" />
-            <span>Import ICS</span>
+            <span className="hidden sm:inline">Import ICS</span>
             <input type="file" accept=".ics" onChange={handleImportICS} className="hidden" />
           </label>
 
-          <div className="flex bg-surface border border-border rounded-xl p-1">
+          <div className="flex bg-surface-elevated border border-border rounded-xl p-1">
             {(['month', 'week', 'day'] as const).map(mode => (
               <button
                 key={mode}
                 onClick={() => setViewMode(mode)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors cursor-pointer ${
-                  viewMode === mode ? 'bg-accent text-background font-semibold' : 'text-text-muted hover:text-text'
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-colors cursor-pointer ${
+                  viewMode === mode ? 'bg-accent text-background' : 'text-text-muted hover:text-text'
                 }`}
               >
                 {mode === 'month' ? 'Mois' : mode === 'week' ? 'Semaine' : 'Jour'}
@@ -248,36 +268,29 @@ export function Schedule() {
 
           <button 
             onClick={() => { setEditingId(null); setForm({ title: '', event_date: '', category: 'Cours', course_id: courses[0]?.id || '' }); setIsModalOpen(true); }}
-            className="bg-accent text-background px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 glow-gold hover:bg-accent-strong transition-colors cursor-pointer"
+            className="bg-accent text-background px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 glow-gold hover:bg-accent-strong transition-colors cursor-pointer"
           >
             <Plus size={16} />
-            <span>Ajouter</span>
+            <span className="hidden sm:inline">Ajouter</span>
           </button>
         </div>
       </header>
 
+      {/* NAVIGATION TEMPORELLE */}
+      <div className="flex justify-between items-center bg-surface border border-border rounded-2xl p-2 shadow-sm">
+        <button onClick={handlePrev} className="p-2 text-text-muted hover:text-accent transition-colors cursor-pointer"><ChevronLeft size={20} /></button>
+        <span className="font-serif text-lg md:text-xl font-bold text-text">
+          {viewMode === 'month' && `${monthNames[month]} ${year}`}
+          {viewMode === 'week' && `Sem. du ${weekDays[0].toLocaleDateString('fr-CH', {day: 'numeric', month:'short'})}`}
+          {viewMode === 'day' && currentDate.toLocaleDateString('fr-CH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+        </span>
+        <button onClick={handleNext} className="p-2 text-text-muted hover:text-accent transition-colors cursor-pointer"><ChevronRight size={20} /></button>
+      </div>
+
       {/* Calendrier Visuel Interactif */}
       <Card className="bg-surface border-border p-4 flex flex-col gap-4">
-        
-        <div className="flex justify-between items-center px-2">
-          <h3 className="font-serif text-lg font-bold">
-            {viewMode === 'month' && `${monthNames[month]} ${year}`}
-            {viewMode === 'week' && `Semaine du ${weekDays[0].toLocaleDateString()} au ${weekDays[6].toLocaleDateString()}`}
-            {viewMode === 'day' && currentDate.toLocaleDateString('fr-CH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-          </h3>
-          <div className="flex items-center gap-1">
-            <button onClick={handlePrev} className="p-2 text-text-muted hover:text-text rounded-lg hover:bg-surface-elevated transition-colors cursor-pointer" title="Précédent">
-              <ChevronLeft size={18} />
-            </button>
-            <button onClick={() => setCurrentDate(new Date())} className="px-3 py-1 text-xs bg-surface-elevated rounded-lg text-text hover:text-accent transition-colors">
-              Aujourd'hui
-            </button>
-            <button onClick={handleNext} className="p-2 text-text-muted hover:text-text rounded-lg hover:bg-surface-elevated transition-colors cursor-pointer" title="Suivant">
-              <ChevronRight size={18} />
-            </button>
-          </div>
-        </div>
 
+        {/* VUE MOIS : Grille classique */}
         {viewMode === 'month' && (
           <div className="flex flex-col gap-2">
             <div className="grid grid-cols-7 text-center text-[10px] font-semibold text-text-muted uppercase tracking-wider">
@@ -286,7 +299,7 @@ export function Schedule() {
 
             <div className="grid grid-cols-7 gap-1 text-center">
               {Array.from({ length: adjustedFirstDay }).map((_, i) => (
-                <div key={`empty-${i}`} className="h-12" />
+                <div key={`empty-${i}`} className="h-12 md:h-16" />
               ))}
 
               {Array.from({ length: daysInMonth }).map((_, i) => {
@@ -304,21 +317,22 @@ export function Schedule() {
                       setCurrentDate(targetDate);
                       setViewMode('day');
                     }}
-                    className={`h-12 rounded-xl flex flex-col items-center justify-center relative cursor-pointer transition-all p-1 ${
-                      isToday ? 'bg-accent/20 border border-accent text-accent font-bold' : 'hover:bg-surface-elevated text-text border border-transparent'
+                    className={`h-12 md:h-16 rounded-xl flex flex-col items-center justify-center relative cursor-pointer transition-all p-1 border ${
+                      isToday ? 'bg-accent/10 border-accent text-accent font-bold' : 'bg-surface-elevated border-border text-text hover:border-accent/40'
                     }`}
                   >
-                    <span className="text-xs">{dayNum}</span>
+                    <span className="text-xs md:text-sm">{dayNum}</span>
                     {dayEvents.length > 0 && (
-                      <div className="flex gap-0.5 mt-1">
-                        {dayEvents.slice(0, 3).map((ev, idx) => (
-                          <span 
-                            key={idx} 
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              ev.category === 'Examen' ? 'bg-danger' : ev.category === 'Séminaire' ? 'bg-success' : 'bg-info'
-                            }`}
-                          />
-                        ))}
+                      <div className="flex flex-wrap justify-center gap-0.5 mt-1 px-1">
+                        {dayEvents.slice(0, 4).map((ev, idx) => {
+                          const style = getCategoryStyles(ev.category);
+                          return (
+                            <span 
+                              key={idx} 
+                              className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full ${style.text.replace('text-', 'bg-')}`}
+                            />
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -328,43 +342,67 @@ export function Schedule() {
           </div>
         )}
 
+        {/* VUE SEMAINE : Liste chronologique par jour (Idéal Mobile) */}
         {viewMode === 'week' && (
-          <div className="grid grid-cols-1 md:grid-cols-7 gap-2">
+          <div className="flex flex-col gap-6">
             {weekDays.map((day, idx) => {
               const dateStr = day.toISOString().split('T')[0];
-              const dayEvents = events.filter(e => e.event_date && e.event_date.startsWith(dateStr));
+              const dayEvents = events.filter(e => e.event_date?.startsWith(dateStr)).sort((a,b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime());
               const isToday = new Date().toDateString() === day.toDateString();
+              const loadIndicator = dayEvents.length > 3 ? 'bg-danger' : dayEvents.length > 0 ? 'bg-accent' : 'bg-transparent';
 
               return (
-                <div 
-                  key={idx} 
-                  className={`bg-surface-elevated rounded-xl p-3 flex flex-col gap-2 min-h-[140px] border ${
-                    isToday ? 'border-accent' : 'border-border'
-                  }`}
-                >
-                  <div className="flex justify-between items-center border-b border-border pb-1">
-                    <span className="text-xs font-bold text-text">{dayNames[idx]}</span>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${isToday ? 'bg-accent text-background font-bold' : 'text-text-muted'}`}>
-                      {day.getDate()}
-                    </span>
+                <div key={idx} className="flex flex-col">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center border ${isToday ? 'bg-accent text-background border-accent' : 'bg-surface-elevated border-border text-text'}`}>
+                      <span className="text-[9px] uppercase font-bold opacity-80">{dayNames[idx].substring(0,3)}</span>
+                      <span className="text-sm font-bold">{day.getDate()}</span>
+                    </div>
+                    <div className="h-px bg-border flex-1"></div>
+                    <div className={`w-2 h-2 rounded-full ${loadIndicator}`}></div>
                   </div>
 
-                  <div className="flex flex-col gap-1.5 overflow-y-auto max-h-[180px]">
+                  <div className="flex flex-col gap-3 pl-4 md:pl-16">
                     {dayEvents.length === 0 ? (
-                      <span className="text-[10px] text-text-muted italic text-center py-4">Rien de prévu</span>
+                      <p className="text-xs text-text-muted italic">Aucun événement</p>
                     ) : (
-                      dayEvents.map(ev => (
-                        <div 
-                          key={ev.id} 
-                          onClick={(e) => handleEdit(ev, e)}
-                          className="bg-surface p-2 rounded-lg border border-border text-[11px] hover:border-accent/50 cursor-pointer"
-                        >
-                          <p className="font-semibold text-text truncate">{ev.title}</p>
-                          <span className="text-[9px] text-text-muted">
-                            {new Date(ev.event_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                      ))
+                      dayEvents.map(ev => {
+                        const style = getCategoryStyles(ev.category);
+                        const Icon = style.icon;
+                        return (
+                          <div key={ev.id} className={`flex flex-col bg-surface-elevated border-l-[4px] border-y border-r border-y-border border-r-border rounded-r-xl p-4 shadow-sm ${style.border}`}>
+                            <div className="flex justify-between items-start mb-2">
+                              <div className="flex items-center gap-2">
+                                <div className={`p-1.5 rounded-lg ${style.bg} ${style.text}`}><Icon size={16} /></div>
+                                <span className="text-[11px] font-mono font-bold text-text-muted">
+                                  {new Date(ev.event_date).toLocaleTimeString('fr-CH', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
+                              <div className="flex gap-1">
+                                <button onClick={(e) => handleEdit(ev, e)} className="p-1.5 text-text-muted hover:text-text cursor-pointer"><Edit3 size={14}/></button>
+                                <button onClick={(e) => { e.stopPropagation(); setEventToDelete(ev.id); }} className="p-1.5 text-text-muted hover:text-danger cursor-pointer"><Trash2 size={14}/></button>
+                              </div>
+                            </div>
+                            
+                            <h4 className="font-semibold text-sm text-text">{ev.title}</h4>
+                            {ev.courses?.title && <p className="text-xs text-text-muted mt-1">{ev.courses.title}</p>}
+                            
+                            {/* Hub d'action intégré */}
+                            <div className="flex items-center gap-2 mt-4 pt-3 border-t border-border/50">
+                              {ev.course_id && (
+                                <button onClick={() => navigate(`/courses/${ev.course_id}`)} className="text-[10px] uppercase font-bold tracking-wider text-text-muted hover:text-text flex items-center gap-1 cursor-pointer">
+                                  Ouvrir le cours <ArrowRight size={12} />
+                                </button>
+                              )}
+                              {ev.category === 'Révision' && (
+                                <button onClick={() => navigate('/study')} className="text-[10px] uppercase font-bold tracking-wider text-warning hover:text-warning/80 flex items-center gap-1 ml-auto cursor-pointer">
+                                  Lancer la session <ArrowRight size={12} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 </div>
@@ -373,8 +411,9 @@ export function Schedule() {
           </div>
         )}
 
+        {/* VUE JOUR : Liste horaire détaillée */}
         {viewMode === 'day' && (
-          <div className="flex flex-col gap-2 max-h-[500px] overflow-y-auto pr-2">
+          <div className="flex flex-col gap-2 max-h-[600px] overflow-y-auto pr-2">
             {Array.from({ length: 13 }).map((_, hourIdx) => {
               const hour = hourIdx + 8;
               const hourStr = `${String(hour).padStart(2, '0')}:00`;
@@ -390,29 +429,32 @@ export function Schedule() {
                   
                   <div className="flex-1 flex flex-col gap-2 min-h-[35px]">
                     {hourEvents.length > 0 ? (
-                      hourEvents.map(ev => (
-                        <div 
-                          key={ev.id} 
-                          onClick={(e) => handleEdit(ev, e)}
-                          className="bg-surface-elevated p-3 rounded-xl border border-border hover:border-accent flex justify-between items-center cursor-pointer shadow-sm"
-                        >
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <p className="font-medium text-sm text-text">{ev.title}</p>
-                              <Badge variant={ev.category === 'Examen' ? 'danger' : 'outline'}>{ev.category}</Badge>
+                      hourEvents.map(ev => {
+                        const style = getCategoryStyles(ev.category);
+                        const Icon = style.icon;
+                        return (
+                          <div 
+                            key={ev.id} 
+                            onClick={(e) => handleEdit(ev, e)}
+                            className={`bg-surface-elevated p-3 rounded-xl border-l-[4px] border-y border-r border-y-border border-r-border flex flex-col sm:flex-row sm:items-center gap-3 cursor-pointer shadow-sm hover:border-r-accent ${style.border}`}
+                          >
+                            <div className={`p-2 rounded-lg shrink-0 w-fit ${style.bg} ${style.text}`}>
+                              <Icon size={16} />
                             </div>
-                            <p className="text-xs text-text-muted mt-0.5">{ev.courses?.title || 'Matière générale'}</p>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <p className="font-medium text-sm text-text">{ev.title}</p>
+                                <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded ${style.bg} ${style.text}`}>{ev.category}</span>
+                              </div>
+                              <p className="text-xs text-text-muted mt-0.5">{ev.courses?.title || 'Matière générale'}</p>
+                            </div>
+                            <div className="flex items-center gap-1 sm:ml-auto mt-2 sm:mt-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/50">
+                              <button onClick={(e) => handleEdit(ev, e)} className="p-2 text-text-muted hover:text-accent cursor-pointer"><Edit3 size={14} /></button>
+                              <button onClick={(e) => { e.stopPropagation(); setEventToDelete(ev.id); }} className="p-2 text-text-muted hover:text-danger cursor-pointer"><Trash2 size={14} /></button>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <button onClick={(e) => handleEdit(ev, e)} className="p-1 text-text-muted hover:text-accent cursor-pointer">
-                              <Edit3 size={14} />
-                            </button>
-                            <button onClick={(e) => { e.stopPropagation(); setEventToDelete(ev.id); }} className="p-1 text-text-muted hover:text-danger cursor-pointer">
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </div>
-                      ))
+                        );
+                      })
                     ) : (
                       <div className="h-full border border-dashed border-border/30 rounded-lg flex items-center px-3 text-[11px] text-text-muted/40">
                         Créneau libre
@@ -427,67 +469,13 @@ export function Schedule() {
 
       </Card>
 
-      {/* --- LISTE DES ÉVÉNEMENTS --- */}
-      <div className="flex flex-col gap-3">
-        <h2 className="font-serif text-lg font-semibold px-1">
-          {viewMode === 'month' && 'Événements du mois'}
-          {viewMode === 'week' && 'Événements de la semaine'}
-          {viewMode === 'day' && `Événements du ${currentDate.toLocaleDateString()}`}
-        </h2>
-
-        {loading ? (
-          <div className="text-center py-12 text-text-muted text-sm">Chargement...</div>
-        ) : filteredEvents.length === 0 ? (
-          <div className="text-center py-10 border border-dashed border-border rounded-xl text-text-muted text-sm">
-            Aucun événement planifié pour cette période.
-          </div>
-        ) : (
-          filteredEvents.map(evt => (
-            <Card key={evt.id} className="bg-surface border-border p-4 flex items-center justify-between hover:border-accent/40 transition-colors">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-surface-elevated rounded-xl flex items-center justify-center text-accent shrink-0">
-                  <CalendarDays size={20} />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <p className="font-medium text-sm text-text">{evt.title}</p>
-                    <Badge variant={evt.category === 'Examen' ? 'danger' : 'outline'}>{evt.category}</Badge>
-                  </div>
-                  <p className="text-xs text-text-muted flex items-center gap-1 mt-0.5">
-                    <Clock size={12} />
-                    <span>{evt.courses?.title ? `${evt.courses.title} • ` : ''}{new Date(evt.event_date).toLocaleString()}</span>
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1">
-                <button 
-                  onClick={(e) => handleEdit(evt, e)}
-                  className="p-2 text-text-muted hover:text-accent transition-colors cursor-pointer"
-                  title="Modifier"
-                >
-                  <Edit3 size={16} />
-                </button>
-                <button 
-                  onClick={(e) => { e.stopPropagation(); setEventToDelete(evt.id); }}
-                  className="p-2 text-text-muted hover:text-danger transition-colors cursor-pointer"
-                  title="Supprimer"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            </Card>
-          ))
-        )}
-      </div>
-
       {/* Modal Ajout / Modification */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-surface-elevated border border-border rounded-2xl p-6 shadow-2xl">
+          <div className="w-full max-w-md bg-surface border border-border rounded-3xl p-6 shadow-2xl">
             <h2 className="font-serif text-xl font-bold mb-4">{editingId ? "Modifier l'événement" : "Nouvel événement"}</h2>
             
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-5">
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium text-text-muted">Titre</label>
                 <input 
@@ -496,11 +484,11 @@ export function Schedule() {
                   value={form.title}
                   onChange={(e) => setForm({ ...form, title: e.target.value })}
                   placeholder="ex: Séminaire de droit civil"
-                  className="w-full bg-surface border border-border rounded-xl py-3 px-3 text-sm focus:outline-none focus:border-accent"
+                  className="w-full bg-surface-elevated border border-border rounded-xl py-3 px-3 text-sm focus:outline-none focus:border-accent"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-medium text-text-muted">Date et heure</label>
                   <input 
@@ -508,7 +496,7 @@ export function Schedule() {
                     required
                     value={form.event_date}
                     onChange={(e) => setForm({ ...form, event_date: e.target.value })}
-                    className="w-full bg-surface border border-border rounded-xl py-3 px-3 text-sm focus:outline-none focus:border-accent"
+                    className="w-full bg-surface-elevated border border-border rounded-xl py-3 px-3 text-sm focus:outline-none focus:border-accent"
                   />
                 </div>
 
@@ -517,12 +505,13 @@ export function Schedule() {
                   <select 
                     value={form.category}
                     onChange={(e) => setForm({ ...form, category: e.target.value })}
-                    className="w-full bg-surface border border-border rounded-xl py-3 px-3 text-sm focus:outline-none focus:border-accent appearance-none"
+                    className="w-full bg-surface-elevated border border-border rounded-xl py-3 px-3 text-sm focus:outline-none focus:border-accent appearance-none cursor-pointer"
                   >
                     <option value="Cours">Cours</option>
                     <option value="Examen">Examen</option>
                     <option value="Séminaire">Séminaire</option>
-                    <option value="Rendu">Rendu</option>
+                    <option value="Révision">Révision (Bloc)</option>
+                    <option value="Rendu">Rendu (Deadline)</option>
                   </select>
                 </div>
               </div>
@@ -532,7 +521,7 @@ export function Schedule() {
                 <select 
                   value={form.course_id}
                   onChange={(e) => setForm({ ...form, course_id: e.target.value })}
-                  className="w-full bg-surface border border-border rounded-xl py-3 px-3 text-sm focus:outline-none focus:border-accent appearance-none"
+                  className="w-full bg-surface-elevated border border-border rounded-xl py-3 px-3 text-sm focus:outline-none focus:border-accent appearance-none cursor-pointer"
                 >
                   <option value="">Aucun</option>
                   {courses.map(c => (
@@ -541,17 +530,17 @@ export function Schedule() {
                 </select>
               </div>
 
-              <div className="flex gap-2 mt-4">
+              <div className="flex gap-3 mt-4">
                 <button 
                   type="button" 
                   onClick={() => setIsModalOpen(false)}
-                  className="flex-1 bg-surface border border-border text-text py-3 rounded-xl text-sm font-medium hover:bg-surface/85 cursor-pointer"
+                  className="flex-1 bg-surface-elevated border border-border text-text py-3 rounded-xl text-sm font-medium hover:bg-border cursor-pointer transition-colors"
                 >
                   Annuler
                 </button>
                 <button 
                   type="submit" 
-                  className="flex-1 bg-accent text-background py-3 rounded-xl text-sm font-semibold glow-gold hover:bg-accent-strong cursor-pointer"
+                  className="flex-1 bg-accent text-background py-3 rounded-xl text-sm font-semibold glow-gold hover:bg-accent-strong cursor-pointer transition-colors"
                 >
                   {editingId ? 'Mettre à jour' : 'Enregistrer'}
                 </button>
