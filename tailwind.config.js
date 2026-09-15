@@ -1,4 +1,3 @@
-/** @type {import('tailwindcss').Config} */
 export default {
   content: [
     "./index.html",
@@ -15,6 +14,7 @@ export default {
         'text-muted': 'var(--color-text-muted)',
         accent: 'var(--color-accent)',
         'accent-strong': 'var(--color-accent-strong)',
+        secondary: 'var(--color-secondary)', /* Le bordeaux juridique */
         success: 'var(--color-success)',
         warning: 'var(--color-warning)',
         danger: 'var(--color-danger)',
@@ -23,6 +23,7 @@ export default {
       fontFamily: {
         serif: ['"DM Serif Display"', 'serif'],
         sans: ['Inter', 'sans-serif'],
+        mono: ['"Space Grotesk"', 'monospace'], /* Utilisé pour les ECTS, dates, ATF */
       },
       borderRadius: {
         sm: 'var(--radius-sm)',
