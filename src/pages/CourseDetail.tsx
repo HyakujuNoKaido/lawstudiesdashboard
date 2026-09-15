@@ -41,7 +41,7 @@ export function CourseDetail() {
   // État plié/déplié des chapitres
   const [openChapters, setOpenChapters] = useState<Record<string, boolean>>({});
 
-  // NOUVEAU : État pour la sélection multiple (Batch Selection)
+  // Sélection multiple
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedChapterIds, setSelectedChapterIds] = useState<string[]>([]);
   const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
@@ -92,17 +92,12 @@ export function CourseDetail() {
     setOpenChapters(newState);
   };
 
-  // Gestion de la sélection multiple
   const toggleSelectChapter = (id: string) => {
-    setSelectedChapterIds(prev => 
-      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
-    );
+    setSelectedChapterIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
   };
 
   const toggleSelectDoc = (id: string) => {
-    setSelectedDocIds(prev => 
-      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
-    );
+    setSelectedDocIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
   };
 
   const handleSelectAll = () => {
@@ -115,7 +110,6 @@ export function CourseDetail() {
     }
   };
 
-  // Suppression en masse (Batch Delete)
   const handleBatchDelete = async () => {
     try {
       if (selectedChapterIds.length > 0) {
@@ -123,7 +117,6 @@ export function CourseDetail() {
         if (error) throw error;
       }
       if (selectedDocIds.length > 0) {
-        // Supprimer les fichiers physiques du storage avant de supprimer les lignes
         for (const docId of selectedDocIds) {
           const doc = documents.find(d => d.id === docId);
           if (doc?.bucket_path) {
@@ -133,14 +126,13 @@ export function CourseDetail() {
         const { error } = await supabase.from('documents').delete().in('id', selectedDocIds);
         if (error) throw error;
       }
-      toast("Éléments sélectionnés supprimés avec succès", "success");
+      toast("Éléments sélectionnés supprimés", "success");
       setSelectedChapterIds([]);
       setSelectedDocIds([]);
       setIsSelectMode(false);
       setIsBatchDeleteModalOpen(false);
       loadData();
     } catch (err) {
-      console.error(err);
       toast("Erreur lors de la suppression groupée", "error");
     }
   };
@@ -158,7 +150,7 @@ export function CourseDetail() {
       setNewChapterTitle('');
       setIsAddingChapter(false);
       setParentChapterId(null);
-      toast("Chapitre ou sous-chapitre ajouté", "success");
+      toast("Chapitre ajouté", "success");
       loadData();
     } catch (err) {
       toast("Erreur lors de la création", "error");
@@ -197,7 +189,7 @@ export function CourseDetail() {
       await parseAndCreateChaptersFromSyllabus(courseId, bulkSyllabusText);
       setBulkSyllabusText('');
       setShowBulkModal(false);
-      toast("Table des matières hiérarchique importée !", "success");
+      toast("Table des matières importée !", "success");
       loadData();
     } catch (err) {
       toast("Erreur lors de l'importation", "error");
@@ -223,10 +215,10 @@ export function CourseDetail() {
       await createEvent({ title: eventForm.title, event_date: eventForm.event_date, category: eventForm.category, course_id: courseId });
       setEventForm({ title: '', event_date: '', category: 'Cours' });
       setIsAddingEvent(false);
-      toast("Créneau ajouté au planning", "success");
+      toast("Créneau ajouté", "success");
       loadData();
     } catch (err) {
-      toast("Erreur lors de l'ajout du créneau", "error");
+      toast("Erreur", "error");
     }
   };
 
@@ -264,17 +256,19 @@ export function CourseDetail() {
   const chapterTree = buildChapterTree(chapters);
   const totalSelectedCount = selectedChapterIds.length + selectedDocIds.length;
 
+  // FONCTION RÉCURSIVE INTELLIGENTE POUR L'ACCORDÉON HÉRÉDITAIRE
   const renderChapterItem = (chapter: any, depth = 0) => {
     const chapterDocs = documents.filter(d => d.chapter_id === chapter.id);
     const hasCards = flashcards.some(f => f.chapter_id === chapter.id);
     const isEditing = editingChapterId === chapter.id;
     const isOpen = openChapters[chapter.id] ?? true;
     const isSelected = selectedChapterIds.includes(chapter.id);
-    const indentClass = depth === 1 ? 'ml-6 border-l-2 border-accent/30 pl-2' : depth >= 2 ? 'ml-12 border-l-2 border-secondary/30 pl-2' : '';
 
     return (
-      <div key={chapter.id} className={`flex flex-col gap-2 ${indentClass}`}>
+      <div key={chapter.id} className="flex flex-col gap-2">
         <div className={`bg-surface border rounded-2xl overflow-hidden shadow-sm group transition-all ${isSelected ? 'border-accent bg-accent/5' : 'border-border'}`}>
+          
+          {/* En-tête du chapitre (Cliquable pour plier/déplier) */}
           <div 
             onClick={() => {
               if (isSelectMode) {
@@ -286,7 +280,6 @@ export function CourseDetail() {
             className="p-3.5 flex items-center justify-between bg-surface hover:bg-surface-elevated transition-colors cursor-pointer select-none"
           >
             <div className="flex items-center gap-3 flex-1 min-w-0 pr-2">
-              {/* Checkbox en mode sélection */}
               {isSelectMode && (
                 <div onClick={(e) => { e.stopPropagation(); toggleSelectChapter(chapter.id); }} className="text-accent cursor-pointer shrink-0">
                   {isSelected ? <CheckSquare size={18} /> : <Square size={18} className="text-text-muted" />}
@@ -314,6 +307,7 @@ export function CourseDetail() {
             </div>
           </div>
 
+          {/* Édition en ligne */}
           {isEditing && (
             <div className="p-3 bg-surface-elevated border-t border-border flex gap-2" onClick={(e) => e.stopPropagation()}>
               <input type="text" autoFocus value={editingTitle} onChange={(e) => setEditingTitle(e.target.value)} className="bg-background border border-border rounded-lg px-3 py-1 text-sm text-text w-full focus:border-accent" />
@@ -322,50 +316,64 @@ export function CourseDetail() {
             </div>
           )}
 
-          {isOpen && chapterDocs.length > 0 && (
-            <div className="border-t border-border/50 bg-background/50 flex flex-col divide-y divide-border/50">
-              {chapterDocs.map(doc => {
-                const isPdf = doc.mime_type === 'application/pdf' || doc.original_name.endsWith('.pdf');
-                const isDocSelected = selectedDocIds.includes(doc.id);
-                return (
-                  <div 
-                    key={doc.id} 
-                    onClick={() => {
-                      if (isSelectMode) toggleSelectDoc(doc.id);
-                      else navigate(`/viewer/${doc.id}`);
-                    }} 
-                    className={`p-3 pl-12 flex items-center justify-between cursor-pointer transition-colors ${isDocSelected ? 'bg-accent/10' : 'hover:bg-surface'}`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      {isSelectMode && (
-                        <div onClick={(e) => { e.stopPropagation(); toggleSelectDoc(doc.id); }} className="text-accent cursor-pointer shrink-0">
-                          {isDocSelected ? <CheckSquare size={16} /> : <Square size={16} className="text-text-muted" />}
+          {/* CONTENU DU CHAPITRE : S'affiche uniquement si déplié (isOpen) */}
+          {isOpen && (
+            <div className="border-t border-border/50 bg-background/40 flex flex-col">
+              
+              {/* Documents directs du chapitre */}
+              {chapterDocs.length > 0 && (
+                <div className="flex flex-col divide-y divide-border/50">
+                  {chapterDocs.map(doc => {
+                    const isPdf = doc.mime_type === 'application/pdf' || doc.original_name.endsWith('.pdf');
+                    const isDocSelected = selectedDocIds.includes(doc.id);
+                    return (
+                      <div 
+                        key={doc.id} 
+                        onClick={() => {
+                          if (isSelectMode) toggleSelectDoc(doc.id);
+                          else navigate(`/viewer/${doc.id}`);
+                        }} 
+                        className={`p-3 pl-12 flex items-center justify-between cursor-pointer transition-colors ${isDocSelected ? 'bg-accent/15' : 'hover:bg-surface'}`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          {isSelectMode && (
+                            <div onClick={(e) => { e.stopPropagation(); toggleSelectDoc(doc.id); }} className="text-accent cursor-pointer shrink-0">
+                              {isDocSelected ? <CheckSquare size={16} /> : <Square size={16} className="text-text-muted" />}
+                            </div>
+                          )}
+                          <div className={`p-1.5 rounded-lg shrink-0 ${isPdf ? 'bg-danger/10 text-danger' : 'bg-info/10 text-info'}`}>
+                            <FileText size={14} />
+                          </div>
+                          <div className="min-w-0 pr-2">
+                            <p className="text-sm font-medium text-text truncate hover:text-accent transition-colors">{doc.original_name}</p>
+                          </div>
                         </div>
-                      )}
-                      <div className={`p-1.5 rounded-lg shrink-0 ${isPdf ? 'bg-danger/10 text-danger' : 'bg-info/10 text-info'}`}>
-                        <FileText size={14} />
+                        {!isSelectMode && (
+                          <button onClick={(e) => { e.stopPropagation(); setDocToDelete({ id: doc.id, path: doc.bucket_path }); }} className="p-1.5 text-text-muted hover:text-danger rounded-lg transition-colors cursor-pointer">
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
-                      <div className="min-w-0 pr-2">
-                        <p className="text-sm font-medium text-text truncate hover:text-accent transition-colors">{doc.original_name}</p>
-                      </div>
-                    </div>
-                    {!isSelectMode && (
-                      <button onClick={(e) => { e.stopPropagation(); setDocToDelete({ id: doc.id, path: doc.bucket_path }); }} className="p-1.5 text-text-muted hover:text-danger rounded-lg transition-colors cursor-pointer">
-                        <Trash2 size={14} />
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* SOUS-CHAPITRES IMBRIQUÉS (Repliés ou dépliés avec le parent) */}
+              {chapter.children && chapter.children.length > 0 && (
+                <div className="flex flex-col gap-2 p-2.5 border-t border-border/30 bg-background/60">
+                  {chapter.children.map((child: any) => renderChapterItem(child, depth + 1))}
+                </div>
+              )}
+
+              {chapterDocs.length === 0 && (!chapter.children || chapter.children.length === 0) && (
+                <div className="p-4 text-center text-xs text-text-muted italic">
+                  Ce chapitre est vide.
+                </div>
+              )}
             </div>
           )}
         </div>
-
-        {chapter.children && chapter.children.length > 0 && (
-          <div className="flex flex-col gap-2 mt-1">
-            {chapter.children.map((child: any) => renderChapterItem(child, depth + 1))}
-          </div>
-        )}
       </div>
     );
   };
@@ -417,16 +425,22 @@ export function CourseDetail() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* COLONNE GAUCHE (Chapitres hiérarchiques avec sélection multiple) */}
+        {/* COLONNE GAUCHE (Chapitres hiérarchiques avec sélection multiple et accordéon gigogne) */}
         <section className="lg:col-span-2 flex flex-col gap-4 text-text">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-2">
             <div className="flex items-center gap-3">
               <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
                 <LayoutGrid size={16} /> Structure hiérarchique ({chapters.length})
               </h2>
+              {chapters.length > 0 && (
+                <div className="flex items-center gap-1 text-[11px] text-text-muted font-mono">
+                  <button onClick={() => handleToggleAll(true)} className="hover:text-accent cursor-pointer">Déplier tout</button>
+                  <span>•</span>
+                  <button onClick={() => handleToggleAll(false)} className="hover:text-accent cursor-pointer">Plier tout</button>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2">
-              {/* Bouton de bascule du mode sélection */}
               <button 
                 onClick={() => {
                   setIsSelectMode(!isSelectMode);
