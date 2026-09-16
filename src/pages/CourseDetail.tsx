@@ -1,4 +1,3 @@
-## File: src/pages/CourseDetail.tsx
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ChevronLeft, FileText, LayoutGrid, Scale, Plus, X, CheckSquare, Square, FolderInput, UploadCloud, Sparkles, Calendar, BookOpen, FileEdit, BrainCircuit, CheckCircle2, Circle, AlertCircle, ChevronDown, ChevronRight, ClipboardPaste, Trash2 } from 'lucide-react';
