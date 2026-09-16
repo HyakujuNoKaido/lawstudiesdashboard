@@ -4,23 +4,27 @@
 
 @layer base {
   :root {
-    --color-background: #0A0A0E;
-    --color-surface: #121218;
-    --color-surface-elevated: #191922;
-    --color-border: #262631;
-    --color-text: #F1F1F4;
-    --color-text-muted: #9595A6;
-    --color-accent: #FFB800;
-    --color-accent-strong: #E5A600;
-    --color-secondary: #7A2828; /* Bordeaux chaud */
-    --color-success: #10B981;
-    --color-warning: #F59E0B;
-    --color-danger: #EF4444;
-    --color-info: #3B82F6;
+    /* Hiérarchie stricte Apple-like */
+    --color-background: #090A0E;
+    --color-surface: #111218;
+    --color-surface-elevated: #191B23;
+    --color-surface-interactive: #222530;
     
-    --radius-sm: 0.25rem;
-    --radius-md: 0.5rem;
-    --radius-lg: 0.75rem;
+    /* Bordures ultra discrètes */
+    --color-border: rgba(255, 255, 255, 0.08);
+    
+    /* Textes */
+    --color-text: #F5F5F7;
+    --color-text-muted: #86868B;
+    
+    /* Couleurs sémantiques */
+    --color-accent: #FFB800; /* Or */
+    --color-accent-strong: #E5A600;
+    --color-secondary: #7A2828; /* Bordeaux Juridique */
+    --color-success: #34C759; /* Vert Apple */
+    --color-warning: #FF9F0A; /* Orange Apple */
+    --color-danger: #FF453A; /* Rouge Apple */
+    --color-info: #0A84FF; /* Bleu Apple */
   }
 
   html, body {
@@ -30,14 +34,15 @@
     margin: 0;
     padding: 0;
     overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Forcer le mode sombre sur les champs de saisie, on réduit le côté plastique */
   input, select, textarea {
     background-color: var(--color-surface) !important;
     color: var(--color-text) !important;
     border-color: var(--color-border) !important;
-    transition: border-color 0.2s ease;
+    transition: all 0.2s ease;
   }
 
   input:focus, select:focus, textarea:focus {
@@ -48,20 +53,19 @@
 }
 
 @layer utilities {
-  /* On affine les glows pour les rendre moins "app générique" */
+  /* Glows limités aux boutons primaires */
   .glow-gold {
-    box-shadow: 0 0 16px rgba(255, 184, 0, 0.15);
-  }
-  .glow-gold-subtle {
-    box-shadow: 0 0 8px rgba(255, 184, 0, 0.08);
-  }
-  .glow-green {
-    box-shadow: 0 0 16px rgba(16, 185, 129, 0.15);
+    box-shadow: 0 4px 20px -4px rgba(255, 184, 0, 0.25);
   }
   
+  .glow-green {
+    box-shadow: 0 4px 20px -4px rgba(52, 199, 89, 0.2);
+  }
+
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
+  
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
@@ -69,10 +73,12 @@
 }
 
 @layer components {
+  /* Micro-interactions Apple */
   button, .card-interactive {
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1), background-color 0.2s ease, border-color 0.2s ease;
   }
-  button:active {
+  
+  button:active, .card-interactive:active {
     transform: scale(0.98);
   }
 }
