@@ -506,3 +506,22 @@ export async function batchDeleteFlashcards(cardIds: string[]) {
     .in('id', cardIds);
   if (error) throw error;
 }
+  export async function archiveResource(table: 'courses' | 'documents' | 'flashcards', id: string, isArchived: boolean) {
+  const { error } = await supabase
+    .from(table)
+    .update({ is_archived: isArchived, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+export async function fetchArchivedResources() {
+  const [coursesRes, docsRes] = await Promise.all([
+    supabase.from('courses').select('*').eq('is_archived', true),
+    supabase.from('documents').select('*').eq('is_archived', true)
+  ]);
+  
+  return {
+    courses: coursesRes.data || [],
+    documents: docsRes.data || []
+  };
+}
