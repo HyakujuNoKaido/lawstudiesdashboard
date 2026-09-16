@@ -1,8 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft, Save, BookOpen, GraduationCap, Target } from 'lucide-react';
+import { ChevronLeft, Save, BookOpen, GraduationCap, Target, Scale, Shield, FileText, Bookmark } from 'lucide-react';
 import { fetchCourseById, updateCourse } from '../services/supabaseService';
 import { toast } from '../lib/toast';
+
+const AVAILABLE_COLORS = [
+  { id: 'gold', label: 'Or (Défaut)', class: 'bg-[#D4AF37]' },
+  { id: 'blue', label: 'Bleu Académique', class: 'bg-[#3B82F6]' },
+  { id: 'emerald', label: 'Vert Juge', class: 'bg-[#10B981]' },
+  { id: 'ruby', label: 'Rubis', class: 'bg-[#EF4444]' },
+  { id: 'purple', label: 'Améthyste', class: 'bg-[#8B5CF6]' },
+];
+
+const AVAILABLE_ICONS = [
+  { id: 'Scale', label: 'Balance', icon: Scale },
+  { id: 'BookOpen', label: 'Livre', icon: BookOpen },
+  { id: 'Shield', label: 'Bouclier', icon: Shield },
+  { id: 'FileText', label: 'Document', icon: FileText },
+  { id: 'Bookmark', label: 'Marque-page', icon: Bookmark },
+];
 
 export function EditCourse() {
   const { courseId } = useParams<{ courseId: string }>();
@@ -19,7 +35,9 @@ export function EditCourse() {
     teacher_name: '',
     semester: 'Automne 2026',
     description: '',
-    target_grade: 4.5
+    target_grade: 4.5,
+    color: 'gold',
+    icon: 'Scale'
   });
 
   useEffect(() => {
@@ -34,7 +52,9 @@ export function EditCourse() {
             teacher_name: data.teacher_name || '',
             semester: data.semester || 'Automne 2026',
             description: data.description || '',
-            target_grade: data.target_grade || 4.5
+            target_grade: data.target_grade || 4.5,
+            color: data.color || 'gold',
+            icon: data.icon || 'Scale'
           });
         })
         .catch(err => {
@@ -74,7 +94,7 @@ export function EditCourse() {
         </button>
         <div>
           <h1 className="font-serif text-3xl font-bold mb-1">Modifier le module</h1>
-          <p className="text-text-muted text-xs">Personnalisez les paramètres académiques et les objectifs de cette matière.</p>
+          <p className="text-text-muted text-xs">Personnalisez l'apparence visuelle, les paramètres et les objectifs.</p>
         </div>
       </header>
 
@@ -153,6 +173,41 @@ export function EditCourse() {
               onChange={(e) => setForm({ ...form, target_grade: Number(e.target.value) })} 
               className="w-full bg-surface border border-border rounded-input py-3 px-3.5 text-sm focus:border-accent font-mono" 
             />
+          </div>
+        </div>
+
+        {/* PERSONNALISATION VISUELLE (Point 4) */}
+        <div className="grid grid-cols-2 gap-4 bg-surface p-4 rounded-card border border-border/60">
+          <div className="flex flex-col gap-2">
+            <label className="text-[10px] uppercase font-bold text-text-muted tracking-wider">Couleur d'accent</label>
+            <div className="flex items-center gap-2">
+              {AVAILABLE_COLORS.map(c => (
+                <button
+                  key={c.id} type="button" title={c.label}
+                  onClick={() => setForm({ ...form, color: c.id })}
+                  className={`w-7 h-7 rounded-full ${c.class} transition-transform cursor-pointer ${form.color === c.id ? 'ring-2 ring-offset-2 ring-accent scale-110' : 'opacity-70 hover:opacity-100'}`}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label className="text-[10px] uppercase font-bold text-text-muted tracking-wider">Icône du module</label>
+            <div className="flex items-center gap-2">
+              {AVAILABLE_ICONS.map(i => {
+                const IconComp = i.icon;
+                const isSelected = form.icon === i.id;
+                return (
+                  <button
+                    key={i.id} type="button" title={i.label}
+                    onClick={() => setForm({ ...form, icon: i.id })}
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center border transition-all cursor-pointer ${isSelected ? 'bg-accent/20 border-accent text-accent' : 'bg-background border-border/60 text-text-muted hover:text-text'}`}
+                  >
+                    <IconComp size={16} />
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
