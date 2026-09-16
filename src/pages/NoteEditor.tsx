@@ -2,17 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ChevronLeft, Save, Trash2, Calendar, BookOpen, Clock, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { SOLO_USER_ID } from '../lib/constants';
+import { getCurrentUserId } from '../services/supabaseService';
 import { toast } from '../lib/toast';
 
 export function NoteEditor() {
   const { noteId } = useParams<{ noteId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  
+
   const [courses, setCourses] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
-  
+
   // États du formulaire
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -44,10 +44,11 @@ export function NoteEditor() {
   async function loadContext() {
     setIsLoading(true);
     try {
+      const userId = await getCurrentUserId();
       // Charger les cours et le planning pour la pré-sélection intelligente
       const [coursesRes, eventsRes] = await Promise.all([
-        supabase.from('courses').select('id, title, course_code').eq('user_id', SOLO_USER_ID),
-        supabase.from('events').select('*').eq('user_id', SOLO_USER_ID)
+        supabase.from('courses').select('id, title, course_code').eq('user_id', userId),
+        supabase.from('events').select('*').eq('user_id', userId)
       ]);
 
       setCourses(coursesRes.data || []);
@@ -60,7 +61,7 @@ export function NoteEditor() {
           .select('*')
           .eq('id', noteId)
           .single();
-          
+        
         if (error) throw error;
         
         setTitle(note.title || '');
@@ -95,10 +96,11 @@ export function NoteEditor() {
   const saveNote = async (isAutosave = false) => {
     if (!title.trim() && !content.trim()) return;
     if (!isAutosave) setIsSaving(true);
-    
+
     try {
+      const userId = await getCurrentUserId();
       const payload = {
-        user_id: SOLO_USER_ID,
+        user_id: userId,
         title: title || 'Nouvelle note',
         content,
         course_id: courseId || null,
@@ -117,11 +119,10 @@ export function NoteEditor() {
           navigate(`/notes/${data.id}`, { replace: true });
         }
       }
-      
+
       setLastSavedContent(content);
       setLastSavedAt(new Date());
       if (!isAutosave) toast("Note sauvegardée", "success");
-      
     } catch (err) {
       if (!isAutosave) toast("Erreur lors de la sauvegarde", "error");
     } finally {
@@ -150,7 +151,6 @@ export function NoteEditor() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-2rem)] md:h-[calc(100vh-4rem)] max-w-4xl mx-auto pt-2 animate-in fade-in duration-300">
-      
       {/* HEADER FIXE */}
       <header className="flex items-center justify-between gap-4 pb-4 border-b border-border shrink-0">
         <div className="flex items-center gap-3 min-w-0">
@@ -192,7 +192,6 @@ export function NoteEditor() {
             {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             <span className="hidden sm:inline">Sauvegarder</span>
           </button>
-          
           <button 
             onClick={handleDelete}
             className="p-1.5 text-text-muted hover:text-danger rounded-lg transition-colors cursor-pointer"
@@ -204,7 +203,6 @@ export function NoteEditor() {
 
       {/* ZONE D'ÉDITION (Notion-like) */}
       <main className="flex-1 overflow-y-auto flex flex-col py-6 custom-scrollbar px-1">
-        
         {/* Titre géant */}
         <input 
           type="text"
@@ -221,9 +219,7 @@ export function NoteEditor() {
           placeholder="Commencez à taper vos notes ici (Markdown supporté)..."
           className="flex-1 w-full bg-transparent text-base md:text-lg text-text leading-relaxed font-sans resize-none focus:outline-none placeholder:text-text-muted/30"
         />
-
       </main>
-
     </div>
   );
 }
