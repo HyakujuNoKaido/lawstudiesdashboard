@@ -4,10 +4,13 @@ import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { ResourceMenu } from '../components/ui/ResourceMenu';
-import { fetchFlashcards, fetchCourses } from '../services/supabaseService';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
+import { InlineEditableTitle } from '../components/ui/InlineEditableTitle';
+import { fetchFlashcards, fetchCourses, deleteFlashcardsByCourse, updateCourse } from '../services/supabaseService';
 import { useApp } from '../context/AppContext';
 import { toast } from '../lib/toast';
-import { BrainCircuit, Zap, CheckCircle2, ChevronRight, AlertCircle, Clock } from 'lucide-react';
+import { BrainCircuit, Play, Zap, CheckCircle2, ChevronRight, AlertCircle, Clock, Edit3 } from 'lucide-react';
+import { LexiIcons } from '../lib/icons';
 
 export function Study() {
   const navigate = useNavigate();
@@ -16,6 +19,8 @@ export function Study() {
   const [cards, setCards] = useState<any[]>(contextCards);
   const [courses, setCourses] = useState<any[]>(contextCourses);
   const [loading, setLoading] = useState(false);
+
+  const [deckToDelete, setDeckToDelete] = useState<any>(null);
 
   useEffect(() => {
     if (cards.length === 0 || courses.length === 0) {
@@ -39,11 +44,35 @@ export function Study() {
     }
   }
 
+  // --- ACTIONS DE DECK (SET) ---
+  const handleUpdateDeckTitle = async (deckId: string, newTitle: string) => {
+    const deck = courses.find(c => c.id === deckId);
+    if (!deck) return;
+    try {
+      await updateCourse(deckId, { ...deck, title: newTitle });
+      setCourses(prev => prev.map(c => c.id === deckId ? { ...c, title: newTitle } : c));
+    } catch (err) {
+      throw err; // Renvoyé au InlineEditableTitle pour le rollback
+    }
+  };
+
+  const confirmDeleteDeck = async () => {
+    if (!deckToDelete) return;
+    try {
+      await deleteFlashcardsByCourse(deckToDelete.id);
+      toast("Set de flashcards supprimé avec succès", "success");
+      loadData(); // Le Deck disparaîtra car il n'aura plus de cartes
+    } catch (err) {
+      toast("Erreur lors de la suppression du set", "error");
+    } finally {
+      setDeckToDelete(null);
+    }
+  };
+
   // --- LOGIQUE DES SETS (DECKS) ---
   const decks = courses.map(course => {
     const courseCards = cards.filter(c => c.course_id === course.id);
     const dueCardsCount = courseCards.filter(c => !c.due_at || new Date(c.due_at) <= new Date()).length;
-    // Une carte est "maîtrisée" si son ease_factor est au dessus de 2.5
     const masteredCardsCount = courseCards.filter(c => c.ease_factor >= 2.5).length;
     const progressPercent = courseCards.length > 0 ? Math.round((masteredCardsCount / courseCards.length) * 100) : 0;
     
@@ -60,7 +89,6 @@ export function Study() {
   return (
     <div className="flex flex-col gap-8 pt-2 pb-16 animate-in fade-in duration-300 text-text">
       
-      {/* HEADER */}
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 px-1 border-b border-border pb-6">
         <div>
           <h1 className="font-serif text-3xl md:text-4xl font-bold tracking-tight mb-2">Révisions & Mémoire</h1>
@@ -83,7 +111,6 @@ export function Study() {
       <Card variant="editorial" className="flex flex-col justify-center relative overflow-hidden p-6 md:p-8 border-l-accent">
         <div className="absolute -right-10 -top-10 w-48 h-48 bg-accent/5 rounded-full blur-3xl pointer-events-none"></div>
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
-          
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
               <div className={`p-2 rounded-xl ${totalDueCards > 0 ? 'bg-warning/10 text-warning' : 'bg-success/10 text-success'}`}>
@@ -91,7 +118,6 @@ export function Study() {
               </div>
               <h2 className="text-sm font-bold uppercase tracking-wider text-text-muted">Statut Global</h2>
             </div>
-            
             {totalDueCards > 0 ? (
               <div className="flex items-baseline gap-3 mt-1">
                 <span className="font-serif text-5xl font-bold text-text">{totalDueCards}</span>
@@ -104,7 +130,6 @@ export function Study() {
               </div>
             )}
           </div>
-
           <button 
             onClick={() => navigate('/session/all', { state: { from: '/study' } })}
             disabled={totalDueCards === 0}
@@ -148,13 +173,17 @@ export function Study() {
                 className="flex flex-col gap-4 group hover:border-accent/40 cursor-pointer p-5"
               >
                 <div className="flex justify-between items-start gap-3">
-                  <h4 className="font-bold text-base text-text group-hover:text-accent transition-colors leading-tight">
-                    {deck.title}
-                  </h4>
+                  <div onClick={(e) => e.stopPropagation()} className="flex-1 min-w-0">
+                    <InlineEditableTitle 
+                      initialTitle={deck.title} 
+                      onSave={(newTitle) => handleUpdateDeckTitle(deck.id, newTitle)}
+                      textClass="font-bold text-base text-text group-hover:text-accent transition-colors leading-tight truncate"
+                    />
+                  </div>
                   <div onClick={e => e.stopPropagation()}>
                     <ResourceMenu 
-                      onEdit={() => navigate(`/courses/${deck.id}`)}
-                      onDuplicate={() => toast("Duplication en cours de développement", "info")}
+                      onEdit={() => navigate(`/courses/${deck.id}`, { state: { tab: 'flashcards' } })}
+                      onDelete={() => setDeckToDelete(deck)}
                     />
                   </div>
                 </div>
@@ -186,6 +215,17 @@ export function Study() {
           </div>
         )}
       </section>
+
+      <ConfirmModal 
+        isOpen={!!deckToDelete}
+        title="Supprimer ce Set de Flashcards ?"
+        message="Cette action supprimera toutes les cartes liées à cette matière. Votre cours et vos documents PDF seront conservés."
+        confirmText="Supprimer les cartes"
+        cancelText="Annuler"
+        isDanger={true}
+        onConfirm={confirmDeleteDeck}
+        onClose={() => setDeckToDelete(null)}
+      />
     </div>
   );
 }
