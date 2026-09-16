@@ -192,8 +192,8 @@ export function CreateFlashcardsBatch() {
     setSaving(true);
     try {
       const payload = validCards.map(c => ({
-        courseid: courseId,
-        chapterid: chapterId || undefined,
+        course_id: courseId,
+        chapter_id: chapterId || undefined,
         front: c.front,
         back: c.back
       }));
