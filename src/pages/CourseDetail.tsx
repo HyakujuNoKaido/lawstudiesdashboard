@@ -61,6 +61,10 @@ export function CourseDetail() {
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkSyllabusText, setBulkSyllabusText] = useState('');
 
+  // États pour la pagination des flashcards (Point 19)
+  const [cardPage, setCardPage] = useState(1);
+  const cardsPerPage = 20;
+
   useEffect(() => {
     if (courseId) loadData();
   }, [courseId]);
@@ -164,7 +168,6 @@ export function CourseDetail() {
     try { await deleteDocument(docToDelete.id, docToDelete.path); setDocToDelete(null); toast("Document supprimé", "success"); loadData(); } catch (err) { toast("Erreur lors de la suppression", "error"); }
   };
 
-  // --- NOUVEAU HANDLE LAUNCH AI ---
   const handleLaunchAI = async () => {
     if (!aiTarget) return;
     setIsAIModalOpen(false);
@@ -182,7 +185,6 @@ export function CourseDetail() {
       }
       
       if (aiConfig.action === 'flashcards') {
-        // Au lieu de sauvegarder directement, on redirige vers l'éditeur de lot avec le texte !
         navigate('/add/flashcards/batch', {
           state: {
             courseId: courseId!,
@@ -229,6 +231,10 @@ export function CourseDetail() {
   const masteredCards = flashcards.filter(f => f.ease_factor >= 2.5).length;
   const progressPercent = flashcards.length > 0 ? Math.round((masteredCards / flashcards.length) * 100) : 0;
   const nextEvent = courseEvents.filter(e => new Date(e.event_date) > new Date()).sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime())[0];
+
+  // Calculs de pagination des flashcards
+  const totalPages = Math.ceil(flashcards.length / cardsPerPage);
+  const paginatedCards = flashcards.slice((cardPage - 1) * cardsPerPage, cardPage * cardsPerPage);
 
   const renderChapterItem = (chapter: any, depth = 0) => {
     const chapterDocs = documents.filter(d => d.chapter_id === chapter.id);
@@ -431,10 +437,14 @@ export function CourseDetail() {
           </div>
         )}
 
+        {/* ONGLET 5 : FLASHCARDS AVEC PAGINATION OPTIMISÉE (Point 19) */}
         {activeTab === 'flashcards' && (
           <div className="flex flex-col gap-4 animate-in fade-in">
             <div className="flex justify-between items-center mb-2 bg-surface p-4 rounded-2xl border border-border">
-              <h2 className="text-sm font-bold text-text">Cartes du Set ({flashcards.length})</h2>
+              <div className="flex flex-col">
+                <h2 className="text-sm font-bold text-text">Cartes du Set ({flashcards.length})</h2>
+                {totalPages > 1 && <span className="text-[10px] text-text-muted font-mono">Page {cardPage} sur {totalPages}</span>}
+              </div>
               <div className="flex gap-2">
                 <button onClick={() => setIsSelectMode(!isSelectMode)} className={`text-xs font-bold flex items-center gap-1.5 px-3 py-2 rounded-btn border transition-colors cursor-pointer ${isSelectMode ? 'bg-accent text-background border-accent' : 'bg-surface-elevated border-border text-text hover:bg-surface-interactive'}`}><CheckSquare size={14} /> Sélection</button>
                 <button onClick={() => { setEditingCardId(null); setCardForm({front: '', back: ''}); setIsCardModalOpen(true); }} className="text-xs bg-surface-elevated border border-border px-3 py-2 rounded-btn font-bold flex items-center gap-1.5 hover:bg-surface-interactive cursor-pointer"><Plus size={14} /> Ajouter</button>
@@ -444,26 +454,48 @@ export function CourseDetail() {
             {flashcards.length === 0 ? (
               <div className="text-center py-12 border border-dashed border-border rounded-2xl text-text-muted text-sm">Aucune flashcard.</div>
             ) : (
-              <div className="flex flex-col border border-border bg-surface rounded-card overflow-hidden shadow-sm">
-                {flashcards.map((card, idx) => {
-                  const isSelected = selectedCardIds.includes(card.id);
-                  return (
-                    <div key={card.id} onClick={() => isSelectMode ? toggleSelectCard(card.id) : null} className={`p-4 flex items-start gap-4 transition-colors group ${idx !== flashcards.length -1 ? 'border-b border-border/50' : ''} ${isSelected ? 'bg-accent/5 border-l-4 border-l-accent' : 'hover:bg-surface-interactive border-l-4 border-l-transparent'}`}>
-                      {isSelectMode && <div className="mt-1 text-accent cursor-pointer shrink-0">{isSelected ? <CheckSquare size={18} /> : <Square size={18} className="text-text-muted" />}</div>}
-                      <div className="flex-1 min-w-0 flex flex-col gap-1">
-                        <div className="flex items-center gap-2"><Badge variant={card.ease_factor >= 2.5 ? 'success' : 'warning'} className="text-[9px] shrink-0 mb-1">{card.ease_factor >= 2.5 ? 'Maîtrisée' : 'À revoir'}</Badge></div>
-                        <p className="text-sm font-medium text-text"><span className="text-text-muted font-mono mr-2 text-xs">Q:</span>{card.front}</p>
-                        <p className="text-sm text-text-muted mt-1"><span className="opacity-50 font-mono mr-2 text-xs">R:</span>{card.back}</p>
-                      </div>
-                      {!isSelectMode && (
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                          <ResourceMenu onEdit={() => { setEditingCardId(card.id); setCardForm({front: card.front, back: card.back}); setIsCardModalOpen(true); }} onMove={() => { setSelectedCardIds([card.id]); openBatchMoveModal('flashcards'); }} onDelete={() => setCardToDelete(card.id)} />
+              <>
+                <div className="flex flex-col border border-border bg-surface rounded-card overflow-hidden shadow-sm">
+                  {paginatedCards.map((card, idx) => {
+                    const isSelected = selectedCardIds.includes(card.id);
+                    return (
+                      <div key={card.id} onClick={() => isSelectMode ? toggleSelectCard(card.id) : null} className={`p-4 flex items-start gap-4 transition-colors group ${idx !== paginatedCards.length -1 ? 'border-b border-border/50' : ''} ${isSelected ? 'bg-accent/5 border-l-4 border-l-accent' : 'hover:bg-surface-interactive border-l-4 border-l-transparent'}`}>
+                        {isSelectMode && <div className="mt-1 text-accent cursor-pointer shrink-0">{isSelected ? <CheckSquare size={18} /> : <Square size={18} className="text-text-muted" />}</div>}
+                        <div className="flex-1 min-w-0 flex flex-col gap-1">
+                          <div className="flex items-center gap-2"><Badge variant={card.ease_factor >= 2.5 ? 'success' : 'warning'} className="text-[9px] shrink-0 mb-1">{card.ease_factor >= 2.5 ? 'Maîtrisée' : 'À revoir'}</Badge></div>
+                          <p className="text-sm font-medium text-text"><span className="text-text-muted font-mono mr-2 text-xs">Q:</span>{card.front}</p>
+                          <p className="text-sm text-text-muted mt-1"><span className="opacity-50 font-mono mr-2 text-xs">R:</span>{card.back}</p>
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                        {!isSelectMode && (
+                          <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                            <ResourceMenu onEdit={() => { setEditingCardId(card.id); setCardForm({front: card.front, back: card.back}); setIsCardModalOpen(true); }} onMove={() => { setSelectedCardIds([card.id]); openBatchMoveModal('flashcards'); }} onDelete={() => setCardToDelete(card.id)} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between px-2 pt-2">
+                    <button 
+                      disabled={cardPage === 1}
+                      onClick={() => setCardPage(p => Math.max(1, p - 1))}
+                      className="px-4 py-2 bg-surface border border-border rounded-btn text-xs font-bold disabled:opacity-30 cursor-pointer hover:bg-surface-interactive transition-colors"
+                    >
+                      Précédent
+                    </button>
+                    <span className="text-xs font-mono text-text-muted">Page {cardPage} / {totalPages}</span>
+                    <button 
+                      disabled={cardPage === totalPages}
+                      onClick={() => setCardPage(p => Math.min(totalPages, p + 1))}
+                      className="px-4 py-2 bg-surface border border-border rounded-btn text-xs font-bold disabled:opacity-30 cursor-pointer hover:bg-surface-interactive transition-colors"
+                    >
+                      Suivant
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
