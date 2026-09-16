@@ -3,16 +3,21 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, FileText, Edit3, Trash2, BrainCircuit, FileEdit, Award, LayoutGrid, Scale, Plus, X, Check, ClipboardPaste, ChevronRight, ChevronDown, Calendar, Clock, CornerDownRight, CheckSquare, Square, FolderInput, UploadCloud, Globe, Sparkles, Target, CheckCircle2, Circle, AlertCircle } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
 import { Card } from '../components/ui/Card';
+import { ProgressBar } from '../components/ui/ProgressBar';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
-import { fetchCourseById, fetchCourseChapters, fetchCourseDocuments, fetchCourseGrades, fetchNotes, fetchFlashcards, deleteDocument, createChapter, parseAndCreateChaptersFromSyllabus, fetchEvents, createEvent, updateChapterParent, batchMoveItems } from '../services/supabaseService';
+import { fetchCourseById, fetchCourseChapters, fetchCourseDocuments, fetchCourseGrades, fetchNotes, fetchFlashcards, deleteDocument, createChapter, parseAndCreateChaptersFromSyllabus, fetchEvents, createEvent, updateChapterParent, batchMoveItems, getCurrentUserId } from '../services/supabaseService';
 import { supabase } from '../lib/supabase';
 import { toast } from '../lib/toast';
 import { extractTextFromPDF, generateAIFlashcards, generateAISummary } from '../lib/aiService';
-import { SOLO_USER_ID } from '../lib/constants';
+
+type TabType = 'overview' | 'chapters' | 'resources' | 'notes' | 'flashcards' | 'grades';
 
 export function CourseDetail() {
   const { courseId } = useParams<{ courseId: string }>();
   const navigate = useNavigate();
+  
+  const [activeTab, setActiveTab] = useState<TabType>('overview');
+  
   const [course, setCourse] = useState<any>(null);
   const [chapters, setChapters] = useState<any[]>([]);
   const [documents, setDocuments] = useState<any[]>([]);
@@ -20,45 +25,35 @@ export function CourseDetail() {
   const [notes, setNotes] = useState<any[]>([]);
   const [flashcards, setFlashcards] = useState<any[]>([]);
   const [courseEvents, setCourseEvents] = useState<any[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [docToDelete, setDocToDelete] = useState<{id: string, path: string} | null>(null);
-
+  
+  // États d'édition (Chapitres)
   const [isAddingChapter, setIsAddingChapter] = useState(false);
   const [newChapterTitle, setNewChapterTitle] = useState('');
   const [parentChapterId, setParentChapterId] = useState<string | null>(null);
-  
   const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
   const [editingParentId, setEditingParentId] = useState<string | null>(null);
-  
   const [chapterToDelete, setChapterToDelete] = useState<string | null>(null);
-
+  
+  // Modales et Bulk actions
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkSyllabusText, setBulkSyllabusText] = useState('');
-
-  const [isAddingEvent, setIsAddingEvent] = useState(false);
-  const [eventForm, setEventForm] = useState({ title: '', event_date: '', category: 'Cours' });
-  const [eventToDelete, setEventToDelete] = useState<string | null>(null);
-
   const [openChapters, setOpenChapters] = useState<Record<string, boolean>>({});
   const [activePlusMenuId, setActivePlusMenuId] = useState<string | null>(null);
-
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedChapterIds, setSelectedChapterIds] = useState<string[]>([]);
   const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
   const [isBatchDeleteModalOpen, setIsBatchDeleteModalOpen] = useState(false);
-  
   const [isBatchMoveModalOpen, setIsBatchMoveModalOpen] = useState(false);
   const [batchTargetParentId, setBatchTargetParentId] = useState<string | null>(null);
 
-  // --- ÉTATS POUR L'IA ---
+  // IA
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [aiTarget, setAiTarget] = useState<{ type: 'document' | 'chapter', id: string, name: string } | null>(null);
-  const [aiConfig, setAiConfig] = useState({
-    action: 'flashcards', // 'flashcards' ou 'summary'
-    pageStart: '',
-    pageEnd: ''
-  });
+  const [aiConfig, setAiConfig] = useState({ action: 'flashcards', pageStart: '', pageEnd: '' });
 
   useEffect(() => {
     if (courseId) loadData();
@@ -83,7 +78,7 @@ export function CourseDetail() {
       setNotes(notesData.filter((n: any) => n.course_id === courseId));
       setFlashcards(flashcardsData);
       setCourseEvents(eventsData.filter((e: any) => e.course_id === courseId));
-
+      
       const initialOpenState: Record<string, boolean> = {};
       chaptersData.forEach((ch: any) => { initialOpenState[ch.id] = true; });
       setOpenChapters(initialOpenState);
@@ -95,31 +90,20 @@ export function CourseDetail() {
     }
   }
 
-  const toggleChapter = (chapterId: string) => {
-    setOpenChapters(prev => ({ ...prev, [chapterId]: !prev[chapterId] }));
-  };
-
+  // Fonctions de manipulation (Arbre, Sélection, IA)
+  const toggleChapter = (chapterId: string) => setOpenChapters(prev => ({ ...prev, [chapterId]: !prev[chapterId] }));
   const handleToggleAll = (open: boolean) => {
     const newState: Record<string, boolean> = {};
     chapters.forEach(ch => { newState[ch.id] = open; });
     setOpenChapters(newState);
   };
-
-  const toggleSelectChapter = (id: string) => {
-    setSelectedChapterIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
-  };
-
-  const toggleSelectDoc = (id: string) => {
-    setSelectedDocIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
-  };
-
+  const toggleSelectChapter = (id: string) => setSelectedChapterIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
+  const toggleSelectDoc = (id: string) => setSelectedDocIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
   const handleSelectAll = () => {
     if (selectedChapterIds.length === chapters.length && selectedDocIds.length === documents.length) {
-      setSelectedChapterIds([]);
-      setSelectedDocIds([]);
+      setSelectedChapterIds([]); setSelectedDocIds([]);
     } else {
-      setSelectedChapterIds(chapters.map(c => c.id));
-      setSelectedDocIds(documents.map(d => d.id));
+      setSelectedChapterIds(chapters.map(c => c.id)); setSelectedDocIds(documents.map(d => d.id));
     }
   };
 
@@ -132,57 +116,33 @@ export function CourseDetail() {
       if (selectedDocIds.length > 0) {
         for (const docId of selectedDocIds) {
           const doc = documents.find(d => d.id === docId);
-          if (doc?.bucket_path) {
-            await supabase.storage.from('user-documents').remove([doc.bucket_path]);
-          }
+          if (doc?.bucket_path) await supabase.storage.from('user-documents').remove([doc.bucket_path]);
         }
         const { error } = await supabase.from('documents').delete().in('id', selectedDocIds);
         if (error) throw error;
       }
       toast("Éléments sélectionnés supprimés", "success");
-      setSelectedChapterIds([]);
-      setSelectedDocIds([]);
-      setIsSelectMode(false);
-      setIsBatchDeleteModalOpen(false);
+      setSelectedChapterIds([]); setSelectedDocIds([]); setIsSelectMode(false); setIsBatchDeleteModalOpen(false);
       loadData();
-    } catch (err) {
-      toast("Erreur lors de la suppression groupée", "error");
-    }
+    } catch (err) { toast("Erreur lors de la suppression groupée", "error"); }
   };
 
   const handleBatchMoveSubmit = async () => {
     try {
       await batchMoveItems(selectedChapterIds, selectedDocIds, batchTargetParentId);
       toast("Éléments déplacés avec succès !", "success");
-      setSelectedChapterIds([]);
-      setSelectedDocIds([]);
-      setIsSelectMode(false);
-      setIsBatchMoveModalOpen(false);
-      setBatchTargetParentId(null);
+      setSelectedChapterIds([]); setSelectedDocIds([]); setIsSelectMode(false); setIsBatchMoveModalOpen(false); setBatchTargetParentId(null);
       loadData();
-    } catch (err) {
-      toast("Erreur lors du déplacement groupé", "error");
-    }
+    } catch (err) { toast("Erreur lors du déplacement groupé", "error"); }
   };
 
   const handleCreateChapter = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newChapterTitle.trim() || !courseId) return;
     try {
-      await createChapter({
-        course_id: courseId,
-        title: newChapterTitle.trim(),
-        parent_id: parentChapterId,
-        order_index: chapters.length + 1
-      });
-      setNewChapterTitle('');
-      setIsAddingChapter(false);
-      setParentChapterId(null);
-      toast("Chapitre ajouté", "success");
-      loadData();
-    } catch (err) {
-      toast("Erreur lors de la création", "error");
-    }
+      await createChapter({ course_id: courseId, title: newChapterTitle.trim(), parent_id: parentChapterId, order_index: chapters.length + 1 });
+      setNewChapterTitle(''); setIsAddingChapter(false); setParentChapterId(null); toast("Chapitre ajouté", "success"); loadData();
+    } catch (err) { toast("Erreur lors de la création", "error"); }
   };
 
   const handleUpdateChapter = async (chapterId: string) => {
@@ -191,13 +151,8 @@ export function CourseDetail() {
       const { error: titleError } = await supabase.from('chapters').update({ title: editingTitle.trim() }).eq('id', chapterId);
       if (titleError) throw titleError;
       await updateChapterParent(chapterId, editingParentId);
-
-      setEditingChapterId(null);
-      toast("Chapitre mis à jour", "success");
-      loadData();
-    } catch (err) {
-      toast("Erreur lors de la modification", "error");
-    }
+      setEditingChapterId(null); toast("Chapitre mis à jour", "success"); loadData();
+    } catch (err) { toast("Erreur lors de la modification", "error"); }
   };
 
   const confirmDeleteChapter = async () => {
@@ -205,111 +160,53 @@ export function CourseDetail() {
     try {
       const { error } = await supabase.from('chapters').delete().eq('id', chapterToDelete);
       if (error) throw error;
-      setChapterToDelete(null);
-      toast("Chapitre supprimé", "success");
-      loadData();
-    } catch (err) {
-      toast("Erreur lors de la suppression", "error");
-    }
+      setChapterToDelete(null); toast("Chapitre supprimé", "success"); loadData();
+    } catch (err) { toast("Erreur lors de la suppression", "error"); }
   };
 
   const handleBulkImport = async () => {
     if (!bulkSyllabusText.trim() || !courseId) return;
     try {
       await parseAndCreateChaptersFromSyllabus(courseId, bulkSyllabusText);
-      setBulkSyllabusText('');
-      setShowBulkModal(false);
-      toast("Table des matières importée !", "success");
-      loadData();
-    } catch (err) {
-      toast("Erreur lors de l'importation", "error");
-    }
+      setBulkSyllabusText(''); setShowBulkModal(false); toast("Table des matières importée !", "success"); loadData();
+    } catch (err) { toast("Erreur lors de l'importation", "error"); }
   };
 
   const handleDeleteDocument = async () => {
     if (!docToDelete) return;
     try {
       await deleteDocument(docToDelete.id, docToDelete.path);
-      setDocToDelete(null);
-      toast("Document supprimé", "success");
-      loadData();
-    } catch (err) {
-      toast("Impossible de supprimer le document", "error");
-    }
+      setDocToDelete(null); toast("Document supprimé", "success"); loadData();
+    } catch (err) { toast("Impossible de supprimer le document", "error"); }
   };
 
-  const handleCreateEvent = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!eventForm.title || !eventForm.event_date || !courseId) return;
-    try {
-      await createEvent({ title: eventForm.title, event_date: eventForm.event_date, category: eventForm.category, course_id: courseId });
-      setEventForm({ title: '', event_date: '', category: 'Cours' });
-      setIsAddingEvent(false);
-      toast("Créneau ajouté", "success");
-      loadData();
-    } catch (err) {
-      toast("Erreur", "error");
-    }
-  };
-
-  const confirmDeleteEvent = async () => {
-    if (!eventToDelete) return;
-    try {
-      const { error } = await supabase.from('events').delete().eq('id', eventToDelete);
-      if (error) throw error;
-      setEventToDelete(null);
-      toast("Créneau supprimé", "success");
-      loadData();
-    } catch (err) {
-      toast("Erreur", "error");
-    }
-  };
-
-  // --- NOUVEAU : HANDLER D'IA (VRAI APPEL VERS GEMINI) ---
   const handleLaunchAI = async () => {
     if (!aiTarget) return;
     setIsAIModalOpen(false);
-    
-    const pageRange = aiTarget.type === 'document' && (aiConfig.pageStart || aiConfig.pageEnd) 
-      ? `(Pages ${aiConfig.pageStart || 'début'} à ${aiConfig.pageEnd || 'fin'})` 
-      : '';
-    
-    toast(`L'IA analyse le ${aiTarget.type === 'document' ? 'document' : 'chapitre'} ${pageRange}...`, "info");
-    
+    toast(`L'IA analyse le contenu...`, "info");
     try {
       let textToAnalyze = "";
-
       if (aiTarget.type === 'document') {
         const doc = documents.find(d => d.id === aiTarget.id);
         if (!doc) throw new Error("Document introuvable");
-        
-        // On demande à Supabase un lien temporaire pour lire le PDF (1 minute)
         const { data: urlData } = await supabase.storage.from('user-documents').createSignedUrl(doc.bucket_path, 60);
         if (!urlData?.signedUrl) throw new Error("Impossible d'accéder au fichier dans le cloud.");
-
-        const startP = aiConfig.pageStart ? parseInt(aiConfig.pageStart) : undefined;
-        const endP = aiConfig.pageEnd ? parseInt(aiConfig.pageEnd) : undefined;
-        
-        // Extraction du texte via pdfjs-dist
-        textToAnalyze = await extractTextFromPDF(urlData.signedUrl, startP, endP);
-      } 
-      else if (aiTarget.type === 'chapter') {
-        // Pour un chapitre, on rassemble toutes les notes de l'étudiant
+        textToAnalyze = await extractTextFromPDF(urlData.signedUrl, aiConfig.pageStart ? parseInt(aiConfig.pageStart) : undefined, aiConfig.pageEnd ? parseInt(aiConfig.pageEnd) : undefined);
+      } else if (aiTarget.type === 'chapter') {
         const chapterNotes = notes.filter(n => n.title.includes(aiTarget.name));
         textToAnalyze = chapterNotes.map(n => n.content).join('\n\n');
-        if (!textToAnalyze) throw new Error("Aucune note trouvée dans ce chapitre pour générer du contenu.");
+        if (!textToAnalyze) throw new Error("Aucune note trouvée dans ce chapitre.");
       }
 
-      // Envoi à Gemini
       if (aiConfig.action === 'flashcards') {
         const count = await generateAIFlashcards(textToAnalyze, courseId!, aiTarget.type === 'chapter' ? aiTarget.id : undefined);
         toast(`Magie ! ${count} flashcards générées avec succès !`, "success");
         loadData();
       } else if (aiConfig.action === 'summary') {
         const summary = await generateAISummary(textToAnalyze);
-        // Sauvegarde automatique du résumé dans l'espace Notes
+        const userId = await getCurrentUserId();
         await supabase.from('notes').insert([{
-          user_id: SOLO_USER_ID,
+          user_id: userId,
           course_id: courseId,
           title: `Résumé IA : ${aiTarget.name}`,
           content: summary
@@ -319,7 +216,7 @@ export function CourseDetail() {
       }
     } catch (error: any) {
       console.error(error);
-      toast(error.message || "L'analyse IA a échoué. Vérifiez votre clé API.", "error");
+      toast(error.message || "L'analyse IA a échoué.", "error");
     }
   };
 
@@ -328,11 +225,8 @@ export function CourseDetail() {
     const roots: any[] = [];
     flatChapters.forEach(ch => map.set(ch.id, { ...ch, children: [] }));
     flatChapters.forEach(ch => {
-      if (ch.parent_id && map.has(ch.parent_id)) {
-        map.get(ch.parent_id).children.push(map.get(ch.id));
-      } else {
-        roots.push(map.get(ch.id));
-      }
+      if (ch.parent_id && map.has(ch.parent_id)) map.get(ch.parent_id).children.push(map.get(ch.id));
+      else roots.push(map.get(ch.id));
     });
     return roots;
   };
@@ -340,18 +234,19 @@ export function CourseDetail() {
   if (loading) return <div className="text-center p-12 text-text-muted font-mono animate-pulse">Chargement...</div>;
   if (!course) return <div className="text-center p-12 text-text-muted">Cours introuvable</div>;
 
-  const dueCardsCount = flashcards.filter(f => new Date(f.due_at) <= new Date()).length;
+  const dueCardsCount = flashcards.filter(f => !f.due_at || new Date(f.due_at) <= new Date()).length;
   const chapterTree = buildChapterTree(chapters);
-  const totalSelectedCount = selectedChapterIds.length + selectedDocIds.length;
-
   const generalDocs = documents.filter(d => !d.chapter_id);
-
-  // RADAR DE RAPPROCHEMENT (Trouver le prochain événement)
-  const futureEvents = courseEvents
-    .filter(e => new Date(e.event_date) > new Date())
-    .sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime());
+  const totalSelectedCount = selectedChapterIds.length + selectedDocIds.length;
+  
+  const futureEvents = courseEvents.filter(e => new Date(e.event_date) > new Date()).sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime());
   const nextEvent = futureEvents.length > 0 ? futureEvents[0] : null;
 
+  // Calcul d'une progression "fictive" basée sur le ratio flashcards maîtrisées (ease_factor >= 2.5) pour la matière
+  const masteredCards = flashcards.filter(f => f.ease_factor >= 2.5).length;
+  const progressPercent = flashcards.length > 0 ? Math.round((masteredCards / flashcards.length) * 100) : 0;
+
+  // --- RENDU D'UN CHAPITRE ---
   const renderChapterItem = (chapter: any, depth = 0) => {
     const chapterDocs = documents.filter(d => d.chapter_id === chapter.id);
     const chapterCards = flashcards.filter(f => f.chapter_id === chapter.id);
@@ -360,8 +255,6 @@ export function CourseDetail() {
     const isOpen = openChapters[chapter.id] ?? true;
     const isSelected = selectedChapterIds.includes(chapter.id);
     const isPlusMenuOpen = activePlusMenuId === chapter.id;
-
-    // MÉTRIQUES DE LA CHECKLIST
     const docsCount = chapterDocs.length;
     const cardsCount = chapterCards.length;
     const hasNotes = notes.some(n => n.title.toLowerCase().includes(chapter.title.toLowerCase())); 
@@ -369,17 +262,10 @@ export function CourseDetail() {
 
     return (
       <div key={chapter.id} className="flex flex-col gap-2 relative">
-        <div className={`bg-surface border rounded-2xl overflow-hidden shadow-sm group transition-all ${isSelected ? 'border-accent bg-accent/5' : 'border-border'}`}>
-          
+        <div className={`bg-surface border rounded-card overflow-hidden shadow-none transition-all ${isSelected ? 'border-accent bg-accent/5' : 'border-border/60'}`}>
           <div 
-            onClick={() => {
-              if (isSelectMode) {
-                toggleSelectChapter(chapter.id);
-              } else if (!isEditing) {
-                toggleChapter(chapter.id);
-              }
-            }}
-            className="p-3.5 flex items-center justify-between bg-surface hover:bg-surface-elevated transition-colors cursor-pointer select-none"
+            onClick={() => isSelectMode ? toggleSelectChapter(chapter.id) : (!isEditing && toggleChapter(chapter.id))}
+            className="p-3.5 flex items-center justify-between hover:bg-surface-interactive transition-colors cursor-pointer select-none"
           >
             <div className="flex items-center gap-3 flex-1 min-w-0 pr-2">
               {isSelectMode && (
@@ -393,130 +279,83 @@ export function CourseDetail() {
               {depth > 0 && <CornerDownRight size={14} className="text-accent shrink-0" />}
               <h3 className="font-semibold text-sm text-text truncate">{chapter.title}</h3>
             </div>
-
+            
             <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-              
-              {/* CHECKLIST VISUELLE */}
               {!isSelectMode && (
                 <div className="hidden md:flex items-center gap-2 mr-2">
-                  <div className="flex items-center gap-1 text-[10px] bg-surface-elevated px-2 py-0.5 rounded border border-border" title={`${docsCount} document(s)`}>
+                  <div className="flex items-center gap-1 text-[10px] bg-surface-elevated px-2 py-0.5 rounded border border-border/50" title={`${docsCount} document(s)`}>
                     <FileText size={10} className={docsCount > 0 ? 'text-info' : 'text-text-muted opacity-50'} />
                     <span className="font-mono">{docsCount}</span>
                   </div>
-                  <div className="flex items-center gap-1 text-[10px] bg-surface-elevated px-2 py-0.5 rounded border border-border" title={hasNotes ? 'Notes associées' : 'Pas de notes'}>
+                  <div className="flex items-center gap-1 text-[10px] bg-surface-elevated px-2 py-0.5 rounded border border-border/50" title={hasNotes ? 'Notes associées' : 'Pas de notes'}>
                     <FileEdit size={10} className={hasNotes ? 'text-accent' : 'text-text-muted opacity-50'} />
                   </div>
-                  <div className="flex items-center gap-1 text-[10px] bg-surface-elevated px-2 py-0.5 rounded border border-border" title={`${cardsCount} flashcards`}>
+                  <div className="flex items-center gap-1 text-[10px] bg-surface-elevated px-2 py-0.5 rounded border border-border/50" title={`${cardsCount} flashcards`}>
                     <BrainCircuit size={10} className={cardsCount > 0 ? 'text-warning' : 'text-text-muted opacity-50'} />
                     <span className="font-mono">{cardsCount}</span>
                   </div>
                   {isComplete ? <CheckCircle2 size={14} className="text-success ml-1" /> : <Circle size={14} className="text-text-muted opacity-30 ml-1" />}
                 </div>
               )}
-
               {!isSelectMode && (
-                <div className="flex items-center gap-1 border-l border-border pl-2 ml-1 relative">
-                  
-                  {/* BOUTON IA SUR CHAPITRE */}
-                  <button 
-                    onClick={(e) => { 
-                      e.stopPropagation(); 
-                      setAiTarget({ type: 'chapter', id: chapter.id, name: chapter.title }); 
-                      setIsAIModalOpen(true); 
-                    }}
-                    className="p-1 text-text-muted hover:text-warning transition-colors rounded cursor-pointer group/ai"
-                    title="Générer des flashcards par IA"
-                  >
+                <div className="flex items-center gap-1 border-l border-border/50 pl-2 ml-1 relative">
+                  <button onClick={(e) => { e.stopPropagation(); setAiTarget({ type: 'chapter', id: chapter.id, name: chapter.title }); setIsAIModalOpen(true); }} className="p-1 text-text-muted hover:text-warning transition-colors rounded cursor-pointer group/ai" title="Générer des flashcards par IA">
                     <Sparkles size={16} className="group-hover/ai:animate-pulse" />
                   </button>
-
                   <div className="relative">
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActivePlusMenuId(isPlusMenuOpen ? null : chapter.id);
-                      }} 
-                      className="p-1 text-text-muted hover:text-accent transition-colors rounded cursor-pointer" 
-                      title="Ajouter..."
-                    >
+                    <button onClick={(e) => { e.stopPropagation(); setActivePlusMenuId(isPlusMenuOpen ? null : chapter.id); }} className="p-1 text-text-muted hover:text-accent transition-colors rounded cursor-pointer" title="Ajouter...">
                       <Plus size={16} />
                     </button>
-
                     {isPlusMenuOpen && (
-                      <div className="absolute right-0 top-full mt-1.5 w-52 bg-surface-elevated border border-border rounded-xl shadow-2xl z-50 py-1.5 animate-in fade-in duration-150 text-left">
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActivePlusMenuId(null);
-                            setParentChapterId(chapter.id);
-                            setIsAddingChapter(true);
-                          }}
-                          className="w-full px-3.5 py-2 text-xs text-text hover:bg-surface flex items-center gap-2.5 cursor-pointer"
-                        >
+                      <div className="absolute right-0 top-full mt-1.5 w-52 bg-surface-elevated border border-border rounded-modal shadow-apple z-50 py-1.5 animate-in fade-in duration-150 text-left">
+                        <button onClick={(e) => { e.stopPropagation(); setActivePlusMenuId(null); setParentChapterId(chapter.id); setIsAddingChapter(true); }} className="w-full px-3.5 py-2 text-xs text-text hover:bg-surface-interactive flex items-center gap-2.5 cursor-pointer">
                           <Plus size={14} className="text-accent" /> Ajouter un sous-chapitre
                         </button>
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActivePlusMenuId(null);
-                            navigate('/add/document', { state: { courseId, chapterId: chapter.id } });
-                          }}
-                          className="w-full px-3.5 py-2 text-xs text-text hover:bg-surface flex items-center gap-2.5 cursor-pointer"
-                        >
+                        <button onClick={(e) => { e.stopPropagation(); setActivePlusMenuId(null); navigate('/add/document', { state: { courseId, chapterId: chapter.id } }); }} className="w-full px-3.5 py-2 text-xs text-text hover:bg-surface-interactive flex items-center gap-2.5 cursor-pointer">
                           <UploadCloud size={14} className="text-info" /> Ajouter un document ici
                         </button>
                       </div>
                     )}
                   </div>
-
                   <button onClick={() => { setEditingChapterId(chapter.id); setEditingTitle(chapter.title); setEditingParentId(chapter.parent_id || null); }} className="p-1 text-text-muted hover:text-accent transition-colors rounded cursor-pointer" title="Modifier / Déplacer"><Edit3 size={14} /></button>
                   <button onClick={() => setChapterToDelete(chapter.id)} className="p-1 text-text-muted hover:text-danger transition-colors rounded cursor-pointer" title="Supprimer"><Trash2 size={14} /></button>
                 </div>
               )}
             </div>
           </div>
-
+          
           {isEditing && (
-            <div className="p-4 bg-surface-elevated border-t border-border flex flex-col gap-3 animate-in fade-in" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 bg-surface-elevated border-t border-border/50 flex flex-col gap-3 animate-in fade-in" onClick={(e) => e.stopPropagation()}>
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] uppercase font-bold text-text-muted">Intitulé du chapitre</label>
-                <input type="text" value={editingTitle} onChange={(e) => setEditingTitle(e.target.value)} className="bg-background border border-border rounded-lg px-3 py-1.5 text-sm text-text w-full focus:border-accent" />
+                <input type="text" value={editingTitle} onChange={(e) => setEditingTitle(e.target.value)} className="bg-background border border-border rounded-input px-3 py-2 text-sm text-text w-full focus:border-accent" />
               </div>
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] uppercase font-bold text-accent">Rattachement / Partie parente</label>
-                <select 
-                  value={editingParentId || ''} 
-                  onChange={(e) => setEditingParentId(e.target.value ? e.target.value : null)}
-                  className="bg-background border border-border rounded-lg px-3 py-1.5 text-xs text-text w-full focus:border-accent"
-                >
-                  <option value="">(Aucun parent / Chapitre principal / Partie I)</option>
-                  {chapters.filter(c => c.id !== chapter.id).map(c => (
-                    <option key={c.id} value={c.id}>{c.title}</option>
-                  ))}
+                <select value={editingParentId || ''} onChange={(e) => setEditingParentId(e.target.value ? e.target.value : null)} className="bg-background border border-border rounded-input px-3 py-2 text-sm text-text w-full focus:border-accent">
+                  <option value="">(Aucun parent / Chapitre principal)</option>
+                  {chapters.filter(c => c.id !== chapter.id).map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
                 </select>
               </div>
               <div className="flex justify-end gap-2 mt-1">
-                <button onClick={() => setEditingChapterId(null)} className="px-3 py-1.5 bg-surface border border-border rounded-lg text-xs cursor-pointer">Annuler</button>
-                <button onClick={() => handleUpdateChapter(chapter.id)} className="px-4 py-1.5 bg-accent text-background rounded-lg text-xs font-bold cursor-pointer glow-gold">Enregistrer</button>
+                <button onClick={() => setEditingChapterId(null)} className="px-3 py-1.5 bg-surface border border-border rounded-btn text-xs font-medium cursor-pointer hover:bg-surface-interactive">Annuler</button>
+                <button onClick={() => handleUpdateChapter(chapter.id)} className="px-4 py-1.5 bg-accent text-background rounded-btn text-xs font-bold cursor-pointer glow-gold">Enregistrer</button>
               </div>
             </div>
           )}
 
           {isOpen && (
-            <div className="border-t border-border/50 bg-background/40 flex flex-col">
+            <div className="border-t border-border/40 bg-background/20 flex flex-col">
               {chapterDocs.length > 0 && (
-                <div className="flex flex-col divide-y divide-border/50">
+                <div className="flex flex-col divide-y divide-border/40">
                   {chapterDocs.map(doc => {
                     const isPdf = doc.mime_type === 'application/pdf' || doc.original_name.endsWith('.pdf');
                     const isDocSelected = selectedDocIds.includes(doc.id);
                     return (
                       <div 
                         key={doc.id} 
-                        onClick={() => {
-                          if (isSelectMode) toggleSelectDoc(doc.id);
-                          else navigate(`/viewer/${doc.id}`);
-                        }} 
-                        className={`p-3 pl-12 flex items-center justify-between cursor-pointer transition-colors ${isDocSelected ? 'bg-accent/15' : 'hover:bg-surface'}`}
+                        onClick={() => isSelectMode ? toggleSelectDoc(doc.id) : navigate(`/viewer/${doc.id}`)} 
+                        className={`p-3 pl-12 flex items-center justify-between cursor-pointer transition-colors ${isDocSelected ? 'bg-accent/15' : 'hover:bg-surface-interactive'}`}
                       >
                         <div className="flex items-center gap-3 min-w-0 flex-1">
                           {isSelectMode && (
@@ -533,16 +372,7 @@ export function CourseDetail() {
                         </div>
                         {!isSelectMode && (
                           <div className="flex items-center gap-1">
-                            {/* BOUTON IA SUR DOCUMENT */}
-                            <button 
-                              onClick={(e) => { 
-                                e.stopPropagation(); 
-                                setAiTarget({ type: 'document', id: doc.id, name: doc.original_name }); 
-                                setIsAIModalOpen(true); 
-                              }}
-                              className="p-1.5 text-text-muted hover:text-warning rounded-lg transition-colors cursor-pointer"
-                              title="Analyser avec l'IA"
-                            >
+                            <button onClick={(e) => { e.stopPropagation(); setAiTarget({ type: 'document', id: doc.id, name: doc.original_name }); setIsAIModalOpen(true); }} className="p-1.5 text-text-muted hover:text-warning rounded-lg transition-colors cursor-pointer" title="Analyser avec l'IA">
                               <Sparkles size={14} />
                             </button>
                             <button onClick={(e) => { e.stopPropagation(); setDocToDelete({ id: doc.id, path: doc.bucket_path }); }} className="p-1.5 text-text-muted hover:text-danger rounded-lg transition-colors cursor-pointer">
@@ -555,17 +385,13 @@ export function CourseDetail() {
                   })}
                 </div>
               )}
-
               {chapter.children && chapter.children.length > 0 && (
-                <div className="flex flex-col gap-2 p-2.5 border-t border-border/30 bg-background/60">
+                <div className="flex flex-col gap-2 p-2.5 border-t border-border/30 bg-background/40">
                   {chapter.children.map((child: any) => renderChapterItem(child, depth + 1))}
                 </div>
               )}
-
               {chapterDocs.length === 0 && (!chapter.children || chapter.children.length === 0) && (
-                <div className="p-4 text-center text-xs text-text-muted italic">
-                  Ce chapitre est vide.
-                </div>
+                <div className="p-4 text-center text-xs text-text-muted italic">Ce chapitre est vide.</div>
               )}
             </div>
           )}
@@ -575,146 +401,156 @@ export function CourseDetail() {
   };
 
   return (
-    <div className="flex flex-col gap-8 pt-2 pb-24 animate-in fade-in duration-300 relative">
-      <header className="flex flex-col gap-6 text-text border-b border-border pb-6">
+    <div className="flex flex-col gap-6 pt-2 pb-24 animate-in fade-in duration-300">
+      
+      {/* HEADER DE LA PAGE COURS */}
+      <header className="flex flex-col gap-5 text-text">
         <div className="flex items-center justify-between">
           <button onClick={() => navigate('/courses')} className="flex items-center gap-1 text-text-muted hover:text-text transition-colors -ml-2 p-2 cursor-pointer">
             <ChevronLeft size={20} />
-            <span className="text-sm font-medium">Plan d'études</span>
+            <span className="text-sm font-medium">Retour</span>
           </button>
-          <button onClick={() => navigate(`/edit/course/${course.id}`)} className="flex items-center gap-1.5 bg-surface border border-border px-3 py-2 rounded-xl text-xs font-medium text-text hover:border-accent transition-colors cursor-pointer">
+          <button onClick={() => navigate(`/edit/course/${course.id}`)} className="flex items-center gap-1.5 bg-surface border border-border px-3 py-1.5 rounded-btn text-xs font-bold text-text hover:border-accent transition-colors cursor-pointer shadow-sm">
             <Edit3 size={14} /> Modifier
           </button>
         </div>
+        
         <div>
-          <div className="flex items-center gap-2 mb-3">
-            <Badge variant="outline" className="text-secondary border-secondary/30 font-mono">{course.course_code}</Badge>
-            <Badge variant={course.status === 'Validé' ? 'success' : 'default'} className="font-mono">{course.status}</Badge>
-            <span className="text-xs font-bold bg-surface-elevated px-2 py-1 rounded-md">{course.ects} ECTS</span>
-          </div>
           <h1 className="font-serif text-4xl md:text-5xl font-bold mb-3 leading-tight">{course.title}</h1>
-          <p className="text-sm text-text-muted flex items-center gap-2">
-            <Scale size={16} className="text-accent" />
-            {course.teacher_name ? `Dispensé par ${course.teacher_name}` : 'Matière générale'} • {course.semester}
-          </p>
+          <div className="flex flex-wrap items-center gap-3 text-sm text-text-muted">
+            <Badge variant="outline" className="font-mono bg-surface">{course.course_code || 'Général'}</Badge>
+            <span className="text-accent font-bold bg-accent/10 px-2 py-1 rounded-md">{course.ects} ECTS</span>
+            <span>•</span>
+            <span className="flex items-center gap-1.5"><Scale size={14} /> {course.teacher_name || 'Professeur non spécifié'}</span>
+            <span>•</span>
+            <span>{course.semester}</span>
+          </div>
+        </div>
+
+        {/* ONGLETS DE NAVIGATION INTERNE */}
+        <div className="flex bg-surface-elevated p-1 rounded-xl overflow-x-auto custom-scrollbar border border-border/50 shadow-inner w-full sm:w-fit">
+          {[
+            { id: 'overview', label: "Vue d'ensemble" },
+            { id: 'chapters', label: `Chapitres (${chapters.length})` },
+            { id: 'resources', label: `Documents (${documents.length})` },
+            { id: 'notes', label: `Notes (${notes.length})` },
+            { id: 'flashcards', label: `Flashcards (${flashcards.length})` },
+            { id: 'grades', label: `Résultats` }
+          ].map(tab => (
+            <button 
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as TabType)}
+              className={`flex-1 sm:flex-none whitespace-nowrap px-4 py-2 rounded-lg text-sm font-bold transition-all cursor-pointer ${activeTab === tab.id ? 'bg-accent text-background shadow-sm' : 'text-text-muted hover:text-text hover:bg-surface-interactive'}`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
       </header>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card variant="minimal" onClick={() => navigate('/add/document', { state: { courseId } })} className="cursor-pointer bg-surface p-4 flex items-center gap-3 hover:border-accent/50 transition-colors border">
-          <div className="w-10 h-10 rounded-lg bg-surface-elevated flex items-center justify-center text-text-muted"><FileText size={18} /></div>
-          <span className="text-xs font-bold leading-tight">Ajouter<br/>Document</span>
-        </Card>
-        <Card variant="minimal" onClick={() => navigate('/notes')} className="cursor-pointer bg-surface p-4 flex items-center gap-3 hover:border-accent/50 transition-colors border">
-          <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center text-accent"><FileEdit size={18} /></div>
-          <span className="text-xs font-bold leading-tight">Nouvelle<br/>Note</span>
-        </Card>
-        <Card variant="minimal" onClick={() => navigate('/add/flashcards/batch')} className="cursor-pointer bg-surface p-4 flex items-center gap-3 hover:border-accent/50 transition-colors border">
-          <div className="w-10 h-10 rounded-lg bg-info/10 flex items-center justify-center text-info"><BrainCircuit size={18} /></div>
-          <span className="text-xs font-bold leading-tight">Créer<br/>Flashcards</span>
-        </Card>
-        <Card variant="minimal" onClick={() => navigate('/add/grade')} className="cursor-pointer bg-surface p-4 flex items-center gap-3 hover:border-accent/50 transition-colors border">
-          <div className="w-10 h-10 rounded-lg bg-warning/10 flex items-center justify-center text-warning"><Award size={18} /></div>
-          <span className="text-xs font-bold leading-tight">Ajouter<br/>Note / Examen</span>
-        </Card>
-      </div>
+      {/* CONTENU DES ONGLETS */}
+      <div className="mt-2">
+        
+        {/* ONGLET 1 : VUE D'ENSEMBLE */}
+        {activeTab === 'overview' && (
+          <div className="flex flex-col gap-8 animate-in fade-in">
+            {/* Progression et Actions Rapides */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Card className="md:col-span-2 bg-surface p-6 flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-sm text-text-muted uppercase tracking-wider">Progression de la matière</h3>
+                  <span className="font-serif text-2xl font-bold text-accent">{progressPercent}%</span>
+                </div>
+                <ProgressBar value={progressPercent} max={100} colorClass="bg-accent" />
+                <div className="flex justify-between items-center mt-2">
+                  <span className="text-xs text-text-muted">{flashcards.length} cartes au total</span>
+                  {dueCardsCount > 0 ? (
+                    <span className="text-xs font-bold text-warning flex items-center gap-1"><AlertCircle size={14}/> {dueCardsCount} à réviser</span>
+                  ) : (
+                    <span className="text-xs font-bold text-success flex items-center gap-1"><CheckCircle2 size={14}/> À jour</span>
+                  )}
+                </div>
+              </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <section className="lg:col-span-2 flex flex-col gap-6 text-text">
-          
-          {generalDocs.length > 0 && (
-            <div className="bg-surface border border-accent/40 rounded-2xl p-4 flex flex-col gap-3 shadow-md animate-in fade-in">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-accent flex items-center gap-2">
-                <Globe size={16} /> Documents généraux du cours ({generalDocs.length})
-              </h2>
-              <div className="flex flex-col gap-2">
-                {generalDocs.map(doc => {
-                  const isPdf = doc.mime_type === 'application/pdf' || doc.original_name.endsWith('.pdf');
-                  const isDocSelected = selectedDocIds.includes(doc.id);
-                  return (
-                    <div 
-                      key={doc.id} 
-                      onClick={() => {
-                        if (isSelectMode) toggleSelectDoc(doc.id);
-                        else navigate(`/viewer/${doc.id}`);
-                      }}
-                      className={`p-3 bg-surface-elevated border rounded-xl flex items-center justify-between cursor-pointer transition-colors ${isDocSelected ? 'border-accent bg-accent/15' : 'border-border hover:border-accent/50'}`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        {isSelectMode && (
-                          <div onClick={(e) => { e.stopPropagation(); toggleSelectDoc(doc.id); }} className="text-accent cursor-pointer shrink-0">
-                            {isDocSelected ? <CheckSquare size={16} /> : <Square size={16} className="text-text-muted" />}
-                          </div>
-                        )}
-                        <div className={`p-2 rounded-lg shrink-0 ${isPdf ? 'bg-danger/10 text-danger' : 'bg-info/10 text-info'}`}>
-                          <FileText size={16} />
-                        </div>
-                        <div className="min-w-0 pr-2">
-                          <p className="text-sm font-medium text-text truncate hover:text-accent transition-colors">{doc.original_name}</p>
-                          <span className="text-[10px] font-mono text-text-muted uppercase">{doc.document_type} • Global</span>
-                        </div>
-                      </div>
-                      {!isSelectMode && (
-                        <div className="flex items-center gap-1">
-                          {/* BOUTON IA SUR DOCUMENT GÉNÉRAL */}
-                          <button 
-                            onClick={(e) => { 
-                              e.stopPropagation(); 
-                              setAiTarget({ type: 'document', id: doc.id, name: doc.original_name }); 
-                              setIsAIModalOpen(true); 
-                            }}
-                            className="p-1.5 text-text-muted hover:text-warning rounded-lg transition-colors cursor-pointer"
-                            title="Analyser avec l'IA"
-                          >
-                            <Sparkles size={16} />
-                          </button>
-                          <button onClick={(e) => { e.stopPropagation(); setDocToDelete({ id: doc.id, path: doc.bucket_path }); }} className="p-1.5 text-text-muted hover:text-danger rounded-lg transition-colors cursor-pointer">
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+              <div className="flex flex-col gap-3">
+                <button onClick={() => navigate('/editor/new')} className="flex-1 bg-surface-elevated border border-border rounded-card flex items-center justify-center gap-2 font-bold text-sm hover:bg-surface-interactive hover:border-accent/50 transition-all cursor-pointer group">
+                  <FileEdit size={18} className="text-text-muted group-hover:text-accent transition-colors" /> Note rapide
+                </button>
+                <button onClick={() => navigate('/session/' + course.id, { state: { from: `/courses/${course.id}` } })} className="flex-1 bg-accent text-background rounded-card flex items-center justify-center gap-2 font-bold text-sm glow-gold hover:bg-accent-strong transition-all cursor-pointer">
+                  <BrainCircuit size={18} /> Réviser maintenant
+                </button>
               </div>
             </div>
-          )}
 
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-2">
+            {/* Widgets (Prochain Événement, Accès Récents) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {nextEvent ? (
+                <Card className="bg-info/10 border border-info/20 p-5 flex flex-col gap-3">
+                  <div className="flex items-center gap-2 text-info font-bold text-xs uppercase tracking-wider">
+                    <Calendar size={16} /> Prochaine échéance
+                  </div>
+                  <div>
+                    <h4 className="font-serif text-lg font-bold text-text">{nextEvent.title}</h4>
+                    <p className="text-sm text-text-muted mt-1">{new Date(nextEvent.event_date).toLocaleString('fr-CH', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute:'2-digit' })}</p>
+                  </div>
+                </Card>
+              ) : (
+                <Card className="bg-surface p-5 flex items-center justify-center text-center border-dashed">
+                  <p className="text-sm text-text-muted">Aucune échéance planifiée pour ce cours.</p>
+                </Card>
+              )}
+
+              <Card className="bg-surface p-5 flex flex-col gap-3">
+                <h4 className="font-bold text-xs uppercase tracking-wider text-text-muted">Derniers ajouts</h4>
+                <div className="flex flex-col gap-2">
+                  {documents.slice(0,2).map(d => (
+                    <div key={d.id} onClick={() => navigate(`/viewer/${d.id}`)} className="flex items-center gap-3 cursor-pointer hover:text-accent transition-colors text-sm">
+                      <FileText size={14} className="text-text-muted" /> <span className="truncate">{d.original_name}</span>
+                    </div>
+                  ))}
+                  {notes.slice(0,1).map(n => (
+                    <div key={n.id} onClick={() => navigate(`/editor/${n.id}`)} className="flex items-center gap-3 cursor-pointer hover:text-accent transition-colors text-sm">
+                      <FileEdit size={14} className="text-text-muted" /> <span className="truncate">{n.title}</span>
+                    </div>
+                  ))}
+                  {documents.length === 0 && notes.length === 0 && <span className="text-xs text-text-muted italic">La matière est vide.</span>}
+                </div>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {/* ONGLET 2 : CHAPITRES */}
+        {activeTab === 'chapters' && (
+          <div className="flex flex-col gap-4 animate-in fade-in">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-2 bg-surface p-4 rounded-2xl border border-border">
               <div className="flex items-center gap-3">
-                <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
-                  <LayoutGrid size={16} /> Structure hiérarchique ({chapters.length})
+                <h2 className="text-sm font-bold text-text flex items-center gap-2">
+                  <LayoutGrid size={18} className="text-accent" /> Plan du cours
                 </h2>
                 {chapters.length > 0 && (
-                  <div className="flex items-center gap-1 text-[11px] text-text-muted font-mono">
-                    <button onClick={() => handleToggleAll(true)} className="hover:text-accent cursor-pointer">Déplier tout</button>
-                    <span>•</span>
-                    <button onClick={() => handleToggleAll(false)} className="hover:text-accent cursor-pointer">Plier tout</button>
+                  <div className="flex items-center gap-2 text-xs text-text-muted font-medium bg-surface-elevated px-2 py-1 rounded-md border border-border/50">
+                    <button onClick={() => handleToggleAll(true)} className="hover:text-text transition-colors cursor-pointer">Tout déplier</button>
+                    <span>|</span>
+                    <button onClick={() => handleToggleAll(false)} className="hover:text-text transition-colors cursor-pointer">Tout plier</button>
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-2">
-                <button 
-                  onClick={() => {
-                    setIsSelectMode(!isSelectMode);
-                    if (isSelectMode) { setSelectedChapterIds([]); setSelectedDocIds([]); }
-                  }} 
-                  className={`text-xs font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-colors cursor-pointer ${isSelectMode ? 'bg-accent text-background border-accent font-bold' : 'bg-surface border-border text-text'}`}
-                >
-                  <CheckSquare size={14} /> {isSelectMode ? 'Mode sélection actif' : 'Sélectionner'}
+              <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+                <button onClick={() => { setIsSelectMode(!isSelectMode); if (isSelectMode) { setSelectedChapterIds([]); setSelectedDocIds([]); } }} className={`text-xs font-bold flex items-center gap-1.5 px-3 py-2 rounded-btn border transition-colors cursor-pointer shrink-0 ${isSelectMode ? 'bg-accent text-background border-accent' : 'bg-surface-elevated border-border text-text hover:bg-surface-interactive'}`}>
+                  <CheckSquare size={14} /> Sélection
                 </button>
-                <button onClick={() => setShowBulkModal(true)} className="text-xs text-text font-semibold flex items-center gap-1 hover:border-accent/50 transition-colors cursor-pointer bg-surface px-3 py-1.5 rounded-lg border border-border">
-                  <ClipboardPaste size={14} className="text-accent" /> Table des matières
+                <button onClick={() => setShowBulkModal(true)} className="text-xs text-text font-bold flex items-center gap-1 hover:bg-surface-interactive transition-colors cursor-pointer bg-surface-elevated px-3 py-2 rounded-btn border border-border shrink-0">
+                  <ClipboardPaste size={14} className="text-text-muted" /> Importer Plan
                 </button>
-                <button onClick={() => { setParentChapterId(null); setIsAddingChapter(true); }} className="text-xs text-accent font-bold flex items-center gap-1 hover:underline cursor-pointer bg-accent/10 px-3 py-1.5 rounded-lg border border-accent/20">
+                <button onClick={() => { setParentChapterId(null); setIsAddingChapter(true); }} className="text-xs text-background font-bold flex items-center gap-1 cursor-pointer bg-text px-3 py-2 rounded-btn hover:bg-text/90 shrink-0">
                   <Plus size={14} /> Chapitre
                 </button>
               </div>
             </div>
 
             {isSelectMode && (
-              <div className="bg-surface-elevated border border-accent/40 px-4 py-3 rounded-2xl flex flex-col sm:flex-row items-center justify-between shadow-lg gap-3 animate-in fade-in duration-200">
+              <div className="bg-surface-elevated border border-accent/40 px-4 py-3 rounded-2xl flex flex-col sm:flex-row items-center justify-between shadow-sm gap-3 animate-in slide-in-from-top-2">
                 <div className="flex items-center gap-3">
                   <button onClick={handleSelectAll} className="text-xs font-bold text-accent hover:underline cursor-pointer">
                     {totalSelectedCount === chapters.length + documents.length ? 'Tout désélectionner' : 'Tout sélectionner'}
@@ -723,18 +559,10 @@ export function CourseDetail() {
                   <span className="text-xs font-semibold text-text">{totalSelectedCount} sélectionné(s)</span>
                 </div>
                 <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <button 
-                    disabled={totalSelectedCount === 0}
-                    onClick={() => setIsBatchMoveModalOpen(true)}
-                    className="flex-1 sm:flex-none bg-info/15 text-info border border-info/30 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-info/25 transition-colors cursor-pointer disabled:opacity-40"
-                  >
-                    <FolderInput size={14} /> Déplacer vers...
+                  <button disabled={totalSelectedCount === 0} onClick={() => setIsBatchMoveModalOpen(true)} className="flex-1 sm:flex-none bg-surface border border-border px-3 py-2 rounded-btn text-xs font-bold flex items-center justify-center gap-1.5 hover:border-info/50 hover:text-info transition-colors cursor-pointer disabled:opacity-40">
+                    <FolderInput size={14} /> Déplacer
                   </button>
-                  <button 
-                    disabled={totalSelectedCount === 0}
-                    onClick={() => setIsBatchDeleteModalOpen(true)}
-                    className="flex-1 sm:flex-none bg-danger/10 text-danger border border-danger/30 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-danger/20 transition-colors cursor-pointer disabled:opacity-40"
-                  >
+                  <button disabled={totalSelectedCount === 0} onClick={() => setIsBatchDeleteModalOpen(true)} className="flex-1 sm:flex-none bg-danger/10 text-danger border border-danger/20 px-3 py-2 rounded-btn text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-danger/20 transition-colors cursor-pointer disabled:opacity-40">
                     <Trash2 size={14} /> Supprimer
                   </button>
                 </div>
@@ -743,27 +571,20 @@ export function CourseDetail() {
 
             {isAddingChapter && (
               <form onSubmit={handleCreateChapter} className="bg-surface border border-accent/40 p-4 rounded-2xl flex flex-col gap-3 animate-in fade-in duration-200">
-                <span className="text-xs font-bold text-accent">
-                  {parentChapterId ? "Ajouter un sous-chapitre" : "Ajouter un chapitre principal"}
-                </span>
+                <span className="text-xs font-bold text-accent">{parentChapterId ? "Ajouter un sous-chapitre" : "Ajouter un chapitre principal"}</span>
                 <div className="flex gap-2">
-                  <input 
-                    type="text"
-                    autoFocus
-                    value={newChapterTitle}
-                    onChange={(e) => setNewChapterTitle(e.target.value)}
-                    placeholder="Intitulé (ex: 1.1 Notion de consentement)"
-                    className="flex-1 bg-surface-elevated border border-border rounded-xl px-3 py-2 text-sm focus:border-accent"
-                  />
-                  <button type="submit" className="bg-accent text-background px-4 py-2 rounded-xl text-xs font-bold cursor-pointer">Créer</button>
+                  <input type="text" autoFocus value={newChapterTitle} onChange={(e) => setNewChapterTitle(e.target.value)} placeholder="Intitulé (ex: 1.1 Notion de consentement)" className="flex-1 bg-background border border-border rounded-input px-3 py-2 text-sm focus:border-accent" />
+                  <button type="submit" className="bg-accent text-background px-4 py-2 rounded-btn text-xs font-bold cursor-pointer">Créer</button>
                   <button type="button" onClick={() => { setIsAddingChapter(false); setParentChapterId(null); }} className="p-2 text-text-muted hover:text-text"><X size={18}/></button>
                 </div>
               </form>
             )}
 
             {chapters.length === 0 && !isAddingChapter ? (
-              <div className="text-center py-12 border border-dashed border-border rounded-2xl text-text-muted text-sm">
-                Aucun chapitre. Collez votre table des matières ou créez un chapitre principal.
+              <div className="text-center py-16 border border-dashed border-border rounded-2xl text-text-muted text-sm flex flex-col items-center gap-3">
+                <LayoutGrid size={32} className="opacity-20" />
+                <p>Aucun chapitre. Construisez la structure du cours pour mieux vous organiser.</p>
+                <button onClick={() => setShowBulkModal(true)} className="text-accent font-bold hover:underline cursor-pointer">Coller une table des matières</button>
               </div>
             ) : (
               <div className="flex flex-col gap-3">
@@ -771,114 +592,144 @@ export function CourseDetail() {
               </div>
             )}
           </div>
-        </section>
+        )}
 
-        <aside className="lg:col-span-1 flex flex-col gap-6">
-          
-          {/* RADAR DE RAPPROCHEMENT */}
-          {nextEvent && (
-            <Card className="bg-surface-elevated border-info/40 p-5 flex flex-col gap-4 animate-in slide-in-from-right-4 shadow-lg relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-info/5 rounded-bl-full -z-10"></div>
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-2 text-info font-bold text-xs uppercase tracking-wider">
-                  <Target size={16} /> Prochain séminaire
-                </div>
-                <Badge variant="info" className="text-[10px]">
-                  {new Date(nextEvent.event_date).toLocaleDateString('fr-CH', { weekday: 'short', day: 'numeric', month: 'short' })}
-                </Badge>
-              </div>
-              <div className="flex flex-col gap-2">
-                <h3 className="font-serif text-lg font-bold text-text leading-tight">{nextEvent.title}</h3>
-                <p className="text-xs text-text-muted leading-relaxed">Le radar détecte un retard dans vos révisions. Voici votre feuille de route avant ce cours :</p>
-                
-                <ul className="flex flex-col gap-2 mt-2">
-                  <li className="flex items-center gap-2 text-xs font-medium text-text">
-                    <Circle size={14} className="text-warning" /> 2 documents non lus
-                  </li>
-                  <li className="flex items-center gap-2 text-xs font-medium text-text">
-                    <AlertCircle size={14} className="text-danger" /> Aucune note préparatoire
-                  </li>
-                  <li className="flex items-center gap-2 text-xs font-medium text-text">
-                    <CheckCircle2 size={14} className="text-success" /> Flashcards à jour
-                  </li>
-                </ul>
-              </div>
-              <button onClick={() => navigate('/study')} className="mt-2 bg-info/10 text-info hover:bg-info/20 py-2 rounded-xl text-xs font-bold transition-colors w-full cursor-pointer">
-                Régler la dette de révision
-              </button>
-            </Card>
-          )}
-
-          <div className="flex flex-col gap-3">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
-                <Calendar size={16} /> Planning & Créneaux
-              </h2>
-              <button onClick={() => setIsAddingEvent(true)} className="text-xs text-accent font-bold flex items-center gap-1 hover:underline cursor-pointer bg-accent/10 px-2.5 py-1 rounded-lg border border-accent/20">
-                <Plus size={12} /> Créneau
+        {/* ONGLET 3 : RESSOURCES / DOCUMENTS */}
+        {activeTab === 'resources' && (
+          <div className="flex flex-col gap-4 animate-in fade-in">
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="text-sm font-bold text-text">Tous les documents ({documents.length})</h2>
+              <button onClick={() => navigate('/add/document', { state: { courseId } })} className="text-xs bg-surface-elevated border border-border px-3 py-2 rounded-btn font-bold flex items-center gap-1.5 hover:bg-surface-interactive cursor-pointer">
+                <Plus size={14} /> Importer
               </button>
             </div>
-
-            {isAddingEvent && (
-              <form onSubmit={handleCreateEvent} className="bg-surface border border-accent/40 p-3 rounded-2xl flex flex-col gap-2.5">
-                <input type="text" required value={eventForm.title} onChange={(e) => setEventForm({ ...eventForm, title: e.target.value })} placeholder="Titre (ex: Séminaire)" className="bg-surface-elevated border border-border rounded-xl px-3 py-2 text-xs" />
-                <div className="grid grid-cols-2 gap-2">
-                  <input type="datetime-local" required value={eventForm.event_date} onChange={(e) => setEventForm({ ...eventForm, event_date: e.target.value })} className="bg-surface-elevated border border-border rounded-xl px-2 py-2 text-xs" />
-                  <select value={eventForm.category} onChange={(e) => setEventForm({ ...eventForm, category: e.target.value })} className="bg-surface-elevated border border-border rounded-xl px-2 py-2 text-xs">
-                    <option value="Cours">Cours</option>
-                    <option value="Examen">Examen</option>
-                    <option value="Séminaire">Séminaire</option>
-                    <option value="Rendu">Rendu</option>
-                  </select>
-                </div>
-                <div className="flex gap-2 mt-1">
-                  <button type="submit" className="flex-1 bg-accent text-background py-1.5 rounded-xl text-xs font-bold">Enregistrer</button>
-                  <button type="button" onClick={() => setIsAddingEvent(false)} className="px-3 bg-surface border border-border text-text-muted py-1.5 rounded-xl text-xs">Annuler</button>
-                </div>
-              </form>
+            
+            {documents.length === 0 ? (
+              <div className="text-center py-12 border border-dashed border-border rounded-2xl text-text-muted text-sm">Aucun document importé.</div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {documents.map(doc => {
+                  const isPdf = doc.mime_type === 'application/pdf' || doc.original_name.endsWith('.pdf');
+                  return (
+                    <Card key={doc.id} onClick={() => navigate(`/viewer/${doc.id}`)} className="p-4 flex items-center gap-4 hover:border-accent/50 cursor-pointer group">
+                      <div className={`p-3 rounded-xl shrink-0 ${isPdf ? 'bg-danger/10 text-danger' : 'bg-info/10 text-info'}`}>
+                        <FileText size={20} />
+                      </div>
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <span className="font-bold text-sm text-text truncate group-hover:text-accent transition-colors">{doc.original_name}</span>
+                        <span className="text-[10px] text-text-muted font-mono uppercase tracking-wider mt-1">{doc.document_type} • {doc.chapters?.title || 'Global'}</span>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
             )}
-
-            <div className="bg-surface border border-border rounded-2xl p-4 flex flex-col gap-2.5">
-              {courseEvents.length === 0 ? (
-                <p className="text-xs text-text-muted italic text-center py-2">Aucun créneau programmé.</p>
-              ) : (
-                courseEvents.map(evt => (
-                  <div key={evt.id} className="flex items-center justify-between bg-surface-elevated p-2.5 rounded-xl border border-border/50 text-xs">
-                    <div className="flex flex-col gap-0.5 min-w-0 pr-2">
-                      <span className="font-semibold text-text truncate">{evt.title}</span>
-                      <span className="text-[10px] font-mono text-text-muted flex items-center gap-1">
-                        <Clock size={10} /> {new Date(evt.event_date).toLocaleString('fr-CH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                    <button onClick={() => setEventToDelete(evt.id)} className="p-1.5 text-text-muted hover:text-danger rounded-lg"><Trash2 size={14} /></button>
-                  </div>
-                ))
-              )}
-            </div>
           </div>
+        )}
 
-          <Card onClick={() => navigate(`/study`)} className="bg-surface border-border p-5 cursor-pointer hover:border-info/50 group">
-            <div className="flex justify-between items-start mb-4">
-              <div className="p-2.5 bg-info/10 text-info rounded-xl group-hover:scale-110 transition-transform"><BrainCircuit size={20} /></div>
-              <ChevronRight size={18} className="text-text-muted group-hover:text-info" />
+        {/* ONGLET 4 : NOTES */}
+        {activeTab === 'notes' && (
+          <div className="flex flex-col gap-4 animate-in fade-in">
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="text-sm font-bold text-text">Vos notes de cours ({notes.length})</h2>
+              <button onClick={() => navigate('/editor/new')} className="text-xs bg-surface-elevated border border-border px-3 py-2 rounded-btn font-bold flex items-center gap-1.5 hover:bg-surface-interactive cursor-pointer">
+                <FileEdit size={14} /> Nouvelle note
+              </button>
             </div>
-            <h3 className="font-serif font-bold text-xl mb-1">Répétition espacée</h3>
-            <p className="text-sm text-text-muted">À réviser : <span className="font-bold text-info">{dueCardsCount}</span></p>
-          </Card>
-        </aside>
+            
+            {notes.length === 0 ? (
+              <div className="text-center py-12 border border-dashed border-border rounded-2xl text-text-muted text-sm">Aucune note liée à ce cours.</div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {notes.map(note => (
+                  <Card key={note.id} onClick={() => navigate(`/editor/${note.id}`)} className="p-5 flex flex-col gap-3 cursor-pointer hover:border-accent/50 group">
+                    <h3 className="font-serif font-bold text-lg text-text group-hover:text-accent transition-colors truncate">{note.title}</h3>
+                    <p className="text-sm text-text-muted line-clamp-3 font-serif">{note.content}</p>
+                    <span className="text-[10px] text-text-muted font-mono mt-2">Mise à jour : {new Date(note.updated_at).toLocaleDateString()}</span>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ONGLET 5 : FLASHCARDS */}
+        {activeTab === 'flashcards' && (
+          <div className="flex flex-col gap-4 animate-in fade-in">
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="text-sm font-bold text-text">Flashcards du cours ({flashcards.length})</h2>
+              <div className="flex gap-2">
+                <button onClick={() => navigate('/session/' + course.id, { state: { from: `/courses/${course.id}` } })} className="text-xs bg-accent text-background px-3 py-2 rounded-btn font-bold flex items-center gap-1.5 glow-gold cursor-pointer">
+                  <BrainCircuit size={14} /> Réviser
+                </button>
+              </div>
+            </div>
+            
+            {flashcards.length === 0 ? (
+              <div className="text-center py-12 border border-dashed border-border rounded-2xl text-text-muted text-sm">
+                Aucune flashcard. Créez-en manuellement ou générez-les avec l'IA depuis un document.
+              </div>
+            ) : (
+              <div className="flex flex-col border border-border bg-surface rounded-card overflow-hidden shadow-sm">
+                {flashcards.map((card, idx) => (
+                  <div key={card.id} className={`p-4 flex flex-col gap-1 hover:bg-surface-interactive transition-colors ${idx !== flashcards.length -1 ? 'border-b border-border/50' : ''}`}>
+                    <div className="flex justify-between items-start gap-4">
+                      <p className="text-sm font-medium text-text"><span className="text-text-muted font-mono mr-2 text-xs">Q:</span>{card.front}</p>
+                      <Badge variant={card.ease_factor >= 2.5 ? 'success' : 'warning'} className="text-[9px] shrink-0">
+                        {card.ease_factor >= 2.5 ? 'Maîtrisée' : 'À revoir'}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-text-muted"><span className="opacity-50 font-mono mr-2 text-xs">R:</span>{card.back}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ONGLET 6 : RÉSULTATS */}
+        {activeTab === 'grades' && (
+          <div className="flex flex-col gap-4 animate-in fade-in">
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="text-sm font-bold text-text">Résultats d'examens</h2>
+              <button onClick={() => navigate('/add/grade')} className="text-xs bg-surface-elevated border border-border px-3 py-2 rounded-btn font-bold flex items-center gap-1.5 hover:bg-surface-interactive cursor-pointer">
+                <Plus size={14} /> Saisir note
+              </button>
+            </div>
+            
+            {grades.length === 0 ? (
+              <div className="text-center py-12 border border-dashed border-border rounded-2xl text-text-muted text-sm">Aucune note enregistrée.</div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {grades.map(g => (
+                  <Card key={g.id} className="p-5 flex items-center justify-between border-l-4 border-l-info">
+                    <div className="flex flex-col">
+                      <span className="font-bold text-sm text-text">{g.eval_type}</span>
+                      <span className="text-xs text-text-muted">Pondération : {g.weight}%</span>
+                    </div>
+                    <span className={`font-serif text-3xl font-bold ${g.grade >= 4.0 ? 'text-success' : 'text-danger'}`}>{g.grade.toFixed(2)}</span>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
 
+      {/* MODALES COMMUNES */}
       {showBulkModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm p-4 animate-in fade-in">
-          <div className="w-full max-w-xl bg-surface-elevated border border-border rounded-3xl p-6 shadow-2xl flex flex-col gap-4 text-text">
-            <div className="flex justify-between items-center pb-2 border-b border-border">
-              <h3 className="font-serif text-xl font-bold">Importer la table des matières hiérarchique</h3>
-              <button onClick={() => setShowBulkModal(false)} className="p-1.5 hover:bg-surface rounded-xl text-text-muted"><X size={20} /></button>
+          <div className="w-full max-w-xl bg-surface-elevated border border-border rounded-modal p-6 shadow-apple flex flex-col gap-4 text-text">
+            <div className="flex justify-between items-center pb-2 border-b border-border/50">
+              <h3 className="font-serif text-xl font-bold">Importer un plan de cours</h3>
+              <button onClick={() => setShowBulkModal(false)} className="p-1.5 hover:bg-surface rounded-full text-text-muted cursor-pointer"><X size={20} /></button>
             </div>
-            <textarea autoFocus value={bulkSyllabusText} onChange={(e) => setBulkSyllabusText(e.target.value)} placeholder="I. Introduction&#10;  1. Notion de base..." className="w-full h-48 bg-surface border border-border rounded-xl p-4 text-sm font-serif resize-none" />
+            <p className="text-xs text-text-muted">Copiez/collez la table des matières de votre syllabus. Lexi créera la hiérarchie automatiquement.</p>
+            <textarea autoFocus value={bulkSyllabusText} onChange={(e) => setBulkSyllabusText(e.target.value)} placeholder="I. Introduction&#10;  1. Notion de base..." className="w-full h-48 bg-background border border-border rounded-input p-4 text-sm font-serif resize-none focus:border-accent" />
             <div className="flex gap-2 mt-2">
-              <button onClick={() => setShowBulkModal(false)} className="flex-1 bg-surface border border-border py-3 rounded-xl text-sm">Annuler</button>
-              <button onClick={handleBulkImport} className="flex-1 bg-accent text-background py-3 rounded-xl text-sm font-bold glow-gold">Lancer l'import</button>
+              <button onClick={() => setShowBulkModal(false)} className="flex-1 bg-surface border border-border py-2.5 rounded-btn text-sm font-medium cursor-pointer">Annuler</button>
+              <button onClick={handleBulkImport} className="flex-1 bg-accent text-background py-2.5 rounded-btn text-sm font-bold glow-gold cursor-pointer">Lancer l'import</button>
             </div>
           </div>
         </div>
@@ -886,112 +737,59 @@ export function CourseDetail() {
 
       {isBatchMoveModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm p-4 animate-in fade-in">
-          <div className="w-full max-w-md bg-surface-elevated border border-border rounded-3xl p-6 shadow-2xl flex flex-col gap-4 text-text">
-            <div className="flex justify-between items-center pb-2 border-b border-border">
+          <div className="w-full max-w-md bg-surface-elevated border border-border rounded-modal p-6 shadow-apple flex flex-col gap-4 text-text">
+            <div className="flex justify-between items-center pb-2 border-b border-border/50">
               <h3 className="font-serif text-xl font-bold">Déplacer la sélection</h3>
-              <button onClick={() => setIsBatchMoveModalOpen(false)} className="p-1.5 hover:bg-surface rounded-xl text-text-muted"><X size={20} /></button>
+              <button onClick={() => setIsBatchMoveModalOpen(false)} className="p-1.5 hover:bg-surface rounded-full text-text-muted cursor-pointer"><X size={20} /></button>
             </div>
-            <p className="text-xs text-text-muted leading-relaxed">
-              Choisissez le chapitre parent ou la partie où vous souhaitez regrouper les {totalSelectedCount} éléments sélectionnés :
-            </p>
             <div className="flex flex-col gap-1.5">
               <label className="text-[10px] uppercase font-bold text-accent">Chapitre ou Partie de destination</label>
-              <select 
-                value={batchTargetParentId || ''} 
-                onChange={(e) => setBatchTargetParentId(e.target.value ? e.target.value : null)}
-                className="bg-surface border border-border rounded-xl px-3.5 py-2.5 text-sm text-text w-full focus:border-accent"
-              >
+              <select value={batchTargetParentId || ''} onChange={(e) => setBatchTargetParentId(e.target.value ? e.target.value : null)} className="bg-background border border-border rounded-input px-3.5 py-2.5 text-sm text-text w-full focus:border-accent cursor-pointer">
                 <option value="">(Racine du cours / Aucun parent direct)</option>
-                {chapters.map(c => (
-                  <option key={c.id} value={c.id}>{c.title}</option>
-                ))}
+                {chapters.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
               </select>
             </div>
             <div className="flex gap-2 mt-2">
-              <button onClick={() => setIsBatchMoveModalOpen(false)} className="flex-1 bg-surface border border-border py-3 rounded-xl text-sm cursor-pointer">Annuler</button>
-              <button onClick={handleBatchMoveSubmit} className="flex-1 bg-accent text-background py-3 rounded-xl text-sm font-bold glow-gold cursor-pointer">Déplacer ici</button>
+              <button onClick={() => setIsBatchMoveModalOpen(false)} className="flex-1 bg-surface border border-border py-2.5 rounded-btn text-sm cursor-pointer">Annuler</button>
+              <button onClick={handleBatchMoveSubmit} className="flex-1 bg-accent text-background py-2.5 rounded-btn text-sm font-bold glow-gold cursor-pointer">Déplacer ici</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODALE INTELLIGENTE D'IA (SÉLECTION DE PAGES) */}
       {isAIModalOpen && aiTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm p-4 animate-in fade-in">
-          <div className="w-full max-w-md bg-surface-elevated border border-border rounded-3xl p-6 shadow-2xl flex flex-col gap-5 text-text">
-            <div className="flex justify-between items-center pb-3 border-b border-border">
-              <h3 className="font-serif text-xl font-bold flex items-center gap-2 text-warning">
-                <Sparkles size={20} /> Assistant IA Lexi
-              </h3>
-              <button onClick={() => setIsAIModalOpen(false)} className="p-1.5 hover:bg-surface rounded-xl text-text-muted cursor-pointer"><X size={20} /></button>
+          <div className="w-full max-w-md bg-surface-elevated border border-border rounded-modal p-6 shadow-apple flex flex-col gap-5 text-text">
+            <div className="flex justify-between items-center pb-3 border-b border-border/50">
+              <h3 className="font-serif text-xl font-bold flex items-center gap-2 text-warning"><Sparkles size={20} /> Assistant IA Lexi</h3>
+              <button onClick={() => setIsAIModalOpen(false)} className="p-1.5 hover:bg-surface rounded-full text-text-muted cursor-pointer"><X size={20} /></button>
             </div>
-            
-            <p className="text-sm font-medium text-text">
-              Analyse cible : <span className="text-accent">{aiTarget.name}</span>
-            </p>
-
+            <p className="text-sm font-medium text-text">Analyse cible : <span className="text-accent">{aiTarget.name}</span></p>
             <div className="flex flex-col gap-3">
               <label className="text-[10px] uppercase font-bold text-text-muted">Type de tâche</label>
               <div className="grid grid-cols-2 gap-2">
-                <button 
-                  onClick={() => setAiConfig({...aiConfig, action: 'flashcards'})}
-                  className={`py-2 px-3 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${aiConfig.action === 'flashcards' ? 'bg-warning/10 border-warning text-warning' : 'bg-surface border-border text-text-muted'}`}
-                >Générer Flashcards</button>
-                <button 
-                  onClick={() => setAiConfig({...aiConfig, action: 'summary'})}
-                  className={`py-2 px-3 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${aiConfig.action === 'summary' ? 'bg-info/10 border-info text-info' : 'bg-surface border-border text-text-muted'}`}
-                >Résumé Analytique</button>
+                <button onClick={() => setAiConfig({...aiConfig, action: 'flashcards'})} className={`py-2 px-3 rounded-btn text-xs font-bold border transition-colors cursor-pointer ${aiConfig.action === 'flashcards' ? 'bg-warning/10 border-warning text-warning' : 'bg-surface border-border text-text-muted'}`}>Flashcards</button>
+                <button onClick={() => setAiConfig({...aiConfig, action: 'summary'})} className={`py-2 px-3 rounded-btn text-xs font-bold border transition-colors cursor-pointer ${aiConfig.action === 'summary' ? 'bg-info/10 border-info text-info' : 'bg-surface border-border text-text-muted'}`}>Résumé</button>
               </div>
             </div>
-
-            {/* SELECTION DE PLAGE DE PAGES (Uniquement pour les documents) */}
             {aiTarget.type === 'document' && (
-              <div className="flex flex-col gap-2 p-3 bg-warning/5 border border-warning/20 rounded-xl">
-                <label className="text-[10px] uppercase font-bold text-warning flex items-center gap-1.5">
-                  <FileText size={12} /> Fichier volumineux ? Cibler les pages
-                </label>
+              <div className="flex flex-col gap-2 p-3 bg-surface border border-border rounded-xl">
+                <label className="text-[10px] uppercase font-bold text-text-muted flex items-center gap-1.5">Fichier volumineux ? Cibler les pages</label>
                 <div className="flex items-center gap-3">
-                  <input 
-                    type="number" 
-                    placeholder="Page début" 
-                    value={aiConfig.pageStart}
-                    onChange={(e) => setAiConfig({...aiConfig, pageStart: e.target.value})}
-                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:border-warning" 
-                  />
-                  <span className="text-text-muted font-serif">à</span>
-                  <input 
-                    type="number" 
-                    placeholder="Page fin" 
-                    value={aiConfig.pageEnd}
-                    onChange={(e) => setAiConfig({...aiConfig, pageEnd: e.target.value})}
-                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:border-warning" 
-                  />
+                  <input type="number" placeholder="Début" value={aiConfig.pageStart} onChange={(e) => setAiConfig({...aiConfig, pageStart: e.target.value})} className="w-full bg-background border border-border rounded-input px-3 py-2 text-sm focus:border-warning" />
+                  <span className="text-text-muted">à</span>
+                  <input type="number" placeholder="Fin" value={aiConfig.pageEnd} onChange={(e) => setAiConfig({...aiConfig, pageEnd: e.target.value})} className="w-full bg-background border border-border rounded-input px-3 py-2 text-sm focus:border-warning" />
                 </div>
-                <p className="text-[10px] text-text-muted mt-1 italic">Laissez vide pour analyser l'intégralité du document.</p>
               </div>
             )}
-
-            <button onClick={handleLaunchAI} className="mt-2 bg-text text-background py-3 rounded-xl text-sm font-bold shadow-lg hover:scale-[1.02] transition-transform cursor-pointer">
-              Lancer l'analyse
-            </button>
+            <button onClick={handleLaunchAI} className="mt-2 bg-text text-background py-3 rounded-btn text-sm font-bold shadow-sm hover:scale-[1.02] transition-transform cursor-pointer">Lancer l'analyse</button>
           </div>
         </div>
       )}
 
       <ConfirmModal isOpen={!!docToDelete} title="Supprimer le document ?" message="Ce document sera définitivement effacé." confirmText="Supprimer" cancelText="Annuler" isDanger={true} onConfirm={handleDeleteDocument} onClose={() => setDocToDelete(null)} />
       <ConfirmModal isOpen={!!chapterToDelete} title="Supprimer le chapitre ?" message="Attention, les sous-chapitres associés seront également supprimés." confirmText="Supprimer" cancelText="Annuler" isDanger={true} onConfirm={confirmDeleteChapter} onClose={() => setChapterToDelete(null)} />
-      <ConfirmModal isOpen={!!eventToDelete} title="Supprimer le créneau ?" message="Supprimer cet événement du calendrier ?" confirmText="Supprimer" cancelText="Annuler" isDanger={true} onConfirm={confirmDeleteEvent} onClose={() => setEventToDelete(null)} />
-
-      <ConfirmModal 
-        isOpen={isBatchDeleteModalOpen} 
-        title="Supprimer la sélection ?" 
-        message={`Voulez-vous vraiment supprimer les ${totalSelectedCount} éléments sélectionnés ?`} 
-        confirmText="Tout supprimer" 
-        cancelText="Annuler" 
-        isDanger={true} 
-        onConfirm={handleBatchDelete} 
-        onClose={() => setIsBatchDeleteModalOpen(false)} 
-      />
+      <ConfirmModal isOpen={isBatchDeleteModalOpen} title="Supprimer la sélection ?" message={`Voulez-vous vraiment supprimer les ${totalSelectedCount} éléments sélectionnés ?`} confirmText="Tout supprimer" cancelText="Annuler" isDanger={true} onConfirm={handleBatchDelete} onClose={() => setIsBatchDeleteModalOpen(false)} />
     </div>
   );
 }
