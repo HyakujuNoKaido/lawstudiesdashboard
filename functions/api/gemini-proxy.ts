@@ -26,27 +26,26 @@ const MODELS_TO_TRY = [
   'gemini-1.5-flash',
 ];
 
+// À REMPLACER : Mets ici tes vrais domaines (ex: lawstudiesdashboard.pages.dev)
 const ALLOWED_ORIGINS = new Set([
   'http://localhost:5173',
   'http://localhost:3000',
-  'https://lexi-suisse.pages.dev', // Remplacer par ton vrai domaine
+  'https://lexi-suisse.pages.dev',
 ]);
 
 export async function onRequest(context: { request: Request; env: { GEMINI_API_KEY?: string } }) {
   const requestOrigin = context.request.headers.get('Origin');
   
-  // Sécurité CORS stricte
-  if (requestOrigin && !ALLOWED_ORIGINS.has(requestOrigin)) {
-    return new Response(JSON.stringify({ error: 'Origin non autorisée.' }), {
+  // SÉCURITÉ STRICTE : Si pas d'origine ou origine inconnue -> Rejet 403
+  if (!requestOrigin || !ALLOWED_ORIGINS.has(requestOrigin)) {
+    return new Response(JSON.stringify({ error: 'Origine manquante ou non autorisée.' }), {
       status: 403,
       headers: { 'Content-Type': 'application/json' },
     });
   }
 
-  const allowedOrigin = requestOrigin || 'https://lexi-suisse.pages.dev';
-
   const corsHeaders = {
-    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Origin': requestOrigin,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Vary': 'Origin',
