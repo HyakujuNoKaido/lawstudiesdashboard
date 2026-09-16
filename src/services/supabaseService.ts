@@ -7,7 +7,7 @@ export async function getCurrentUserId(): Promise<string> {
 }
 
 export async function fetchCourses(semester?: string) {
-  let query = supabase.from('courses').select('*, chapters(id), documents(id), course_schedules(day_of_week)');
+  let query = supabase.from('courses').select('*, chapters(id), documents(id), course_schedules(day_of_week)').eq('is_archived', false);
   if (semester && semester !== 'Tous') {
     query = query.eq('semester', semester);
   }
