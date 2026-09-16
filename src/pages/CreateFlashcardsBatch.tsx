@@ -34,6 +34,41 @@ export function CreateFlashcardsBatch() {
   
   const [generationReport, setGenerationReport] = useState<FlashcardGenerationResult | null>(null);
 
+  // ÉTATS POUR LA BARRE DE PROGRESSION IA
+  const [progress, setProgress] = useState(0);
+  const [statusMessage, setStatusMessage] = useState('');
+
+  // GESTION DE LA BARRE DE PROGRESSION INTELLIGENTE
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (generating) {
+      setProgress(0);
+      setStatusMessage("Initialisation de l'IA...");
+      
+      interval = setInterval(() => {
+        setProgress(old => {
+          // Approche asymptotique vers 95% (ralentit au fur et à mesure)
+          const step = (95 - old) * 0.05; 
+          const next = old + step;
+          
+          // Changement dynamique du texte selon l'avancement simulé
+          if (next < 20) setStatusMessage("Lecture et structuration du document...");
+          else if (next < 50) setStatusMessage("Analyse juridique du contenu...");
+          else if (next < 80) setStatusMessage("Rédaction des questions et réponses...");
+          else setStatusMessage("Vérification académique et formatage...");
+          
+          return next;
+        });
+      }, 500);
+    } else {
+      // Quand la génération est finie, on bloque à 100% brièvement avant que le bloc ne disparaisse
+      setProgress(100);
+      setStatusMessage("Génération terminée !");
+    }
+    
+    return () => clearInterval(interval);
+  }, [generating]);
+
   useEffect(() => {
     async function initialize() {
       try {
@@ -106,7 +141,7 @@ export function CreateFlashcardsBatch() {
     
     setGenerating(true);
     setGenerationReport(null);
-    toast("L'IA analyse le document et génère vos cartes...", "info");
+    toast("L'IA analyse le document...", "info");
     
     try {
       const result = await generateAIFlashcardsDetailed(text, {
@@ -145,9 +180,12 @@ export function CreateFlashcardsBatch() {
 
     } catch (err: any) {
       console.error('Erreur génération IA :', err);
-      toast(err.message || "La génération IA a échoué. Aucune carte n’a été enregistrée.", "error");
+      toast(err.message || "La génération IA a échoué.", "error");
     } finally {
-      setGenerating(false);
+      // Petit délai pour laisser l'utilisateur voir "100%"
+      setTimeout(() => {
+        setGenerating(false);
+      }, 600);
     }
   };
 
@@ -222,13 +260,13 @@ export function CreateFlashcardsBatch() {
               <BrainCircuit size={24} />
             </div>
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold">Créateur de Set</h1>
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Créateur de Set</h1>
               <p className="text-gray-500 text-xs md:text-sm">Vérifiez et éditez vos cartes avant de les sauvegarder.</p>
             </div>
           </div>
           <button 
             onClick={() => setShowBulkImport(true)}
-            className="flex items-center gap-2 bg-white border border-gray-200 px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-gray-50 transition-colors cursor-pointer shadow-sm"
+            className="flex items-center gap-2 bg-white border border-gray-200 px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-gray-50 transition-colors cursor-pointer shadow-sm text-gray-800"
           >
             <ClipboardPaste size={16} className="text-blue-600" />
             <span className="hidden sm:inline">Générer via texte</span>
@@ -253,9 +291,35 @@ export function CreateFlashcardsBatch() {
       </div>
 
       {generating && (
-        <div className="flex flex-col items-center justify-center p-12 bg-yellow-50 border border-yellow-200 rounded-2xl gap-4 animate-pulse">
-          <Sparkles size={32} className="text-yellow-600" />
-          <p className="text-lg font-medium text-gray-800">L'IA rédige les flashcards...</p>
+        <div className="flex flex-col items-center justify-center p-10 bg-blue-50/50 border border-blue-100 rounded-2xl gap-6 shadow-sm overflow-hidden relative">
+          {/* Lueur d'arrière-plan */}
+          <div className="absolute inset-0 bg-blue-400 blur-[80px] opacity-10 rounded-full"></div>
+          
+          <div className="relative">
+            <BrainCircuit size={48} className="text-blue-600 relative z-10 animate-pulse" />
+            <Sparkles size={20} className="text-yellow-500 absolute -top-2 -right-2 animate-spin-slow" />
+          </div>
+          
+          <div className="w-full max-w-md flex flex-col gap-3 relative z-10">
+            <div className="flex justify-between items-end">
+              <p className="text-sm font-semibold text-gray-700 transition-all duration-300">
+                {statusMessage}
+              </p>
+              <span className="text-sm font-bold text-blue-600 font-mono">
+                {Math.round(progress)}%
+              </span>
+            </div>
+            
+            <div className="h-2.5 w-full bg-blue-100 rounded-full overflow-hidden shadow-inner">
+              <div 
+                className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-300 ease-out"
+                style={{ width: `${progress}%` }}
+              ></div>
+            </div>
+            <p className="text-[10px] text-gray-400 text-center mt-1 uppercase tracking-wide">
+              Veuillez ne pas quitter cette page
+            </p>
+          </div>
         </div>
       )}
 
