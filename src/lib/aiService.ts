@@ -1,7 +1,7 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Configuration du Worker PDF
-pdfjsLib.GlobalWorkerOptions.workerSrc = '[https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js](https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js)';
+// Configuration rigoureuse et propre du Worker PDF (Corrigé sans syntaxe Markdown)
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 export interface ExtractedPdfPage {
   page: number;
@@ -23,9 +23,20 @@ export interface GeneratedFlashcard {
   sourceQuote?: string;
 }
 
+export interface FlashcardGenerationResult {
+  cards: GeneratedFlashcard[];
+  generatedCount: number;
+  validCount: number;
+  duplicateCount: number;
+  rejectedCount: number;
+  warnings: string[];
+}
+
 export interface FlashcardGenerationOptions {
   courseId?: string;
   chapterId?: string;
+  courseTitle?: string;
+  chapterTitle?: string;
   count?: number;
   difficulty?: 'mixed' | 'basic' | 'intermediate' | 'advanced';
   sourceType?: 'pdf' | 'text' | 'note';
@@ -170,15 +181,17 @@ function normalizeStringArray(value: unknown): string[] {
 }
 
 /**
- * Normalisation et validation tolérante d'une flashcard (avec gestion stricte des pages si PDF)
+ * Normalisation tolérante d'une flashcard avec suivi des rejets
  */
-function normalizeFlashcard(value: unknown, sourceType?: string): GeneratedFlashcard | null {
-  if (!value || typeof value !== 'object') return null;
+function normalizeFlashcard(value: unknown, sourceType?: string): { card: GeneratedFlashcard | null; reason?: string } {
+  if (!value || typeof value !== 'object') {
+    return { card: null, reason: 'Format objet invalide' };
+  }
   const card = value as Record<string, unknown>;
   
   if (typeof card.question !== 'string' || !card.question.trim() ||
       typeof card.answer !== 'string' || !card.answer.trim()) {
-    return null;
+    return { card: null, reason: 'Question ou réponse vide' };
   }
 
   const validCategories = ['definition', 'distinction', 'condition', 'exception', 'liste', 'application', 'reference'];
@@ -188,35 +201,41 @@ function normalizeFlashcard(value: unknown, sourceType?: string): GeneratedFlash
     ? card.sourcePages.filter((p): p is number => Number.isInteger(p) && p > 0) 
     : [];
 
-  // Exigence de traçabilité stricte pour les sources de type PDF
   if (sourceType === 'pdf' && sourcePages.length === 0) {
-    return null; 
+    return { card: null, reason: 'Pages sources absentes pour un document PDF' };
   }
 
   return {
-    question: card.question.trim(),
-    answer: card.answer.trim(),
-    category: validCategories.includes(card.category as string) ? (card.category as any) : 'definition',
-    difficulty: validDifficulties.includes(card.difficulty as string) ? (card.difficulty as any) : 'intermediate',
-    sourcePages,
-    sourceQuote: typeof card.sourceQuote === 'string' ? card.sourceQuote : undefined,
+    card: {
+      question: card.question.trim(),
+      answer: card.answer.trim(),
+      category: validCategories.includes(card.category as string) ? (card.category as any) : 'definition',
+      difficulty: validDifficulties.includes(card.difficulty as string) ? (card.difficulty as any) : 'intermediate',
+      sourcePages,
+      sourceQuote: typeof card.sourceQuote === 'string' ? card.sourceQuote : undefined,
+    }
   };
 }
 
 /**
  * Dédoublonnage textuel des flashcards
  */
-function deduplicateFlashcards(cards: GeneratedFlashcard[]): GeneratedFlashcard[] {
+function deduplicateFlashcards(cards: GeneratedFlashcard[]): { uniqueCards: GeneratedFlashcard[]; duplicateCount: number } {
   const seen = new Set<string>();
-  return cards.filter((card) => {
+  let duplicateCount = 0;
+  const uniqueCards = cards.filter((card) => {
     const key = `${card.question}::${card.answer}`
       .toLowerCase()
       .replace(/\s+/g, ' ')
       .trim();
-    if (seen.has(key)) return false;
+    if (seen.has(key)) {
+      duplicateCount++;
+      return false;
+    }
     seen.add(key);
     return true;
   });
+  return { uniqueCards, duplicateCount };
 }
 
 /**
@@ -252,13 +271,13 @@ ${sourceContext}`;
 }
 
 /**
- * Génération de flashcards avec préservation de la signature d'origine (courseId, chapterId)
+ * Génération avancée de flashcards avec rapport détaillé (générées, valides, doublons, rejetées)
  */
-export async function generateAIFlashcards(
+export async function generateAIFlashcardsDetailed(
   text: string,
   optionsOrCourseId?: string | FlashcardGenerationOptions,
   chapterId?: string
-): Promise<GeneratedFlashcard[]> {
+): Promise<FlashcardGenerationResult> {
   const options: FlashcardGenerationOptions =
     typeof optionsOrCourseId === 'string'
       ? { courseId: optionsOrCourseId, chapterId }
@@ -268,8 +287,8 @@ export async function generateAIFlashcards(
 
   const prompt = `Génère des flashcards universitaires à partir de la SOURCE.
 PARAMÈTRES :
-- Cours associé : ${options.courseId ?? 'Non précisé'}
-- Chapitre associé : ${options.chapterId ?? 'Non précisé'}
+- Cours associé (Contexte) : ${options.courseTitle ?? options.courseId ?? 'Non précisé'}
+- Chapitre associé (Contexte) : ${options.chapterTitle ?? options.chapterId ?? 'Non précisé'}
 - Nombre cible : ${options.count ?? 'adaptatif'}
 - Difficulté : ${options.difficulty ?? 'mixed'}
 
@@ -299,11 +318,49 @@ ${sourceContext}`;
     ? rawResult 
     : ((rawResult as any)?.flashcards || (rawResult as any)?.cards || []);
 
-  const normalizedCards = arrayResult
-    .map((card) => normalizeFlashcard(card, options.sourceType))
-    .filter((c): c is GeneratedFlashcard => c !== null);
-  
-  return deduplicateFlashcards(normalizedCards);
+  const generatedCount = arrayResult.length;
+  let rejectedCount = 0;
+  const warnings: string[] = [];
+  const parsedCards: GeneratedFlashcard[] = [];
+
+  for (const item of arrayResult) {
+    const { card, reason } = normalizeFlashcard(item, options.sourceType);
+    if (card) {
+      parsedCards.push(card);
+    } else {
+      rejectedCount++;
+      if (reason) warnings.push(`Carte ignorée : ${reason}`);
+    }
+  }
+
+  const { uniqueCards, duplicateCount } = deduplicateFlashcards(parsedCards);
+  if (duplicateCount > 0) {
+    warnings.push(`${duplicateCount} doublon(s) textuel(s) retiré(s).`);
+  }
+  if (rejectedCount > 0) {
+    warnings.push(`${rejectedCount} carte(s) ignorée(s) pour format incomplet.`);
+  }
+
+  return {
+    cards: uniqueCards,
+    generatedCount,
+    validCount: uniqueCards.length,
+    duplicateCount,
+    rejectedCount,
+    warnings,
+  };
+}
+
+/**
+ * Signature historique conservée pour la rétrocompatibilité (renvoie uniquement le tableau de cartes)
+ */
+export async function generateAIFlashcards(
+  text: string,
+  optionsOrCourseId?: string | FlashcardGenerationOptions,
+  chapterId?: string
+): Promise<GeneratedFlashcard[]> {
+  const result = await generateAIFlashcardsDetailed(text, optionsOrCourseId, chapterId);
+  return result.cards;
 }
 
 /**
@@ -323,6 +380,7 @@ Retourne uniquement un objet JSON valide :
   "date": "",
   "jurisdiction": "",
   "source_basis": "explicit",
+  "incomplete",
   "facts": "",
   "procedure": "",
   "claims_and_arguments": "",
@@ -342,7 +400,6 @@ ${sourceContext}`;
 
   const fallback = "Non précisé dans le support";
   
-  // Validation rigoureuse à l'exécution (runtime safety)
   const analysis: CaseLawAnalysis = {
     title: typeof rawAnalysis?.title === 'string' ? rawAnalysis.title : fallback,
     court: typeof rawAnalysis?.court === 'string' ? rawAnalysis.court : fallback,
@@ -370,7 +427,6 @@ ${sourceContext}`;
   const reasoningVal = analysis.reasoning;
   const significanceVal = analysis.significance;
 
-  // Adaptateur double pour assurer une rétrocompatibilité complète avec les composants existants
   return {
     title: analysis.title,
     atf_citation: citationVal,
@@ -427,7 +483,7 @@ ${sourceContext}`;
 }
 
 /**
- * Examen blanc avec vérification stricte du mode et rejet si source manquante en mode source_based
+ * Examen blanc avec distinction stricte entre mode fondé sur le support et mode général
  */
 export async function generateMockExam(
   inputOrCourseTitle: string | { 
@@ -446,13 +502,19 @@ export async function generateMockExam(
     throw new Error('Un support est nécessaire pour générer un examen basé sur le cours.');
   }
 
+  const examBasis =
+    input.mode === 'source_based'
+      ? 'L’examen doit être strictement fondé sur la SOURCE fournie.'
+      : 'L’examen est général et fondé uniquement sur le nom du cours. Indique clairement qu’il ne provient pas d’un support importé.';
+
   const sourceContext = buildSourceContext({
     text: input.sourceText ?? '',
     courseTitle: input.courseTitle,
     sourceType: 'support d’examen',
   });
 
-  const prompt = `Génère un examen blanc universitaire fondé sur le cours et la SOURCE fournie.
+  const prompt = `Génère un examen blanc universitaire.
+- Règle de conception : ${examBasis}
 - Nom du cours : ${input.courseTitle}
 - Difficulté : ${input.difficulty ?? 'advanced'}
 - Durée : ${input.durationMinutes ?? 90} minutes
