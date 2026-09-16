@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarDays, Plus, Trash2, Edit3, ChevronLeft, ChevronRight, Clock, Download, Upload, BookOpen, Timer, Scale, FileText, BrainCircuit, ArrowRight, AlertCircle, LayoutList } from 'lucide-react';
-import { Card } from '../components/ui/Card';
-import { Badge } from '../components/ui/Badge';
-import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { fetchEvents, createEvent, fetchCourses } from '../services/supabaseService';
 import { supabase } from '../lib/supabase';
 import { toast } from '../lib/toast';
@@ -13,22 +10,19 @@ export function Schedule() {
   const [events, setEvents] = useState<any[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  
   const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
-  
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
-  
-  // --- NOUVEAU : JOUR SÉLECTIONNÉ POUR LE PROGRAMME DU BAS ---
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-
+  
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-
-  // État pour la modale de suppression
   const [eventToDelete, setEventToDelete] = useState<string | null>(null);
-  
-  // État du mini-menu contextuel (le seul de la page)
   const [isPlusMenuOpen, setIsPlusMenuOpen] = useState(false);
   
+  // Option spécifique pour l'examen
+  const [generatePrepPlan, setGeneratePrepPlan] = useState(false);
+
   const [form, setForm] = useState({
     title: '',
     event_date: '',
@@ -42,24 +36,19 @@ export function Schedule() {
 
   async function loadData() {
     try {
-      const [eventsData, coursesData] = await Promise.all([
-        fetchEvents(),
-        fetchCourses()
-      ]);
+      const [eventsData, coursesData] = await Promise.all([ fetchEvents(), fetchCourses() ]);
       setEvents(eventsData);
       setCourses(coursesData);
       if (coursesData.length > 0 && !form.course_id) {
         setForm(f => ({ ...f, course_id: coursesData[0].id }));
       }
     } catch (err) {
-      console.error("Erreur chargement planning:", err);
       toast("Erreur lors du chargement", "error");
     } finally {
       setLoading(false);
     }
   }
 
-  // --- Helpers d'UI pour le code couleur ---
   const getCategoryStyles = (category: string) => {
     switch (category) {
       case 'Examen': return { bg: 'bg-danger/10', text: 'text-danger', border: 'border-danger/30', icon: Timer };
@@ -70,7 +59,7 @@ export function Schedule() {
     }
   };
 
-  const handleExportICS = () => { /* Logique inchangée */
+  const handleExportICS = () => {
     let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Lexi Suisse//Calendar//FR\n";
     events.forEach(ev => {
       const dtStart = new Date(ev.event_date).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
@@ -81,7 +70,6 @@ export function Schedule() {
       icsContent += "END:VEVENT\n";
     });
     icsContent += "END:VCALENDAR";
-
     const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -90,10 +78,10 @@ export function Schedule() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    toast("Planning exporté en ICS", "success");
+    toast("Planning exporté", "success");
   };
 
-  const handleImportICS = async (e: React.ChangeEvent<HTMLInputElement>) => { /* Logique inchangée */
+  const handleImportICS = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
@@ -114,24 +102,18 @@ export function Schedule() {
               const year = rawDate.substring(0, 4);
               const month = rawDate.substring(4, 6);
               const day = rawDate.substring(6, 8);
-              let formattedDate = '';
+              let formattedDate = `${year}-${month}-${day}T08:00`;
               if (rawDate.includes('T') && rawDate.length >= 13) {
-                const hour = rawDate.substring(9, 11);
-                const minute = rawDate.substring(11, 13);
-                formattedDate = `${year}-${month}-${day}T${hour}:${minute}`;
-              } else {
-                formattedDate = `${year}-${month}-${day}T08:00`;
+                formattedDate = `${year}-${month}-${day}T${rawDate.substring(9, 11)}:${rawDate.substring(11, 13)}`;
               }
               await createEvent({ title, event_date: formattedDate, category: 'Cours' });
               importedCount++;
             }
           }
         }
-        if (importedCount > 0) { toast(`${importedCount} événement(s) importé(s) avec succès !`, "success"); loadData(); } 
-        else { toast("Aucun événement valide trouvé dans ce fichier ICS.", "warning"); }
+        if (importedCount > 0) { toast(`${importedCount} événements importés !`, "success"); loadData(); } 
       } catch (err) {
-        console.error("Erreur parsing ICS:", err);
-        toast("Erreur lors de l'importation du fichier ICS.", "error");
+        toast("Erreur lors de l'importation.", "error");
       }
     };
     reader.readAsText(file);
@@ -143,7 +125,6 @@ export function Schedule() {
     else if (viewMode === 'week') newDate.setDate(newDate.getDate() - 7);
     else newDate.setDate(newDate.getDate() - 1);
     setCurrentDate(newDate);
-    // Si on navigue, on synchronise le selectedDate avec la vue
     setSelectedDate(newDate);
   };
 
@@ -160,47 +141,54 @@ export function Schedule() {
     setIsPlusMenuOpen(false);
     setEditingId(null);
     setForm({ title: '', event_date: '', category, course_id: courses[0]?.id || '' });
+    setGeneratePrepPlan(false);
     setIsModalOpen(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.title || !form.event_date) return;
-
     try {
       if (editingId) {
-        const { error } = await supabase.from('events').update({ title: form.title, event_date: form.event_date, category: form.category, course_id: form.course_id || null }).eq('id', editingId);
-        if (error) throw error;
+        await supabase.from('events').update({ title: form.title, event_date: form.event_date, category: form.category, course_id: form.course_id || null }).eq('id', editingId);
         toast("Événement mis à jour", "success");
       } else {
         await createEvent(form);
-        toast("Événement ajouté au planning", "success");
+        
+        // --- GÉNÉRATION DU PLAN DE PRÉPARATION (Étape 6) ---
+        if (form.category === 'Examen' && generatePrepPlan && form.course_id) {
+           const examDate = new Date(form.event_date);
+           for(let i=1; i<=3; i++) {
+              const prepDate = new Date(examDate);
+              prepDate.setDate(prepDate.getDate() - (i*7));
+              await createEvent({
+                 title: `Prep. Examen : ${form.title} (J-${i*7})`,
+                 event_date: prepDate.toISOString().substring(0, 16),
+                 category: 'Révision',
+                 course_id: form.course_id
+              });
+           }
+           toast("Plan de révision généré sur 3 semaines", "info");
+        } else {
+          toast("Événement ajouté", "success");
+        }
       }
-      setIsModalOpen(false);
-      setEditingId(null);
-      setForm({ title: '', event_date: '', category: 'Cours', course_id: courses[0]?.id || '' });
-      loadData();
+      setIsModalOpen(false); setEditingId(null); loadData();
     } catch (err) {
-      toast("Échec de l'enregistrement de l'événement.", "error");
+      toast("Échec de l'enregistrement", "error");
     }
   };
 
   const confirmDeleteEvent = async () => {
     if (!eventToDelete) return;
     try {
-      const { error } = await supabase.from('events').delete().eq('id', eventToDelete);
-      if (error) throw error;
-      setEventToDelete(null);
-      toast("Événement supprimé", "success");
-      loadData();
-    } catch (err) {
-      toast("Erreur lors de la suppression", "error");
-    }
+      await supabase.from('events').delete().eq('id', eventToDelete);
+      setEventToDelete(null); toast("Événement supprimé", "success"); loadData();
+    } catch (err) { toast("Erreur lors de la suppression", "error"); }
   };
 
   const handleEdit = (evt: any, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setEditingId(evt.id);
+    e.stopPropagation(); setEditingId(evt.id); setGeneratePrepPlan(false);
     setForm({ title: evt.title, event_date: evt.event_date ? evt.event_date.substring(0, 16) : '', category: evt.category || 'Cours', course_id: evt.course_id || '' });
     setIsModalOpen(true);
   };
@@ -209,7 +197,6 @@ export function Schedule() {
   const month = currentDate.getMonth();
   const monthNames = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
   const dayNames = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
-
   const firstDayIndex = new Date(year, month, 1).getDay();
   const adjustedFirstDay = (firstDayIndex === 0 ? 6 : firstDayIndex - 1);
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -219,22 +206,16 @@ export function Schedule() {
     const day = d.getDay();
     const diff = d.getDate() - day + (day === 0 ? -6 : 1);
     const monday = new Date(d.setDate(diff));
-    const week = [];
-    for (let i = 0; i < 7; i++) {
+    return Array.from({length: 7}).map((_, i) => {
       const nextDay = new Date(monday.getTime());
       nextDay.setDate(monday.getDate() + i);
-      week.push(nextDay);
-    }
-    return week;
+      return nextDay;
+    });
   };
-
+  
   const weekDays = getWeekDays(currentDate);
-
-  // Événements pour la vue détaillée en bas (dépendent du jour sélectionné)
   const selectedDateStr = selectedDate.toISOString().split('T')[0];
   const selectedDayEvents = events.filter(e => e.event_date?.startsWith(selectedDateStr)).sort((a,b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime());
-
-  // Événements globaux pour la vue 'jour'
   const filteredEvents = events.filter(evt => {
     const evtDate = new Date(evt.event_date);
     if (viewMode === 'month') return evtDate.getMonth() === month && evtDate.getFullYear() === year;
@@ -251,22 +232,20 @@ export function Schedule() {
           <h1 className="font-serif text-3xl font-bold">Mon planning</h1>
           <p className="text-text-muted text-sm mt-1">Gérez votre emploi du temps et vos échéances.</p>
         </div>
-
+        
         <div className="flex flex-wrap items-center gap-3 relative">
-          
-          <label className="bg-surface border border-border px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 hover:border-accent/50 transition-colors cursor-pointer">
-            <Upload size={15} className="text-info" />
-            <span className="hidden sm:inline">Import ICS</span>
+          <label className="bg-surface border border-border px-3.5 py-2.5 rounded-btn text-xs font-semibold flex items-center gap-1.5 hover:border-accent/50 transition-colors cursor-pointer shadow-sm">
+            <Upload size={15} className="text-info" /> <span className="hidden sm:inline">Import ICS</span>
             <input type="file" accept=".ics" onChange={handleImportICS} className="hidden" />
           </label>
-
-          <div className="flex bg-surface-elevated border border-border rounded-xl p-1">
+          
+          <div className="flex bg-surface-elevated border border-border rounded-btn p-1 shadow-sm">
             {(['month', 'week', 'day'] as const).map(mode => (
               <button
                 key={mode}
                 onClick={() => setViewMode(mode)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-colors cursor-pointer ${
-                  viewMode === mode ? 'bg-accent text-background' : 'text-text-muted hover:text-text'
+                className={`px-4 py-2 rounded-md text-xs font-bold capitalize transition-colors cursor-pointer ${
+                  viewMode === mode ? 'bg-accent text-background shadow-sm' : 'text-text-muted hover:text-text'
                 }`}
               >
                 {mode === 'month' ? 'Mois' : mode === 'week' ? 'Sem' : 'Jour'}
@@ -274,25 +253,24 @@ export function Schedule() {
             ))}
           </div>
 
-          {/* MINI MENU CONTEXTUEL DU PLANNING (1 SEUL PAR PAGE) */}
           <div className="relative">
             <button 
               onClick={() => setIsPlusMenuOpen(!isPlusMenuOpen)}
-              className="bg-accent text-background px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 glow-gold hover:bg-accent-strong transition-transform active:scale-95 cursor-pointer"
+              className="bg-accent text-background px-4 py-2.5 rounded-btn text-xs font-bold flex items-center gap-1.5 glow-gold hover:bg-accent-strong transition-transform active:scale-95 cursor-pointer"
             >
               <Plus size={16} className={`transition-transform duration-200 ${isPlusMenuOpen ? 'rotate-45' : ''}`} />
               <span className="hidden sm:inline">Ajouter</span>
             </button>
             
             {isPlusMenuOpen && (
-              <div className="absolute right-0 top-full mt-2 w-56 bg-surface-elevated border border-border rounded-xl shadow-2xl z-50 py-1.5 animate-in fade-in zoom-in-95">
-                <button onClick={() => openModalWithCategory('Cours')} className="w-full px-4 py-2.5 text-sm text-text hover:bg-surface flex items-center gap-3 cursor-pointer">
+              <div className="absolute right-0 top-full mt-2 w-56 bg-surface-elevated border border-border rounded-modal shadow-apple z-50 py-1.5 animate-in fade-in zoom-in-95">
+                <button onClick={() => openModalWithCategory('Cours')} className="w-full px-4 py-2.5 text-sm text-text hover:bg-surface-interactive flex items-center gap-3 cursor-pointer">
                   <BookOpen size={16} className="text-accent" /> Ajouter un cours
                 </button>
-                <button onClick={() => openModalWithCategory('Révision')} className="w-full px-4 py-2.5 text-sm text-text hover:bg-surface flex items-center gap-3 cursor-pointer">
+                <button onClick={() => openModalWithCategory('Révision')} className="w-full px-4 py-2.5 text-sm text-text hover:bg-surface-interactive flex items-center gap-3 cursor-pointer">
                   <BrainCircuit size={16} className="text-warning" /> Bloquer une révision
                 </button>
-                <button onClick={() => openModalWithCategory('Examen')} className="w-full px-4 py-2.5 text-sm text-text hover:bg-surface flex items-center gap-3 cursor-pointer">
+                <button onClick={() => openModalWithCategory('Examen')} className="w-full px-4 py-2.5 text-sm text-text hover:bg-surface-interactive flex items-center gap-3 cursor-pointer">
                   <AlertCircle size={16} className="text-danger" /> Ajouter un examen
                 </button>
               </div>
@@ -302,50 +280,43 @@ export function Schedule() {
       </header>
 
       {/* NAVIGATION TEMPORELLE */}
-      <div className="flex justify-between items-center bg-surface border border-border rounded-2xl p-2 shadow-sm">
-        <button onClick={handlePrev} className="p-2 text-text-muted hover:text-accent transition-colors cursor-pointer"><ChevronLeft size={20} /></button>
+      <div className="flex justify-between items-center bg-surface border border-border rounded-card p-2 shadow-sm">
+        <button onClick={handlePrev} className="p-2 text-text-muted hover:text-accent transition-colors cursor-pointer rounded-lg hover:bg-surface-interactive"><ChevronLeft size={20} /></button>
         <span className="font-serif text-lg md:text-xl font-bold text-text">
           {viewMode === 'month' && `${monthNames[month]} ${year}`}
           {viewMode === 'week' && `Sem. du ${weekDays[0].toLocaleDateString('fr-CH', {day: 'numeric', month:'short'})}`}
           {viewMode === 'day' && currentDate.toLocaleDateString('fr-CH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
         </span>
-        <button onClick={handleNext} className="p-2 text-text-muted hover:text-accent transition-colors cursor-pointer"><ChevronRight size={20} /></button>
+        <button onClick={handleNext} className="p-2 text-text-muted hover:text-accent transition-colors cursor-pointer rounded-lg hover:bg-surface-interactive"><ChevronRight size={20} /></button>
       </div>
 
       {/* VUE DU HAUT : CALENDRIER INTERACTIF */}
-      <Card className="bg-surface border-border p-4 flex flex-col gap-4">
-
-        {/* VUE MOIS : Grille classique */}
+      <div className="bg-surface border border-border rounded-card p-5 shadow-sm flex flex-col gap-4">
+        {/* VUE MOIS */}
         {viewMode === 'month' && (
           <div className="flex flex-col gap-2">
-            <div className="grid grid-cols-7 text-center text-[10px] font-semibold text-text-muted uppercase tracking-wider">
+            <div className="grid grid-cols-7 text-center text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-1">
               <span>Lun</span><span>Mar</span><span>Mer</span><span>Jeu</span><span>Ven</span><span>Sam</span><span>Dim</span>
             </div>
-
-            <div className="grid grid-cols-7 gap-1 text-center">
-              {Array.from({ length: adjustedFirstDay }).map((_, i) => (
-                <div key={`empty-${i}`} className="h-12 md:h-16" />
-              ))}
-
+            <div className="grid grid-cols-7 gap-1.5 text-center">
+              {Array.from({ length: adjustedFirstDay }).map((_, i) => <div key={`empty-${i}`} className="h-12 md:h-16" />)}
               {Array.from({ length: daysInMonth }).map((_, i) => {
                 const dayNum = i + 1;
                 const targetDate = new Date(year, month, dayNum);
                 const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-                
                 const dayEvents = events.filter(e => e.event_date && e.event_date.startsWith(dateStr));
                 const isSelected = selectedDate.toDateString() === targetDate.toDateString();
-
                 return (
                   <div 
                     key={dayNum}
                     onClick={() => setSelectedDate(targetDate)}
                     className={`h-12 md:h-16 rounded-xl flex flex-col items-center justify-center relative cursor-pointer transition-all p-1 border ${
-                      isSelected ? 'bg-accent/10 border-accent text-accent font-bold shadow-md' : 'bg-surface-elevated border-border text-text hover:border-accent/40'
+                      isSelected ? 'bg-accent/10 border-accent text-accent font-bold shadow-md' : 'bg-surface-elevated border-border text-text hover:border-accent/40 hover:bg-surface-interactive'
                     }`}
                   >
                     <span className="text-xs md:text-sm">{dayNum}</span>
                     {dayEvents.length > 0 && (
-                      <div className="flex flex-wrap justify-center gap-0.5 mt-1 px-1">
+                      <div className="flex flex-wrap justify-center gap-1 mt-1 px-1">
                         {dayEvents.slice(0, 4).map((ev, idx) => {
                           const style = getCategoryStyles(ev.category);
                           return <span key={idx} className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full ${style.text.replace('text-', 'bg-')}`} />;
@@ -359,59 +330,56 @@ export function Schedule() {
           </div>
         )}
 
-        {/* VUE SEMAINE : En-têtes sélectionnables */}
+        {/* VUE SEMAINE */}
         {viewMode === 'week' && (
-          <div className="grid grid-cols-7 gap-1 text-center mb-2">
+          <div className="grid grid-cols-7 gap-2 text-center mb-2">
             {weekDays.map((day, idx) => {
               const isSelected = selectedDate.toDateString() === day.toDateString();
               const dateStr = day.toISOString().split('T')[0];
               const hasEvents = events.some(e => e.event_date?.startsWith(dateStr));
-
               return (
                 <button
                   key={idx}
                   onClick={() => setSelectedDate(day)}
-                  className={`h-14 w-full flex flex-col items-center justify-center rounded-lg text-sm font-medium relative transition-all cursor-pointer ${
-                    isSelected ? 'bg-accent text-background font-bold shadow-md' : 'bg-surface-elevated border border-border text-text hover:border-accent/40'
+                  className={`h-16 w-full flex flex-col items-center justify-center rounded-xl text-sm font-medium relative transition-all cursor-pointer border ${
+                    isSelected ? 'bg-accent text-background border-accent font-bold shadow-md' : 'bg-surface-elevated border-border text-text hover:border-accent/40 hover:bg-surface-interactive'
                   }`}
                 >
-                  <span className="text-[9px] uppercase font-bold opacity-80">{dayNames[idx].substring(0,3)}</span>
-                  <span>{day.getDate()}</span>
-                  {hasEvents && !isSelected && <div className="absolute bottom-1 w-1 h-1 rounded-full bg-warning"></div>}
+                  <span className="text-[9px] uppercase font-bold opacity-80 mb-0.5">{dayNames[idx].substring(0,3)}</span>
+                  <span className="text-base">{day.getDate()}</span>
+                  {hasEvents && !isSelected && <div className="absolute bottom-1.5 w-1 h-1 rounded-full bg-warning"></div>}
                 </button>
               );
             })}
           </div>
         )}
 
-        {/* VUE JOUR : Grille horaire classique */}
+        {/* VUE JOUR (Timegrid) */}
         {viewMode === 'day' && (
-          <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto pr-2">
+          <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
             {Array.from({ length: 13 }).map((_, hourIdx) => {
               const hour = hourIdx + 8;
-              const hourStr = `${String(hour).padStart(2, '0')}:00`;
               const hourEvents = filteredEvents.filter(e => new Date(e.event_date).getHours() === hour);
-
               return (
-                <div key={hour} className="flex gap-4 items-start border-b border-border/60 py-3">
-                  <span className="w-12 text-xs font-mono text-text-muted pt-1">{hourStr}</span>
+                <div key={hour} className="flex gap-4 items-start border-b border-border/40 py-3">
+                  <span className="w-12 text-xs font-mono text-text-muted pt-1">{String(hour).padStart(2, '0')}:00</span>
                   <div className="flex-1 flex flex-col gap-2 min-h-[35px]">
                     {hourEvents.map(ev => {
                       const style = getCategoryStyles(ev.category);
                       const Icon = style.icon;
                       return (
-                        <div key={ev.id} onClick={(e) => handleEdit(ev, e)} className={`bg-surface-elevated p-3 rounded-xl border-l-[4px] border-y border-r border-y-border border-r-border flex flex-col sm:flex-row sm:items-center gap-3 cursor-pointer shadow-sm hover:border-r-accent ${style.border}`}>
-                          <div className={`p-2 rounded-lg shrink-0 w-fit ${style.bg} ${style.text}`}><Icon size={16} /></div>
+                        <div key={ev.id} onClick={(e) => handleEdit(ev, e)} className={`bg-surface-elevated p-3.5 rounded-card border-l-[4px] border-y border-r border-y-border border-r-border flex flex-col sm:flex-row sm:items-center gap-3 cursor-pointer shadow-sm hover:border-r-accent ${style.border}`}>
+                          <div className={`p-2.5 rounded-xl shrink-0 w-fit ${style.bg} ${style.text}`}><Icon size={16} /></div>
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-0.5">
-                              <p className="font-medium text-sm text-text">{ev.title}</p>
+                              <p className="font-bold text-sm text-text">{ev.title}</p>
                               <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded ${style.bg} ${style.text}`}>{ev.category}</span>
                             </div>
                             <p className="text-xs text-text-muted mt-0.5">{ev.courses?.title || 'Matière générale'}</p>
                           </div>
-                          <div className="flex items-center gap-1 sm:ml-auto mt-2 sm:mt-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/50">
-                            <button onClick={(e) => handleEdit(ev, e)} className="p-2 text-text-muted hover:text-accent cursor-pointer"><Edit3 size={14} /></button>
-                            <button onClick={(e) => { e.stopPropagation(); setEventToDelete(ev.id); }} className="p-2 text-text-muted hover:text-danger cursor-pointer"><Trash2 size={14} /></button>
+                          <div className="flex items-center gap-1 sm:ml-auto mt-2 sm:mt-0">
+                            <button onClick={(e) => handleEdit(ev, e)} className="p-2 text-text-muted hover:text-accent cursor-pointer rounded-lg bg-surface"><Edit3 size={14} /></button>
+                            <button onClick={(e) => { e.stopPropagation(); setEventToDelete(ev.id); }} className="p-2 text-text-muted hover:text-danger cursor-pointer rounded-lg bg-surface"><Trash2 size={14} /></button>
                           </div>
                         </div>
                       );
@@ -422,24 +390,24 @@ export function Schedule() {
             })}
           </div>
         )}
-      </Card>
+      </div>
 
-      {/* VUE DU BAS : LISTE DYNAMIQUE DU JOUR SÉLECTIONNÉ (Visible si Mois ou Semaine) */}
+      {/* VUE DU BAS : LISTE DYNAMIQUE DU JOUR SÉLECTIONNÉ */}
       {viewMode !== 'day' && (
-        <section className="flex flex-col gap-4 flex-1 animate-in fade-in mt-2">
-          <div className="flex items-center justify-between">
+        <section className="flex flex-col gap-4 flex-1 animate-in fade-in mt-4">
+          <div className="flex items-center justify-between pl-1">
             <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
               <LayoutList size={16} /> Programme du {selectedDate.toLocaleDateString('fr-CH', { weekday: 'long', day: 'numeric', month: 'long' })}
             </h2>
-            <button onClick={handleExportICS} className="text-xs text-text-muted hover:text-accent flex items-center gap-1 cursor-pointer">
-              <Download size={14} /> Export jour
+            <button onClick={handleExportICS} className="text-xs font-bold text-text-muted hover:text-accent flex items-center gap-1 cursor-pointer bg-surface-elevated px-3 py-1.5 rounded-btn border border-border">
+              <Download size={14} /> Exporter
             </button>
           </div>
-
+          
           {loading ? (
             <div className="text-center py-8 text-text-muted font-mono animate-pulse">Chargement...</div>
           ) : selectedDayEvents.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-text-muted bg-surface/50 border border-dashed border-border rounded-2xl gap-3">
+            <div className="flex flex-col items-center justify-center py-12 text-text-muted bg-surface/30 border border-dashed border-border rounded-card gap-3">
               <CalendarDays size={32} className="opacity-20" />
               <p className="text-sm">Rien de prévu pour ce jour.</p>
             </div>
@@ -448,26 +416,23 @@ export function Schedule() {
               {selectedDayEvents.map(evt => {
                 const style = getCategoryStyles(evt.category);
                 const Icon = style.icon;
-                
                 return (
-                  <div key={evt.id} className={`bg-surface border-l-[4px] border-y border-r border-y-border border-r-border rounded-r-xl p-4 flex items-center gap-4 hover:border-accent/50 transition-colors group cursor-pointer shadow-sm ${style.border}`}>
-                    <div className={`p-2.5 rounded-xl ${style.bg} ${style.text} shrink-0`}><Icon size={18} /></div>
-                    
+                  <div key={evt.id} className={`bg-surface border-l-[4px] border-y border-r border-y-border border-r-border rounded-card p-4 flex items-center gap-4 hover:border-accent/50 transition-colors group cursor-pointer shadow-sm ${style.border}`}>
+                    <div className={`p-3 rounded-xl ${style.bg} ${style.text} shrink-0`}><Icon size={20} /></div>
                     <div className="flex flex-col flex-1 min-w-0">
-                      <h3 className="font-bold text-sm text-text truncate group-hover:text-accent transition-colors">
+                      <h3 className="font-bold text-sm md:text-base text-text truncate group-hover:text-accent transition-colors">
                         {evt.title}
                       </h3>
-                      <div className="flex items-center gap-3 text-[11px] text-text-muted mt-1 font-mono">
+                      <div className="flex items-center gap-3 text-[11px] text-text-muted mt-1.5 font-mono">
                         <span className="flex items-center gap-1"><Clock size={12} /> {new Date(evt.event_date).toLocaleTimeString('fr-CH', { hour: '2-digit', minute: '2-digit' })}</span>
-                        {evt.courses?.title && <span className="truncate max-w-[150px]">{evt.courses.title}</span>}
+                        {evt.courses?.title && <span className="truncate max-w-[200px] text-accent/80">{evt.courses.title}</span>}
                       </div>
                     </div>
-                    
                     <div className="flex items-center gap-2">
-                      <button onClick={(e) => handleEdit(evt, e)} className="p-1.5 text-text-muted hover:text-accent opacity-0 group-hover:opacity-100 transition-opacity"><Edit3 size={16} /></button>
+                      <button onClick={(e) => handleEdit(evt, e)} className="p-2 text-text-muted hover:text-accent bg-surface-elevated rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"><Edit3 size={16} /></button>
                       {evt.course_id && (
-                        <button onClick={() => navigate(`/courses/${evt.course_id}`)} className="w-8 h-8 rounded-lg bg-surface-elevated flex items-center justify-center text-text-muted group-hover:bg-accent group-hover:text-background transition-colors shrink-0">
-                          <ArrowRight size={16} />
+                        <button onClick={() => navigate(`/courses/${evt.course_id}`)} className="w-9 h-9 rounded-xl bg-surface-elevated flex items-center justify-center text-text-muted group-hover:bg-accent group-hover:text-background transition-colors shrink-0">
+                          <ArrowRight size={18} />
                         </button>
                       )}
                     </div>
@@ -479,37 +444,32 @@ export function Schedule() {
         </section>
       )}
 
-      {/* Overlay sombre si le menu contextuel est ouvert */}
-      {isPlusMenuOpen && <div className="fixed inset-0 z-40 bg-background/20 backdrop-blur-sm" onClick={() => setIsPlusMenuOpen(false)}></div>}
-
-      {/* Modal Ajout / Modification (Logique existante) */}
+      {/* Modal Ajout / Modification */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-surface border border-border rounded-3xl p-6 shadow-2xl">
-            <h2 className="font-serif text-xl font-bold mb-4">{editingId ? "Modifier l'événement" : "Nouvel événement"}</h2>
-            
-            <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+          <div className="w-full max-w-md bg-surface-elevated border border-border rounded-modal p-6 shadow-apple">
+            <h2 className="font-serif text-2xl font-bold mb-5">{editingId ? "Modifier l'événement" : "Nouvel événement"}</h2>
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-text-muted">Titre</label>
+                <label className="text-[10px] uppercase font-bold text-text-muted">Titre</label>
                 <input 
                   type="text" required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })}
-                  placeholder="ex: Séminaire de droit civil" className="w-full bg-surface-elevated border border-border rounded-xl py-3 px-3 text-sm focus:outline-none focus:border-accent"
+                  placeholder="ex: Séminaire de droit civil" className="w-full bg-background border border-border rounded-input py-2.5 px-3 text-sm focus:outline-none focus:border-accent"
                 />
               </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-text-muted">Date et heure</label>
+                  <label className="text-[10px] uppercase font-bold text-text-muted">Date et heure</label>
                   <input 
                     type="datetime-local" required value={form.event_date} onChange={(e) => setForm({ ...form, event_date: e.target.value })}
-                    className="w-full bg-surface-elevated border border-border rounded-xl py-3 px-3 text-sm focus:outline-none focus:border-accent"
+                    className="w-full bg-background border border-border rounded-input py-2.5 px-3 text-sm focus:outline-none focus:border-accent"
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-text-muted">Catégorie</label>
+                  <label className="text-[10px] uppercase font-bold text-text-muted">Catégorie</label>
                   <select 
                     value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}
-                    className="w-full bg-surface-elevated border border-border rounded-xl py-3 px-3 text-sm focus:outline-none focus:border-accent appearance-none cursor-pointer"
+                    className="w-full bg-background border border-border rounded-input py-2.5 px-3 text-sm focus:outline-none focus:border-accent cursor-pointer"
                   >
                     <option value="Cours">Cours</option>
                     <option value="Examen">Examen</option>
@@ -519,31 +479,56 @@ export function Schedule() {
                   </select>
                 </div>
               </div>
-
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-text-muted">Cours associé</label>
+                <label className="text-[10px] uppercase font-bold text-text-muted">Cours associé</label>
                 <select 
                   value={form.course_id} onChange={(e) => setForm({ ...form, course_id: e.target.value })}
-                  className="w-full bg-surface-elevated border border-border rounded-xl py-3 px-3 text-sm focus:outline-none focus:border-accent appearance-none cursor-pointer"
+                  className="w-full bg-background border border-border rounded-input py-2.5 px-3 text-sm focus:outline-none focus:border-accent cursor-pointer"
                 >
                   <option value="">Aucun</option>
                   {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
                 </select>
               </div>
 
-              <div className="flex gap-3 mt-4">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 bg-surface-elevated border border-border text-text py-3 rounded-xl text-sm font-medium hover:bg-border cursor-pointer transition-colors">Annuler</button>
-                <button type="submit" className="flex-1 bg-accent text-background py-3 rounded-xl text-sm font-semibold glow-gold hover:bg-accent-strong cursor-pointer transition-colors">{editingId ? 'Mettre à jour' : 'Enregistrer'}</button>
+              {form.category === 'Examen' && !editingId && (
+                <div className="mt-2 p-4 bg-warning/10 border border-warning/30 rounded-card flex items-start gap-3 animate-in slide-in-from-top-2">
+                  <input 
+                    type="checkbox" 
+                    id="genPlan"
+                    checked={generatePrepPlan}
+                    onChange={(e) => setGeneratePrepPlan(e.target.checked)}
+                    className="mt-1 shrink-0 accent-warning w-4 h-4"
+                  />
+                  <label htmlFor="genPlan" className="text-xs text-text cursor-pointer">
+                    <span className="font-bold text-warning block mb-1">Plan de préparation</span>
+                    Générer automatiquement 3 sessions de révision espacées (J-7, J-14, J-21) pour cet examen.
+                  </label>
+                </div>
+              )}
+
+              <div className="flex gap-3 mt-4 pt-4 border-t border-border/50">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 bg-surface border border-border text-text py-3 rounded-btn text-sm font-bold hover:bg-surface-interactive cursor-pointer transition-colors">Annuler</button>
+                <button type="submit" className="flex-[2] bg-accent text-background py-3 rounded-btn text-sm font-bold glow-gold hover:bg-accent-strong cursor-pointer transition-colors">{editingId ? 'Mettre à jour' : 'Enregistrer'}</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Modale de confirmation */}
-      <ConfirmModal 
-        isOpen={!!eventToDelete} title="Supprimer l'événement ?" message="Voulez-vous vraiment supprimer cet événement de votre planning ?" confirmText="Supprimer" cancelText="Annuler" isDanger={true} onConfirm={confirmDeleteEvent} onClose={() => setEventToDelete(null)}
-      />
+      {/* Modale de confirmation pour suppression */}
+      {eventToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="w-full max-w-sm bg-surface-elevated border border-border rounded-modal p-6 shadow-apple flex flex-col gap-4 text-center">
+            <div className="w-12 h-12 bg-danger/10 text-danger rounded-full flex items-center justify-center mx-auto mb-2"><AlertCircle size={24} /></div>
+            <h3 className="font-serif text-xl font-bold">Supprimer l'événement ?</h3>
+            <p className="text-sm text-text-muted">Cette action retirera définitivement l'événement de votre planning.</p>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setEventToDelete(null)} className="flex-1 bg-surface border border-border py-2.5 rounded-btn text-sm font-medium">Annuler</button>
+              <button onClick={confirmDeleteEvent} className="flex-1 bg-danger text-white py-2.5 rounded-btn text-sm font-bold">Supprimer</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
