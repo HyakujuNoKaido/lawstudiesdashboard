@@ -6,7 +6,7 @@ import { calculateSM2 } from '../lib/spacedRepetition';
 import { useApp } from '../context/AppContext';
 import { toast } from '../lib/toast';
 
-type LearningMode = 'sm2' | 'qcm' | 'test' | 'match';
+type LearningMode = 'sm2' | 'qcm' | 'type' | 'match';
 type CardSelection = 'due' | 'hard' | 'unseen' | 'all';
 type SessionState = 'setup' | 'active' | 'completed';
 
