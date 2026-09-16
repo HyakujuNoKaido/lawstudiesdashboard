@@ -76,16 +76,17 @@ async function callLawstudiesAI(
 }
 
 /**
- * Génération d'un résumé exhaustif orienté examens (universel et rigoureux)
+ * Génération d'un résumé exhaustif orienté examens (universel et ultra-détaillé)
  */
 export async function generateAISummary(text: string): Promise<string> {
-  const prompt = `Rédige un résumé juridique extrêmement détaillé, structuré et rigoureux destiné à des révisions d'examen universitaire en droit. 
+  const prompt = `Rédige un résumé juridique exhaustif, ultra-détaillé et rigoureux destiné à des révisions d'examen universitaire en droit. 
 
-Exigences de fond obligatoires :
-1. **Définitions et qualifications précises** : Définis rigoureusement les notions juridiques clés abordées dans le texte en utilisant la terminologie doctrinale et légale suisse exacte.
-2. **Distinctions et conditions** : Mets en évidence les conditions d'application (cumulatives/alternatives), les distinctions dogmatiques importantes et les exceptions.
-3. **Bases légales et jurisprudentielles** : Mets en valeur les articles de loi pertinents (ex: CO, CC, CP, etc.) et les arrêts de principe ou de référence mentionnés.
-4. **Structure claire** : Organise la matière de manière logique (problématique, cadre légal, conditions, effets/conséquences, exceptions).
+Exigences strictes de fond (pour ne rater aucun détail crucial digne d'un examen) :
+1. **Définitions textuelles et doctrinales exactes** : Intègre toutes les définitions précises, citations d'auteurs, qualifications juridiques ou notions fondamentales présentes dans le texte.
+2. **Nuances, précisions contextuelles et historiques/structurelles** : Ne survole rien ; inclus les précisions étymologiques, structurelles, hiérarchiques ou institutionnelles mentionnées dans le support.
+3. **Distinctions dogmatiques nettes** : Oppose rigoureusement les concepts clés, les conditions d'application (cumulatives vs alternatives), les exceptions et les régimes juridiques.
+4. **Bases légales et jurisprudentielles** : Mets en valeur les articles de loi pertinents (CO, CC, CP, etc.) et les arrêts (ATF) ou doctrines cités.
+5. **Structure exhaustive** : Organise la matière de manière logique et détaillée pour couvrir l'intégralité du support sans rien omettre.
 
 Texte source :
 ${text.substring(0, 35000)}`;
@@ -94,11 +95,11 @@ ${text.substring(0, 35000)}`;
 }
 
 /**
- * Génération de flashcards pointues axées sur les examens de droit (universel)
+ * Génération de flashcards pointues axées sur les examens de droit (universel et rigoureux)
  */
 export async function generateAIFlashcards(text: string) {
-  const prompt = `Génère des flashcards de révision d'examen de droit extrêmement rigoureuses et précises à partir de ce texte. 
-Chaque flashcard doit cibler un concept juridique pointu, une définition légale ou doctrinale exacte, une condition d'application d'une norme, ou une distinction institutionnelle/systémique importante (évite les questions trop vagues).
+  const prompt = `Génère des flashcards de révision d'examen de droit extrêmement rigoureuses, pointues et exhaustives à partir de ce texte. 
+Chaque flashcard doit cibler un concept technique précis, une définition exacte, une distinction institutionnelle ou dogmatique, une condition d'application stricte ou une exception mentionnée dans le texte. Ne pose pas de questions vagues ; cible les détails précis qui font l'objet de questions d'examen.
 
 Format JSON strict requis : [{"question": "...", "answer": "..."}]
 Texte source : ${text.substring(0, 30000)}`;
