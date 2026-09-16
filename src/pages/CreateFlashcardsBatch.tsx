@@ -2,13 +2,24 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ChevronLeft, Save, Plus, Trash2, BrainCircuit, ClipboardPaste, X, Sparkles, Loader2 } from 'lucide-react';
 import { fetchCourses, fetchCourseChapters, createFlashcardsBatch } from '../services/supabaseService';
-import { generateAIFlashcards } from '../lib/aiService';
+// Remplacement de l'import pour utiliser la version détaillée
+import { generateAIFlashcardsDetailed } from '../lib/aiService';
 import { toast } from '../lib/toast';
+
+// On étend l'interface locale pour stocker les métadonnées de l'IA
+interface FlashcardRow {
+  id: string;
+  front: string;
+  back: string;
+  category?: string;
+  difficulty?: string;
+  sourcePages?: number[];
+}
 
 export function CreateFlashcardsBatch() {
   const navigate = useNavigate();
   const location = useLocation();
-  const state = location.state as { courseId?: string; chapterId?: string; extractedText?: string } | null;
+  const state = location.state as { courseId?: string; chapterId?: string; extractedText?: string; sourceType?: 'pdf' | 'text' } | null;
 
   const [courses, setCourses] = useState<any[]>([]);
   const [chapters, setChapters] = useState<any[]>([]);
@@ -19,7 +30,8 @@ export function CreateFlashcardsBatch() {
   const [courseId, setCourseId] = useState(state?.courseId || '');
   const [chapterId, setChapterId] = useState(state?.chapterId || '');
 
-  const [cards, setCards] = useState([{ id: Date.now().toString(), front: '', back: '' }]);
+  // Utilisation de la nouvelle interface pour les cartes
+  const [cards, setCards] = useState<FlashcardRow[]>([{ id: Date.now().toString(), front: '', back: '' }]);
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [bulkText, setBulkText] = useState('');
 
@@ -60,20 +72,49 @@ export function CreateFlashcardsBatch() {
     setGenerating(true);
     toast("L'IA génère vos cartes. Veuillez patienter...", "info");
     try {
-      const generatedCards = await generateAIFlashcards(text);
-      if (generatedCards && generatedCards.length > 0) {
-        const mappedCards = generatedCards.map((c: any, i: number) => ({
+      // Récupération des titres pour donner un meilleur contexte au prompt IA
+      const selectedCourse = courses.find(c => c.id === courseId);
+      const selectedChapter = chapters.find(c => c.id === chapterId);
+
+      // Appel de la fonction détaillée
+      const result = await generateAIFlashcardsDetailed(text, {
+        courseId,
+        chapterId,
+        courseTitle: selectedCourse?.title,
+        chapterTitle: selectedChapter?.title,
+        sourceType: state?.sourceType || 'pdf', // Par défaut 'pdf' si texte extrait
+        count: 20, // Valeur cible ajustable
+        difficulty: 'mixed'
+      });
+
+      if (result.cards && result.cards.length > 0) {
+        const mappedCards = result.cards.map((c, i) => ({
           id: `${Date.now()}_${i}`,
           front: c.question,
-          back: c.answer
+          back: c.answer,
+          category: c.category,
+          difficulty: c.difficulty,
+          sourcePages: c.sourcePages
         }));
+
         // Si le lot manuel était vide, on l'écrase
         if (cards.length === 1 && !cards[0].front && !cards[0].back) {
           setCards(mappedCards);
         } else {
           setCards([...cards, ...mappedCards]);
         }
-        toast("Prévisualisation prête ! Vous pouvez modifier les cartes avant de sauvegarder.", "success");
+
+        // --- AFFICHAGE DU RAPPORT DÉTAILLÉ ---
+        if (result.rejectedCount > 0 || result.duplicateCount > 0) {
+          toast(`${result.validCount} cartes créées. ${result.duplicateCount} doublons et ${result.rejectedCount} incomplètes ignorées.`, "warning");
+          if (result.warnings.length > 0) {
+            console.warn("Rapport de nettoyage IA :", result.warnings);
+          }
+        } else {
+          toast(`${result.validCount} flashcards générées avec succès ! Vous pouvez les modifier.`, "success");
+        }
+      } else {
+        toast("Aucune carte valide n'a pu être extraite du texte.", "warning");
       }
     } catch (err: any) {
       toast(err.message || "Erreur lors de la génération IA.", "error");
@@ -85,7 +126,7 @@ export function CreateFlashcardsBatch() {
   const handleBulkImportProcess = () => {
     if (!bulkText.trim()) return;
     const lines = bulkText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    const newCards: any[] = [];
+    const newCards: FlashcardRow[] = [];
     lines.forEach((line, i) => {
       let separator = '\t';
       if (!line.includes('\t') && line.includes(' - ')) separator = ' - ';
@@ -111,6 +152,8 @@ export function CreateFlashcardsBatch() {
     
     setSaving(true);
     try {
+      // Note : si ta table Supabase évolue pour accepter 'category' et 'source_pages', 
+      // tu pourras ajouter ces champs dans ce payload.
       const payload = validCards.map(c => ({
         course_id: courseId,
         chapter_id: chapterId || undefined,
@@ -176,7 +219,7 @@ export function CreateFlashcardsBatch() {
       {generating && (
         <div className="flex flex-col items-center justify-center p-12 bg-warning/5 border border-warning/20 rounded-card gap-4 animate-pulse">
           <Sparkles size={32} className="text-warning" />
-          <p className="font-serif text-lg text-text">L'IA rédige les flashcards...</p>
+          <p className="font-serif text-lg text-text">L'IA analyse le document et rédige les flashcards...</p>
         </div>
       )}
 
@@ -189,7 +232,21 @@ export function CreateFlashcardsBatch() {
           {cards.map((card, index) => (
             <div key={card.id} className="bg-surface border border-border p-5 rounded-card flex flex-col gap-3 relative group shadow-sm focus-within:border-accent/40 transition-colors">
               <div className="flex justify-between items-center border-b border-border/50 pb-2">
-                <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Carte {index + 1}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Carte {index + 1}</span>
+                  {/* NOUVEAU: Affichage de la catégorie IA */}
+                  {card.category && (
+                    <span className="text-[9px] font-bold bg-accent/10 text-accent px-2 py-0.5 rounded-full uppercase">
+                      {card.category}
+                    </span>
+                  )}
+                  {/* NOUVEAU: Affichage de la traçabilité PDF */}
+                  {card.sourcePages && card.sourcePages.length > 0 && (
+                    <span className="text-[9px] font-bold bg-info/10 text-info px-2 py-0.5 rounded-full uppercase">
+                      Page(s) {card.sourcePages.join(', ')}
+                    </span>
+                  )}
+                </div>
                 <button onClick={() => removeCardRow(card.id)} className="text-text-muted hover:text-danger p-1 rounded-md hover:bg-danger/10 transition-colors cursor-pointer opacity-0 group-hover:opacity-100">
                   <Trash2 size={16} />
                 </button>
@@ -237,7 +294,7 @@ export function CreateFlashcardsBatch() {
         </div>
       )}
 
-      {/* Modale Import Rapide */}
+      {/* Modale Import Rapide (Inchangée) */}
       {showBulkImport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
           <div className="w-full max-w-2xl bg-surface-elevated border border-border rounded-modal p-6 shadow-apple flex flex-col gap-4">
