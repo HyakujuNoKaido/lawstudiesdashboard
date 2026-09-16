@@ -1,6 +1,6 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//[cdnjs.cloudflare.com/ajax/libs/pdf.js/$](https://cdnjs.cloudflare.com/ajax/libs/pdf.js/$){pdfjsLib.version}/pdf.worker.min.js`;
 
 const getApiKey = () => import.meta.env.VITE_GEMINI_API_KEY;
 
@@ -27,7 +27,7 @@ export async function extractTextFromPDF(fileUrl: string, startPage?: number, en
 async function callGeminiKeyAuthorized(payload: any, retries = 4, delay = 3000): Promise<any> {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("Clé API Gemini introuvable.");
-  const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  const url = `[https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=$](https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=$){apiKey}`;
   for (let i = 0; i < retries; i++) {
     try {
       const response = await fetch(url, {
@@ -53,15 +53,67 @@ async function callGeminiKeyAuthorized(payload: any, retries = 4, delay = 3000):
   throw new Error("Le serveur Gemini est fortement sollicité. Veuillez patienter quelques secondes et relancer la génération.");
 }
 
-// NOUVEAU : Retourne uniquement les données JSON, sans les sauvegarder !
 export async function generateAIFlashcards(text: string) {
   const prompt = `Tu es un assistant de faculté de droit en Suisse. Génère une liste de flashcards de révision basées sur le texte juridique ci-dessous. 
 Renvoie UNIQUEMENT un tableau JSON valide au format strict : [{"question": "...", "answer": "..."}]. Pas de texte additionnel, pas de markdown autour, juste le JSON brut.
 Texte :
 ${text.substring(0, 30000)}`;
+  
   const data = await callGeminiKeyAuthorized({
     contents: [{ parts: [{ text: prompt }] }]
   });
+  
   let rawText = data.candidates[0].content.parts[0].text.trim();
-  if (rawText.startsWith('```json')) {
-    rawText = rawText.replace(/^
+  if (rawText.startsWith("```json")) {
+    rawText = rawText.slice(7);
+  } else if (rawText.startsWith("```")) {
+    rawText = rawText.slice(3);
+  }
+  if (rawText.endsWith("```")) {
+    rawText = rawText.slice(0, -3);
+  }
+  
+  return JSON.parse(rawText.trim());
+}
+
+export async function generateAISummary(text: string): Promise<string> {
+  const prompt = `Tu es un juriste suisse. Résume le texte juridique fourni en Markdown :\n\n${text.substring(0, 30000)}`;
+  const data = await callGeminiKeyAuthorized({
+    contents: [{ parts: [{ text: prompt }] }]
+  });
+  return data.candidates[0].content.parts[0].text;
+}
+
+export async function generateCaseLaw(text: string): Promise<any> {
+  const summary = await generateAISummary(text);
+  return {
+    title: "Arrêt analysé par l'IA",
+    atf_citation: "ATF non spécifié",
+    facts: summary,
+    procedure: "Procédure standard",
+    legal_issues: "Problématique juridique",
+    consideranda: "Considérants clés",
+    holding: "Dispositif"
+  };
+}
+
+export async function generateSubsumption(text: string): Promise<any> {
+  const summary = await generateAISummary(text);
+  return {
+    legal_issue: "Question juridique du cas",
+    major_premise: "Base légale applicable",
+    minor_premise: "Application aux faits",
+    conclusion: "Solution juridique"
+  };
+}
+
+export async function generateMockExam(courseTitle: string): Promise<any> {
+  return {
+    title: `Examen blanc : ${courseTitle}`,
+    facts: "Faits de l'examen simulé...",
+    legal_issue: "Questions à résoudre",
+    major_premise: "Règles applicables",
+    minor_premise: "Subsumption",
+    conclusion: "Solution"
+  };
+}
