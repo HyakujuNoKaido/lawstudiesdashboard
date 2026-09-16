@@ -309,6 +309,12 @@ export async function deleteFlashcard(id: string) {
   if (error) throw error;
 }
 
+// NOUVEAU : Fonction pour supprimer d'un coup toutes les cartes d'un Set (Cours)
+export async function deleteFlashcardsByCourse(courseId: string) {
+  const { error } = await supabase.from('flashcards').delete().eq('course_id', courseId);
+  if (error) throw error;
+}
+
 export async function updateFlashcardProgress(id: string, repetitions: number, intervalDays: number, easeFactor: number) {
   const nextDue = new Date();
   nextDue.setDate(nextDue.getDate() + intervalDays);
@@ -483,37 +489,4 @@ export async function batchMoveItems(chapterIds: string[], docIds: string[], tar
       .in('id', docIds);
     if (error) throw error;
   }
-}
-
-export async function updateFlashcardReview(id: string, q: number, currentCard: any) {
-  let { repetitions = 0, ease_factor = 2.5, interval_days = 0 } = currentCard;
-  if (q < 3) {
-    repetitions = 0;
-    interval_days = 1;
-  } else {
-    if (repetitions === 0) {
-      interval_days = 1;
-    } else if (repetitions === 1) {
-      interval_days = 6;
-    } else {
-      interval_days = Math.round(interval_days * ease_factor);
-    }
-    repetitions += 1;
-  }
-  
-  ease_factor = ease_factor + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
-  if (ease_factor < 1.3) ease_factor = 1.3;
-  
-  const nextDue = new Date();
-  nextDue.setDate(nextDue.getDate() + interval_days);
-  
-  const { error } = await supabase.from('flashcards').update({
-    repetitions,
-    ease_factor,
-    interval_days,
-    due_at: nextDue.toISOString(),
-    last_reviewed_at: new Date().toISOString()
-  }).eq('id', id);
-  
-  if (error) throw error;
 }
