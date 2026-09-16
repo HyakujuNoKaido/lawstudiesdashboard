@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { fetchCourses, fetchEvents, fetchFlashcards } from '../services/supabaseService';
+import { useAuth } from './AuthContext';
 
 interface AppSettings {
   defaultView: 'today' | 'dashboard';
@@ -38,12 +39,13 @@ const defaultSettings: AppSettings = {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const { user, loading: authLoading } = useAuth();
   const [courses, setCourses] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
   const [flashcards, setFlashcards] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
-  
+
   // Settings (persistés dans localStorage pour la rapidité)
   const [settings, setSettings] = useState<AppSettings>(() => {
     const saved = localStorage.getItem('lexi-settings');
@@ -57,6 +59,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   });
 
   const refreshData = async () => {
+    if (!user) return; // Sécurité : on ne charge pas de données sans utilisateur connecté
+    setLoading(true);
     try {
       const [coursesData, eventsData, cardsData] = await Promise.all([
         fetchCourses(),
@@ -74,19 +78,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    refreshData();
-
+    if (!authLoading) {
+      refreshData();
+    }
+    
     // Gestion du statut Offline/Online
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
+    
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-
+    
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, []);
+  }, [user, authLoading]);
 
   const updateSettings = (newSettings: Partial<AppSettings>) => {
     const updated = { ...settings, ...newSettings };
