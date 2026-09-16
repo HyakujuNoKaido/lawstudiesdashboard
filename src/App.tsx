@@ -43,6 +43,7 @@ export default function App() {
               <Route path="add/grade" element={<AddGrade />} />
               <Route path="add/document" element={<DocumentUpload />} />
               <Route path="import" element={<DocumentImport />} />
+              <Route path="archives" element={<Archives />} />
               
               <Route path="library" element={<Library />} /> 
               <Route path="documents" element={<DocumentLibrary />} /> 
