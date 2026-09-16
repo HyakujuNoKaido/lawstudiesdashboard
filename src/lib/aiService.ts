@@ -6,36 +6,69 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
 const getApiKey = () => import.meta.env.VITE_GEMINI_API_KEY;
 
 /**
- * Extraction et nettoyage rigoureux du texte PDF
+ * Extraction améliorée et structurée du texte PDF avec repérage des pages
  */
-export async function extractTextFromPDF(fileUrl: string, startPage?: number, endPage?: number): Promise<string> {
+export async function extractTextFromPDF(fileUrl: string, startPage = 1, endPage?: number): Promise<string> {
   try {
-    const loadingTask = pdfjsLib.getDocument(fileUrl);
+    const loadingTask = pdfjsLib.getDocument({
+      url: fileUrl,
+      useWorkerFetch: true,
+      isEvalSupported: true,
+    });
     const pdf = await loadingTask.promise;
+    const firstPage = Math.max(1, startPage);
+    const lastPage = Math.min(endPage ?? pdf.numPages, pdf.numPages);
+    
     let fullText = '';
-    const start = startPage && startPage > 0 ? startPage : 1;
-    const end = endPage && endPage <= pdf.numPages ? endPage : pdf.numPages;
-
-    for (let i = start; i <= end; i++) {
-      const page = await pdf.getPage(i);
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items.map((item: any) => item.str).join(' ');
-      fullText += `[Page ${i}] ${pageText}\n\n`;
+    for (let pageNumber = firstPage; pageNumber <= lastPage; pageNumber++) {
+      const page = await pdf.getPage(pageNumber);
+      const content = await page.getTextContent();
+      const pageText = content.items
+        .map((item: any) => item.str)
+        .join(' ')
+        .replace(/\s+/g, ' ');
+      fullText += `[PAGE ${pageNumber}]\n${pageText}\n\n`;
     }
     return fullText.trim();
   } catch (error) {
-    console.error("Erreur PDF:", error);
+    console.error("Erreur d'extraction PDF:", error);
     throw new Error("Impossible de lire le document PDF.");
   }
 }
 
 /**
- * Cœur de l'appel API avec configuration avancée pour le droit suisse
+ * Prompt système universel et strict (Empêche l'IA d'inventer ou de plaquer du droit suisse par défaut)
+ */
+const UNIVERSAL_LEGAL_SYSTEM_PROMPT = `Tu es un assistant académique juridique de niveau universitaire. 
+Ta mission est d'analyser des supports de cours, textes doctrinaux et documents pédagogiques dans tous les domaines du droit.
+
+RÈGLE ABSOLUE DE FIDÉLITÉ :
+1. Utilise en priorité et explicitement le contenu de la SOURCE fournie.
+2. N'ajoute aucune règle, référence légale, jurisprudence ou doctrine absente de la SOURCE (ex: n'ajoute pas d'articles du CO ou du CC s'ils ne figurent pas dans le texte).
+3. Si une information n'est pas présente ou ne peut pas être déduite avec certitude, écris : "Non précisé dans le support".
+4. Ne fabrique jamais un article, un arrêt, une date, une citation ou un auteur.
+5. Distingue ce que le support affirme de ce qui relève d'une déduction logique.
+6. Ne suppose pas par défaut qu'il s'agit du droit suisse si le document concerne un autre système (ex: droit romain).
+7. Conserve les termes latins et les citations exactement tels qu'ils apparaissent dans la SOURCE.`;
+
+/**
+ * Construit un contexte structuré pour isoler les métadonnées du contenu brut
+ */
+function buildSourceContext(text: string, sourceType = 'support de cours') {
+  return `[METADONNEES]
+Type de source : ${sourceType}
+[SOURCE À ANALYSER]
+${text}
+[FIN DE LA SOURCE]`;
+}
+
+/**
+ * Cœur de l'appel API sécurisé par header (Clé AQ.)
  */
 async function callLawstudiesAI(
   prompt: string, 
-  isJsonResponse: boolean = false,
-  systemInstruction: string = "Tu es un professeur de droit rigoureux et un expert en méthodologie juridique suisse. Tes synthèses et flashcards doivent être d'un niveau universitaire irréprochable, intégrant les bases légales (CO, CC, CP, etc.), la jurisprudence (ATF), la doctrine et des distinctions conceptuelles strictes."): Promise<any> {
+  isJsonResponse: boolean = false
+): Promise<any> {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("Clé API manquante.");
 
@@ -44,9 +77,9 @@ async function callLawstudiesAI(
   
   const payload = {
     contents: [{ parts: [{ text: prompt }] }],
-    systemInstruction: { parts: [{ text: systemInstruction }] },
+    systemInstruction: { parts: [{ text: UNIVERSAL_LEGAL_SYSTEM_PROMPT }] },
     generationConfig: {
-      temperature: 0.1, // Rigueur maximale pour éviter toute approximation
+      temperature: 0.1, // Rigueur maximale pour éliminer les hallucinations
       responseMimeType: isJsonResponse ? "application/json" : "text/plain",
     }
   };
@@ -67,8 +100,18 @@ async function callLawstudiesAI(
       throw new Error(`Erreur Lawstudies AI (${response.status}): ${data.error?.message}`);
     }
 
-    const resultText = data.candidates[0].content.parts[0].text;
-    return isJsonResponse ? JSON.parse(resultText) : resultText;
+    const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!resultText) throw new Error("Réponse vide de l'IA.");
+
+    if (isJsonResponse) {
+      let cleanResult = resultText.trim();
+      if (cleanResult.startsWith("```json")) cleanResult = cleanResult.slice(7);
+      if (cleanResult.startsWith("```")) cleanResult = cleanResult.slice(3);
+      if (cleanResult.endsWith("```")) cleanResult = cleanResult.slice(0, -3);
+      return JSON.parse(cleanResult.trim());
+    }
+
+    return resultText;
   } catch (err) {
     console.error("Erreur critique:", err);
     throw err;
@@ -76,69 +119,95 @@ async function callLawstudiesAI(
 }
 
 /**
- * Génération d'un résumé exhaustif orienté examens (universel et ultra-détaillé)
+ * Résumé fidèle et structuré sans ajouts externes non sollicités
  */
 export async function generateAISummary(text: string): Promise<string> {
-  const prompt = `Rédige un résumé juridique exhaustif, ultra-détaillé et rigoureux destiné à des révisions d'examen universitaire en droit. 
+  const sourceContext = buildSourceContext(text);
+  const prompt = `Analyse la SOURCE ci-dessous et rédige une synthèse structurée pour des révisions d'examen universitaire.
 
-Exigences strictes de fond (pour ne rater aucun détail crucial digne d'un examen) :
-1. **Définitions textuelles et doctrinales exactes** : Intègre toutes les définitions précises, citations d'auteurs, qualifications juridiques ou notions fondamentales présentes dans le texte.
-2. **Nuances, précisions contextuelles et historiques/structurelles** : Ne survole rien ; inclus les précisions étymologiques, structurelles, hiérarchiques ou institutionnelles mentionnées dans le support.
-3. **Distinctions dogmatiques nettes** : Oppose rigoureusement les concepts clés, les conditions d'application (cumulatives vs alternatives), les exceptions et les régimes juridiques.
-4. **Bases légales et jurisprudentielles** : Mets en valeur les articles de loi pertinents (CO, CC, CP, etc.) et les arrêts (ATF) ou doctrines cités.
-5. **Structure exhaustive** : Organise la matière de manière logique et détaillée pour couvrir l'intégralité du support sans rien omettre.
+EXIGENCES :
+1. Couvre toutes les parties substantielles de la SOURCE.
+2. Restitue fidèlement les définitions, structures et notions présentes (ex: notions de structure patriarcale, statuts, esclavage, travail, etc., selon ce que contient le texte).
+3. N’ajoute aucune référence légale ou jurisprudentielle (comme des articles de code moderne) si elles ne figurent pas explicitement dans la SOURCE.
+4. Si une information importante manque, indique explicitement : "Non précisé dans le support."
+5. Termine par une section "Points à retenir pour l’examen" strictement fondée sur le support.
 
-Texte source :
-${text.substring(0, 35000)}`;
+${sourceContext}`;
 
   return callLawstudiesAI(prompt, false);
 }
 
 /**
- * Génération de flashcards pointues axées sur les examens de droit (universel et rigoureux)
+ * Génération de flashcards strictement ancrées dans la source
  */
 export async function generateAIFlashcards(text: string) {
-  const prompt = `Génère des flashcards de révision d'examen de droit extrêmement rigoureuses, pointues et exhaustives à partir de ce texte. 
-Chaque flashcard doit cibler un concept technique précis, une définition exacte, une distinction institutionnelle ou dogmatique, une condition d'application stricte ou une exception mentionnée dans le texte. Ne pose pas de questions vagues ; cible les détails précis qui font l'objet de questions d'examen.
+  const sourceContext = buildSourceContext(text);
+  const prompt = `Génère des flashcards universitaires rigoureuses basées EXCLUSIVEMENT sur la SOURCE.
 
-Format JSON strict requis : [{"question": "...", "answer": "..."}]
-Texte source : ${text.substring(0, 30000)}`;
+RÈGLES :
+1. Une carte = une seule idée vérifiable.
+2. Ne crée aucune carte dont la réponse n'est pas soutenue par la SOURCE.
+3. N'ajoute pas de connaissances externes ou d'articles de lois absents du texte.
+4. Crée des cartes variées (définitions, distinctions, conditions, listes).
+
+Retourne uniquement un tableau JSON valide au format strict :
+[
+  {
+    "question": "...",
+    "answer": "..."
+  }
+]
+
+${sourceContext}`;
 
   return callLawstudiesAI(prompt, true);
 }
 
 export async function generateCaseLaw(text: string): Promise<any> {
-  const prompt = `Analyse cet arrêt selon le format rigoureux exigé en faculté de droit (JSON) : 
+  const sourceContext = buildSourceContext(text, 'arrêt ou décision judiciaire');
+  const prompt = `Réalise une fiche d’arrêt à partir de la SOURCE uniquement. Si une information (juridiction, citation, faits) est absente, écris "Non précisé dans le support". Ne l'invente pas.
+
+Retourne uniquement un objet JSON valide :
 {
-  "title": "Titre de l'affaire",
-  "atf_citation": "Référence ATF précise",
-  "facts": "Résumé exhaustif des faits pertinents",
-  "legal_issues": "Problématiques juridiques soulevées",
-  "holding": "Solution et considérants clés de la décision"
+  "title": "",
+  "atf_citation": "",
+  "facts": "",
+  "procedure": "",
+  "legal_issues": "",
+  "holding": ""
 }
-Texte : ${text.substring(0, 30000)}`;
+
+${sourceContext}`;
 
   return callLawstudiesAI(prompt, true);
 }
 
 export async function generateSubsumption(text: string): Promise<any> {
-  const prompt = `Effectue une subsomption juridique rigoureuse (syllogisme) sur ce cas.
+  const sourceContext = buildSourceContext(text, 'cas pratique');
+  const prompt = `Effectue une subsomption juridique basée sur les règles et les faits présents dans la SOURCE. Ne forge pas de bases légales absentes.
+
 Format JSON strict : 
 { 
-  "legal_issue": "Question de droit", 
-  "major_premise": "Règle de droit applicable / Base légale (Majeure)", 
-  "minor_premise": "Application des faits aux conditions légales (Mineure)", 
-  "conclusion": "Solution juridique" 
+  "legal_issue": "...", 
+  "major_premise": "...", 
+  "minor_premise": "...", 
+  "conclusion": "..." 
 }
-Texte : ${text.substring(0, 30000)}`;
 
-  return callLawstudiesAI(prompt, true, "Tu es un expert en méthodologie juridique suisse et en subsomption.");
+${sourceContext}`;
+
+  return callLawstudiesAI(prompt, true);
 }
 
 export async function generateMockExam(courseTitle: string): Promise<any> {
-  const prompt = `Génère un cas pratique d'examen stimulant pour le cours de droit : ${courseTitle}.
-Le cas doit inclure un état de fait complexe comportant plusieurs qualifications juridiques délicates et une solution détaillée ancrée dans le droit suisse.
-Format JSON : { "title": "...", "facts": "...", "questions": ["..."], "solution_guidelines": "..." }`;
+  const prompt = `Génère un cas pratique d'examen universitaire pour le cours : ${courseTitle}.
+Format JSON strict : 
+{ 
+  "title": "...", 
+  "facts": "...", 
+  "questions": ["..."], 
+  "solution_guidelines": "..." 
+}`;
 
   return callLawstudiesAI(prompt, true);
 }
