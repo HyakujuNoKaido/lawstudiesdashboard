@@ -1,5 +1,14 @@
+
 import { supabase } from '../lib/supabase';
-import { SOLO_USER_ID } from '../lib/constants';
+
+// Nouvelle fonction utilitaire pour récupérer dynamiquement l'utilisateur authentifié
+export async function getCurrentUserId(): Promise<string> {
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) {
+    throw new Error("Utilisateur non authentifié. Veuillez vous connecter.");
+  }
+  return user.id;
+}
 
 export async function fetchCourses(semester?: string) {
   let query = supabase.from('courses').select('*, chapters(id), documents(id), course_schedules(day_of_week)');
@@ -64,14 +73,16 @@ export async function updateDocumentMetadata(docId: string, updates: { original_
 }
 
 export async function replaceDocumentFile(docId: string, file: File, oldBucketPath: string) {
+  const userId = await getCurrentUserId();
   const fileExt = file.name.split('.').pop();
   const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
-  const newFilePath = `${SOLO_USER_ID}/${fileName}`;
+  const newFilePath = `${userId}/${fileName}`;
+  
   const { error: uploadError } = await supabase.storage
     .from('user-documents')
     .upload(newFilePath, file);
   if (uploadError) throw uploadError;
-
+  
   const { data, error: dbError } = await supabase
     .from('documents')
     .update({
@@ -83,7 +94,7 @@ export async function replaceDocumentFile(docId: string, file: File, oldBucketPa
     .eq('id', docId)
     .select();
   if (dbError) throw dbError;
-
+  
   supabase.storage.from('user-documents').remove([oldBucketPath]).catch(e => console.error("Échec nettoyage ancien fichier", e));
   return data[0];
 }
@@ -100,10 +111,11 @@ export async function createCourseWithSchedule(
   courseData: { title: string; course_code?: string; ects: number; status: string; teacher_name?: string; semester?: string },
   schedules: Array<{ day_of_week: string; start_time: string; end_time: string }>
 ) {
+  const userId = await getCurrentUserId();
   const { data: courseRes, error: courseErr } = await supabase
     .from('courses')
     .insert([{
-      user_id: SOLO_USER_ID,
+      user_id: userId,
       title: courseData.title,
       course_code: courseData.course_code || 'DROIT',
       ects: Number(courseData.ects) || 6,
@@ -112,8 +124,10 @@ export async function createCourseWithSchedule(
       semester: courseData.semester || 'Automne 2026'
     }])
     .select();
+  
   if (courseErr) throw courseErr;
   const courseId = courseRes[0].id;
+  
   if (schedules.length > 0) {
     const formattedSchedules = schedules.map(s => ({
       course_id: courseId,
@@ -121,10 +135,12 @@ export async function createCourseWithSchedule(
       start_time: s.start_time,
       end_time: s.end_time
     }));
+    
     await supabase.from('course_schedules').insert(formattedSchedules);
     const dayMap: Record<string, number> = { 'Lundi': 1, 'Mardi': 2, 'Mercredi': 3, 'Jeudi': 4, 'Vendredi': 5, 'Samedi': 6, 'Dimanche': 0 };
     const generatedEvents = [];
     const startDate = new Date();
+    
     for (let week = 0; week < 14; week++) {
       for (const sched of schedules) {
         const targetDayNum = dayMap[sched.day_of_week];
@@ -133,8 +149,9 @@ export async function createCourseWithSchedule(
         const distance = (targetDayNum + 7 - currentDayNum) % 7;
         eventDate.setDate(eventDate.getDate() + distance + (week * 7));
         const dateStr = eventDate.toISOString().split('T')[0];
+        
         generatedEvents.push({
-          user_id: SOLO_USER_ID,
+          user_id: userId,
           course_id: courseId,
           title: `Cours: ${courseData.title}`,
           event_date: `${dateStr}T${sched.start_time}:00`,
@@ -142,6 +159,7 @@ export async function createCourseWithSchedule(
         });
       }
     }
+    
     if (generatedEvents.length > 0) {
       await supabase.from('events').insert(generatedEvents);
     }
@@ -175,14 +193,14 @@ export async function parseAndCreateChaptersFromSyllabus(courseId: string, sylla
     const leadingSpaces = raw.length - raw.trimStart().length;
     return { raw: trimmed, indent: Math.floor(leadingSpaces / 2) };
   }).filter(l => l.raw.length > 1);
-
+  
   let stack: { id: string; level: number }[] = [];
   const createdChapters = [];
-
+  
   for (let i = 0; i < lines.length; i++) {
     const { raw, indent } = lines[i];
-
     let level = indent;
+    
     if (/^(chapitre|partie|[ivxlcdm]+\.|[A-Z]\.)/i.test(raw) && indent === 0) {
       level = 0;
     } else if (/^\d+\.\d+\.\d+/.test(raw)) {
@@ -190,13 +208,13 @@ export async function parseAndCreateChaptersFromSyllabus(courseId: string, sylla
     } else if (/^\d+\.\d+/.test(raw) || /^\d+\./.test(raw)) {
       level = 1;
     }
-
+    
     while (stack.length > 0 && stack[stack.length - 1].level >= level) {
       stack.pop();
     }
-
+    
     const parentId = stack.length > 0 ? stack[stack.length - 1].id : null;
-
+    
     try {
       const res = await createChapter({
         course_id: courseId,
@@ -204,6 +222,7 @@ export async function parseAndCreateChaptersFromSyllabus(courseId: string, sylla
         parent_id: parentId,
         order_index: i + 1
       });
+      
       if (res && res[0]) {
         const newId = res[0].id;
         stack.push({ id: newId, level });
@@ -227,8 +246,9 @@ export async function updateChapterParent(chapterId: string, parentId: string | 
 }
 
 export async function createMultipleCourses(coursesList: Array<{ title: string; course_code?: string; ects: number; status?: string; semester?: string }>) {
+  const userId = await getCurrentUserId();
   const formatted = coursesList.map(c => ({
-    user_id: SOLO_USER_ID,
+    user_id: userId,
     title: c.title,
     course_code: c.course_code || 'DROIT',
     ects: Number(c.ects) || 6,
@@ -269,13 +289,15 @@ export async function fetchFlashcards(courseId?: string) {
 }
 
 export async function createFlashcard(card: { course_id: string; chapter_id?: string; front: string; back: string }) {
-  const { data, error } = await supabase.from('flashcards').insert([{ user_id: SOLO_USER_ID, ...card }]).select();
+  const userId = await getCurrentUserId();
+  const { data, error } = await supabase.from('flashcards').insert([{ user_id: userId, ...card }]).select();
   if (error) throw error;
   return data;
 }
 
 export async function createFlashcardsBatch(cards: Array<{ course_id: string; chapter_id?: string; front: string; back: string }>) {
-  const formatted = cards.map(c => ({ user_id: SOLO_USER_ID, ...c }));
+  const userId = await getCurrentUserId();
+  const formatted = cards.map(c => ({ user_id: userId, ...c }));
   const { data, error } = await supabase.from('flashcards').insert(formatted).select();
   if (error) throw error;
   return data;
@@ -309,28 +331,31 @@ export async function fetchNotes() {
 }
 
 export async function saveNote(note: { id?: string; course_id: string; title: string; content: string }) {
+  const userId = await getCurrentUserId();
   if (note.id) {
     const { data, error } = await supabase.from('notes').update({ title: note.title, content: note.content, updated_at: new Date().toISOString() }).eq('id', note.id).select();
     if (error) throw error;
     return data;
   } else {
-    const { data, error } = await supabase.from('notes').insert([{ user_id: SOLO_USER_ID, course_id: note.course_id, title: note.title, content: note.content }]).select();
+    const { data, error } = await supabase.from('notes').insert([{ user_id: userId, course_id: note.course_id, title: note.title, content: note.content }]).select();
     if (error) throw error;
     return data;
   }
 }
 
 export async function createCourse(course: { title: string; course_code?: string; ects: number; status: string; teacher_name?: string; semester?: string; }) {
+  const userId = await getCurrentUserId();
   const { data, error } = await supabase.from('courses').insert([{
-    user_id: SOLO_USER_ID, title: course.title, course_code: course.course_code || null, ects: Number(course.ects), status: course.status || 'En cours', teacher_name: course.teacher_name || null, semester: course.semester || 'Automne 2026'
+    user_id: userId, title: course.title, course_code: course.course_code || null, ects: Number(course.ects), status: course.status || 'En cours', teacher_name: course.teacher_name || null, semester: course.semester || 'Automne 2026'
   }]).select();
   if (error) throw error;
   return data;
 }
 
 export async function createGrade(gradeData: { course_id: string; grade: number; weight: number; eval_type: string; }) {
+  const userId = await getCurrentUserId();
   const { data, error } = await supabase.from('grades').insert([{
-    user_id: SOLO_USER_ID, course_id: gradeData.course_id, grade: Number(gradeData.grade), weight: Number(gradeData.weight), eval_type: gradeData.eval_type
+    user_id: userId, course_id: gradeData.course_id, grade: Number(gradeData.grade), weight: Number(gradeData.weight), eval_type: gradeData.eval_type
   }]).select();
   if (error) throw error;
   return data;
@@ -343,21 +368,25 @@ export async function fetchEvents() {
 }
 
 export async function createEvent(eventData: { title: string; event_date: string; category: string; course_id?: string; }) {
+  const userId = await getCurrentUserId();
   const { data, error } = await supabase.from('events').insert([{
-    user_id: SOLO_USER_ID, title: eventData.title, event_date: eventData.event_date, category: eventData.category, course_id: eventData.course_id || null
+    user_id: userId, title: eventData.title, event_date: eventData.event_date, category: eventData.category, course_id: eventData.course_id || null
   }]).select();
   if (error) throw error;
   return data;
 }
 
 export async function uploadCourseDocument(file: File, courseId: string, documentType: string, chapterId?: string, atfRef?: string, internalName?: string) {
+  const userId = await getCurrentUserId();
   const fileExt = file.name.split('.').pop();
   const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
-  const filePath = `${SOLO_USER_ID}/${fileName}`;
+  const filePath = `${userId}/${fileName}`;
+  
   const { error: uploadError } = await supabase.storage.from('user-documents').upload(filePath, file);
   if (uploadError) throw uploadError;
+  
   const { data, error: dbError } = await supabase.from('documents').insert([{
-    user_id: SOLO_USER_ID,
+    user_id: userId,
     course_id: courseId ? courseId : null,
     chapter_id: chapterId || null,
     bucket_path: filePath,
@@ -393,25 +422,28 @@ export async function saveCaseLaw(caseLaw: {
   holding: string;
   pedagogical_takeaway?: string;
 }) {
+  const userId = await getCurrentUserId();
   if (caseLaw.id) {
     const { data, error } = await supabase.from('case_laws').update(caseLaw).eq('id', caseLaw.id).select();
     if (error) throw error;
     return data;
   } else {
-    const { data, error } = await supabase.from('case_laws').insert([{ user_id: SOLO_USER_ID, ...caseLaw }]).select();
+    const { data, error } = await supabase.from('case_laws').insert([{ user_id: userId, ...caseLaw }]).select();
     if (error) throw error;
     return data;
   }
 }
 
 export async function saveCaseStudy(study: { course_id: string; title: string; legal_issue: string; major_premise: string; minor_premise: string; conclusion: string }) {
-  const { data, error } = await supabase.from('case_studies').insert([{ user_id: SOLO_USER_ID, ...study }]).select();
+  const userId = await getCurrentUserId();
+  const { data, error } = await supabase.from('case_studies').insert([{ user_id: userId, ...study }]).select();
   if (error) throw error;
   return data;
 }
 
 export async function saveExamSimulation(simData: { course_id: string; title: string; facts: string; legal_issue: string; major_premise: string; minor_premise: string; conclusion: string; time_spent_seconds: number }) {
-  const { data, error } = await supabase.from('exam_simulations').insert([{ user_id: SOLO_USER_ID, ...simData }]).select();
+  const userId = await getCurrentUserId();
+  const { data, error } = await supabase.from('exam_simulations').insert([{ user_id: userId, ...simData }]).select();
   if (error) throw error;
   return data;
 }
@@ -458,12 +490,8 @@ export async function batchMoveItems(chapterIds: string[], docIds: string[], tar
   }
 }
 
-/**
- * MET À JOUR UNE FLASHCARD APRÈS RÉVISION (Algorithme SM-2)
- */
 export async function updateFlashcardReview(id: string, q: number, currentCard: any) {
   let { repetitions = 0, ease_factor = 2.5, interval_days = 0 } = currentCard;
-
   if (q < 3) {
     repetitions = 0;
     interval_days = 1;
@@ -477,13 +505,13 @@ export async function updateFlashcardReview(id: string, q: number, currentCard: 
     }
     repetitions += 1;
   }
-
+  
   ease_factor = ease_factor + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
   if (ease_factor < 1.3) ease_factor = 1.3;
-
+  
   const nextDue = new Date();
   nextDue.setDate(nextDue.getDate() + interval_days);
-
+  
   const { error } = await supabase.from('flashcards').update({
     repetitions,
     ease_factor,
@@ -491,6 +519,6 @@ export async function updateFlashcardReview(id: string, q: number, currentCard: 
     due_at: nextDue.toISOString(),
     last_reviewed_at: new Date().toISOString()
   }).eq('id', id);
-
+  
   if (error) throw error;
 }
