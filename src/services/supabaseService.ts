@@ -39,7 +39,7 @@ export async function deleteCourse(courseId: string) {
 
 export async function updateCourse(
   courseId: string,
-  courseData: { title: string; course_code?: string; ects: number; status: string; teacher_name?: string; semester?: string }
+  courseData: { title: string; course_code?: string; ects: number; status: string; teacher_name?: string; semester?: string; description?: string; target_grade?: number; color?: string; icon?: string }
 ) {
   const { data, error } = await supabase
     .from('courses')
@@ -49,7 +49,11 @@ export async function updateCourse(
       ects: Number(courseData.ects) || 6,
       status: courseData.status || 'En cours',
       teacher_name: courseData.teacher_name || null,
-      semester: courseData.semester || 'Automne 2026'
+      semester: courseData.semester || 'Automne 2026',
+      description: courseData.description || null,
+      target_grade: courseData.target_grade || 4.5,
+      color: courseData.color || 'gold',
+      icon: courseData.icon || 'Scale'
     })
     .eq('id', courseId)
     .select();
@@ -103,7 +107,7 @@ export async function deleteDocument(docId: string, bucketPath?: string) {
 }
 
 export async function createCourseWithSchedule(
-  courseData: { title: string; course_code?: string; ects: number; status: string; teacher_name?: string; semester?: string },
+  courseData: { title: string; course_code?: string; ects: number; status: string; teacher_name?: string; semester?: string; color?: string; icon?: string },
   schedules: Array<{ day_of_week: string; start_time: string; end_time: string }>
 ) {
   const userId = await getCurrentUserId();
@@ -116,7 +120,10 @@ export async function createCourseWithSchedule(
       ects: Number(courseData.ects) || 6,
       status: courseData.status || 'En cours',
       teacher_name: courseData.teacher_name || null,
-      semester: courseData.semester || 'Automne 2026'
+      semester: courseData.semester || 'Automne 2026',
+      color: courseData.color || 'gold',
+      icon: courseData.icon || 'Scale',
+      is_archived: false
     }])
     .select();
   
@@ -248,7 +255,8 @@ export async function createMultipleCourses(coursesList: Array<{ title: string; 
     course_code: c.course_code || 'DROIT',
     ects: Number(c.ects) || 6,
     status: 'En cours',
-    semester: c.semester || 'Automne 2026'
+    semester: c.semester || 'Automne 2026',
+    is_archived: false
   }));
   const { data, error } = await supabase.from('courses').insert(formatted).select();
   if (error) throw error;
@@ -260,6 +268,7 @@ export async function fetchCourseDocuments(courseId: string) {
     .from('documents')
     .select('*, chapters(title)')
     .eq('course_id', courseId)
+    .eq('is_archived', false)
     .order('created_at', { ascending: false });
   if (error) return [];
   return data || [];
@@ -309,7 +318,6 @@ export async function deleteFlashcard(id: string) {
   if (error) throw error;
 }
 
-// NOUVEAU : Fonction pour supprimer d'un coup toutes les cartes d'un Set (Cours)
 export async function deleteFlashcardsByCourse(courseId: string) {
   const { error } = await supabase.from('flashcards').delete().eq('course_id', courseId);
   if (error) throw error;
@@ -347,7 +355,7 @@ export async function saveNote(note: { id?: string; course_id: string; title: st
 export async function createCourse(course: { title: string; course_code?: string; ects: number; status: string; teacher_name?: string; semester?: string; }) {
   const userId = await getCurrentUserId();
   const { data, error } = await supabase.from('courses').insert([{
-    user_id: userId, title: course.title, course_code: course.course_code || null, ects: Number(course.ects), status: course.status || 'En cours', teacher_name: course.teacher_name || null, semester: course.semester || 'Automne 2026'
+    user_id: userId, title: course.title, course_code: course.course_code || null, ects: Number(course.ects), status: course.status || 'En cours', teacher_name: course.teacher_name || null, semester: course.semester || 'Automne 2026', is_archived: false
   }]).select();
   if (error) throw error;
   return data;
@@ -396,7 +404,8 @@ export async function uploadCourseDocument(file: File, courseId: string, documen
     size_bytes: file.size,
     document_type: documentType,
     atf_ref: atfRef || null,
-    processing_status: 'completed'
+    processing_status: 'completed',
+    is_archived: false
   }]).select();
   if (dbError) throw dbError;
   return data;
@@ -489,6 +498,7 @@ export async function batchMoveItems(chapterIds: string[], docIds: string[], tar
       .in('id', docIds);
     if (error) throw error;
   }
+} // <-- ACCOLADE CORRIGÉE ICI
 
 export async function batchMoveFlashcards(cardIds: string[], targetCourseId: string) {
   if (!cardIds || cardIds.length === 0) return;
