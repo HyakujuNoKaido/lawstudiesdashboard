@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, FileText, LayoutGrid, Scale, Plus, X, CheckSquare, Square, FolderInput, UploadCloud, Sparkles, Calendar, BookOpen, FileEdit, BrainCircuit, CheckCircle2, Circle, AlertCircle } from 'lucide-react';
+import { ChevronLeft, FileText, LayoutGrid, Scale, Plus, X, CheckSquare, Square, FolderInput, UploadCloud, Sparkles, Calendar, BookOpen, FileEdit, BrainCircuit, CheckCircle2, Circle, AlertCircle, ChevronDown, ChevronRight, ClipboardPaste, Trash2 } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
 import { Card } from '../components/ui/Card';
 import { ProgressBar } from '../components/ui/ProgressBar';
@@ -211,7 +211,6 @@ export function CourseDetail() {
     const isOpen = openChapters[chapter.id] ?? true;
     const isSelected = selectedChapterIds.includes(chapter.id);
     const docsCount = chapterDocs.length; const cardsCount = chapterCards.length;
-    const hasNotes = notes.some(n => n.title.toLowerCase().includes(chapter.title.toLowerCase())); 
 
     return (
       <div key={chapter.id} className="flex flex-col gap-2 relative">
@@ -321,7 +320,6 @@ export function CourseDetail() {
           <button onClick={() => navigate('/courses')} className="flex items-center gap-1 text-text-muted hover:text-text transition-colors -ml-2 p-2 cursor-pointer">
             <ChevronLeft size={20} /> <span className="text-sm font-medium">Retour</span>
           </button>
-          {/* Nouveau menu de gestion global du cours */}
           <ResourceMenu 
              onEdit={() => navigate(`/edit/course/${course.id}`)}
              onArchive={() => toast("Archivage du cours non implémenté", "info")}
@@ -330,7 +328,6 @@ export function CourseDetail() {
         </div>
         
         <div>
-          {/* UTILISATION DE INLINE EDITABLE TITLE */}
           <InlineEditableTitle 
             initialTitle={course.title} 
             onSave={handleUpdateCourseTitle} 
@@ -367,8 +364,6 @@ export function CourseDetail() {
 
       {/* CONTENU DES ONGLETS */}
       <div className="mt-2">
-        
-        {/* ONGLET 1 : VUE D'ENSEMBLE */}
         {activeTab === 'overview' && (
           <div className="flex flex-col gap-8 animate-in fade-in">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -437,7 +432,6 @@ export function CourseDetail() {
           </div>
         )}
 
-        {/* ONGLET 2 : CHAPITRES */}
         {activeTab === 'chapters' && (
           <div className="flex flex-col gap-4 animate-in fade-in">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-2 bg-surface p-4 rounded-2xl border border-border">
@@ -511,7 +505,6 @@ export function CourseDetail() {
           </div>
         )}
 
-        {/* ONGLET 3 : RESSOURCES */}
         {activeTab === 'resources' && (
           <div className="flex flex-col gap-4 animate-in fade-in">
              {documents.length === 0 ? (
@@ -540,8 +533,65 @@ export function CourseDetail() {
           </div>
         )}
 
-        {/* ... Les autres onglets restent similaires (notes, flashcards, grades) ... */}
+        {activeTab === 'notes' && (
+          <div className="flex flex-col gap-4 animate-in fade-in">
+            {notes.length === 0 ? (
+              <div className="text-center py-12 border border-dashed border-border rounded-2xl text-text-muted text-sm">Aucune note liée à ce cours.</div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {notes.map(note => (
+                  <Card key={note.id} onClick={() => navigate(`/editor/${note.id}`)} className="p-5 flex flex-col gap-3 cursor-pointer hover:border-accent/50 group">
+                    <h3 className="font-serif font-bold text-lg text-text group-hover:text-accent transition-colors truncate">{note.title}</h3>
+                    <p className="text-sm text-text-muted line-clamp-3 font-serif">{note.content}</p>
+                    <span className="text-[10px] text-text-muted font-mono mt-2">Mise à jour : {new Date(note.updated_at).toLocaleDateString()}</span>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
+        {activeTab === 'flashcards' && (
+          <div className="flex flex-col gap-4 animate-in fade-in">
+            {flashcards.length === 0 ? (
+              <div className="text-center py-12 border border-dashed border-border rounded-2xl text-text-muted text-sm">Aucune flashcard pour ce cours.</div>
+            ) : (
+              <div className="flex flex-col border border-border bg-surface rounded-card overflow-hidden shadow-sm">
+                {flashcards.map((card, idx) => (
+                  <div key={card.id} className={`p-4 flex flex-col gap-1 hover:bg-surface-interactive transition-colors ${idx !== flashcards.length -1 ? 'border-b border-border/50' : ''}`}>
+                    <div className="flex justify-between items-start gap-4">
+                      <p className="text-sm font-medium text-text"><span className="text-text-muted font-mono mr-2 text-xs">Q:</span>{card.front}</p>
+                      <Badge variant={card.ease_factor >= 2.5 ? 'success' : 'warning'} className="text-[9px] shrink-0">
+                        {card.ease_factor >= 2.5 ? 'Maîtrisée' : 'À revoir'}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-text-muted"><span className="opacity-50 font-mono mr-2 text-xs">R:</span>{card.back}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'grades' && (
+          <div className="flex flex-col gap-4 animate-in fade-in">
+            {grades.length === 0 ? (
+              <div className="text-center py-12 border border-dashed border-border rounded-2xl text-text-muted text-sm">Aucune note enregistrée.</div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {grades.map(g => (
+                  <Card key={g.id} className="p-5 flex items-center justify-between border-l-4 border-l-info">
+                    <div className="flex flex-col">
+                      <span className="font-bold text-sm text-text">{g.eval_type}</span>
+                      <span className="text-xs text-text-muted">Pondération : {g.weight}%</span>
+                    </div>
+                    <span className={`font-serif text-3xl font-bold ${g.grade >= 4.0 ? 'text-success' : 'text-danger'}`}>{g.grade.toFixed(2)}</span>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* MODALES COMMUNES */}
