@@ -5,14 +5,13 @@ import { Card } from '../components/ui/Card';
 import { useApp } from '../context/AppContext';
 import { toast } from '../lib/toast';
 import { supabase } from '../lib/supabase';
-import { SOLO_USER_ID } from '../lib/constants';
-import { fetchCourses } from '../services/supabaseService';
+import { getCurrentUserId, fetchCourses } from '../services/supabaseService';
 
 export function Profile() {
   const navigate = useNavigate();
   const { settings } = useApp();
+  
   const [activeTab, setActiveTab] = useState<'diploma' | 'personal' | 'settings'>('diploma');
-
   const [profile, setProfile] = useState<any>(null);
   const [courses, setCourses] = useState<any[]>([]);
   const [grades, setGrades] = useState<any[]>([]);
@@ -29,10 +28,11 @@ export function Profile() {
   useEffect(() => {
     async function loadUserData() {
       try {
+        const userId = await getCurrentUserId();
         const [profileRes, coursesData, gradesRes] = await Promise.all([
-          supabase.from('profiles').select('*').eq('id', SOLO_USER_ID).single(),
+          supabase.from('profiles').select('*').eq('id', userId).single(),
           fetchCourses(),
-          supabase.from('grades').select('*').eq('user_id', SOLO_USER_ID)
+          supabase.from('grades').select('*').eq('user_id', userId)
         ]);
 
         if (profileRes.data) {
@@ -45,26 +45,31 @@ export function Profile() {
         }
         setCourses(coursesData);
         setGrades(gradesRes.data || []);
+
       } catch (err) {
         console.error("Erreur chargement profil:", err);
       } finally {
         setLoading(false);
       }
     }
+
     loadUserData();
   }, []);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const userId = await getCurrentUserId();
       const { error } = await supabase.from('profiles').upsert({
-        id: SOLO_USER_ID,
+        id: userId,
         full_name: editForm.full_name,
         university: editForm.university,
         cycle: editForm.cycle,
         updated_at: new Date().toISOString()
       });
+
       if (error) throw error;
+      
       setProfile({ ...profile, ...editForm });
       setIsEditProfileOpen(false);
       toast("Profil mis à jour", "success");
@@ -73,10 +78,11 @@ export function Profile() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (window.confirm("Êtes-vous sûr de vouloir vous déconnecter ?")) {
+      await supabase.auth.signOut();
       toast("Déconnexion réussie", "success");
-      navigate('/onboarding');
+      navigate('/onboarding'); // Ou rediriger vers une page de login
     }
   };
 
@@ -109,11 +115,13 @@ export function Profile() {
         <div className="w-24 h-24 rounded-full bg-accent/10 border-2 border-accent text-accent flex items-center justify-center font-serif text-4xl font-bold uppercase shrink-0 shadow-inner">
           {profile?.full_name ? profile.full_name.substring(0, 2).toUpperCase() : 'LX'}
         </div>
+        
         <div className="flex flex-col items-center md:items-start text-center md:text-left flex-1">
           <h1 className="font-serif text-3xl font-bold text-text mb-1.5">{profile?.full_name || 'Étudiant en Droit'}</h1>
           <p className="text-sm font-medium text-text-muted flex items-center gap-2 mb-4">
             <GraduationCap size={16} /> {profile?.cycle || 'Bachelor en Droit'} • {profile?.university || 'Université suisse'}
           </p>
+          
           <div className="flex flex-wrap justify-center md:justify-start gap-2">
             <span className="bg-surface-elevated text-text px-3 py-1 rounded-lg text-xs font-bold border border-border">Moyenne: {gpaText}</span>
             <span className="bg-accent/10 text-accent px-3 py-1 rounded-lg text-xs font-bold border border-accent/25">{totalECTS} ECTS inscrits</span>
@@ -202,7 +210,7 @@ export function Profile() {
                 </div>
               </div>
             </Card>
-            
+
             <Card className="bg-surface p-6 flex flex-col gap-5">
               <h3 className="font-bold flex items-center gap-2 text-warning text-lg"><Target size={20}/> Objectifs & Barème</h3>
               <div className="flex flex-col gap-4 flex-1">
@@ -214,6 +222,7 @@ export function Profile() {
                   <span className="text-sm font-medium text-text">Mode de stockage</span>
                   <span className="font-bold font-mono text-success bg-success/10 px-2 py-1 rounded">Supabase Cloud</span>
                 </div>
+                
                 <button 
                   onClick={() => setIsEditProfileOpen(true)}
                   className="mt-auto w-full text-xs font-bold text-background bg-text py-3 rounded-xl hover:scale-[1.02] transition-transform cursor-pointer"
@@ -232,6 +241,7 @@ export function Profile() {
               <h3 className="font-bold flex items-center gap-2 text-info text-lg border-b border-border/50 pb-4">
                 <Settings2 size={20}/> Préférences de l'application
               </h3>
+              
               <div className="flex flex-col gap-5">
                 <div className="flex justify-between items-center">
                   <div>
@@ -250,7 +260,7 @@ export function Profile() {
                 </div>
               </div>
             </div>
-            
+
             <div className="bg-danger/5 border border-danger/20 rounded-3xl p-6 flex flex-col sm:flex-row justify-between items-center gap-4">
               <div>
                 <p className="font-bold text-sm text-danger flex items-center gap-2"><LogOut size={16}/> Déconnexion</p>
@@ -274,6 +284,7 @@ export function Profile() {
                 <X size={16} />
               </button>
             </div>
+            
             <div className="flex flex-col gap-3">
               <label className="flex flex-col gap-1 text-xs font-bold text-text-muted">
                 Nom complet
@@ -284,6 +295,7 @@ export function Profile() {
                   className="bg-background border border-border rounded-xl p-2.5 text-sm text-text font-normal focus:border-accent"
                 />
               </label>
+              
               <label className="flex flex-col gap-1 text-xs font-bold text-text-muted">
                 Université / Faculté
                 <input 
@@ -293,6 +305,7 @@ export function Profile() {
                   className="bg-background border border-border rounded-xl p-2.5 text-sm text-text font-normal focus:border-accent"
                 />
               </label>
+
               <label className="flex flex-col gap-1 text-xs font-bold text-text-muted">
                 Cursus (ex: Bachelor en Droit)
                 <input 
@@ -303,6 +316,7 @@ export function Profile() {
                 />
               </label>
             </div>
+
             <div className="flex justify-end gap-2 mt-2">
               <button type="button" onClick={() => setIsEditProfileOpen(false)} className="px-4 py-2 bg-surface-elevated text-text text-xs font-bold rounded-xl cursor-pointer">Annuler</button>
               <button type="submit" className="px-4 py-2 bg-accent text-background text-xs font-bold rounded-xl cursor-pointer flex items-center gap-1.5"><Check size={14}/> Enregistrer</button>
@@ -310,7 +324,6 @@ export function Profile() {
           </form>
         </div>
       )}
-
     </div>
   );
 }
