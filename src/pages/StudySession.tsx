@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { RotateCw, ListFilter, Keyboard, Settings2, ArrowRight, CheckCircle2, XCircle, Trophy, LayoutGrid, Timer as TimerIcon, ChevronLeft, BrainCircuit, AlertCircle, Flame, EyeOff } from 'lucide-react';
+import { RotateCw, ListFilter, Keyboard, Settings2, ArrowRight, CheckCircle2, XCircle, Trophy, LayoutGrid, Timer as TimerIcon, ChevronLeft, BrainCircuit, AlertCircle, Flame, EyeOff, Play } from 'lucide-react';
 import { fetchFlashcards, updateFlashcardProgress } from '../services/supabaseService';
 import { calculateSM2 } from '../lib/spacedRepetition';
 import { useApp } from '../context/AppContext';
