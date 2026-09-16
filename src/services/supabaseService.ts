@@ -489,4 +489,20 @@ export async function batchMoveItems(chapterIds: string[], docIds: string[], tar
       .in('id', docIds);
     if (error) throw error;
   }
+export async function batchMoveFlashcards(cardIds: string[], targetCourseId: string) {
+  if (!cardIds || cardIds.length === 0) return;
+  const { error } = await supabase
+    .from('flashcards')
+    .update({ course_id: targetCourseId })
+    .in('id', cardIds);
+  if (error) throw error;
+}
+
+export async function batchDeleteFlashcards(cardIds: string[]) {
+  if (!cardIds || cardIds.length === 0) return;
+  const { error } = await supabase
+    .from('flashcards')
+    .delete()
+    .in('id', cardIds);
+  if (error) throw error;
 }
