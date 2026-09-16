@@ -10,7 +10,7 @@ export function ProgressBar({ value, max, colorClass = 'bg-accent' }: ProgressBa
   const percentage = Math.min(100, Math.max(0, (value / max) * 100));
 
   return (
-    <div className="w-full h-1.5 bg-surface-elevated rounded-full overflow-hidden">
+    <div className="w-full h-1.5 bg-surface rounded-full overflow-hidden border border-border/50">
       <div 
         className={`h-full rounded-full ${colorClass} transition-all duration-500 ease-out`} 
         style={{ width: `${percentage}%` }} 
