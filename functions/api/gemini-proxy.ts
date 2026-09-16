@@ -30,7 +30,7 @@ const MODELS_TO_TRY = [
 const ALLOWED_ORIGINS = new Set([
   'http://localhost:5173',
   'http://localhost:3000',
-  'https://lexi-suisse.pages.dev',
+  'https://lawstudiesdashboard.pages.dev', // <-- Le vrai domaine de ton application !
 ]);
 
 export async function onRequest(context: { request: Request; env: { GEMINI_API_KEY?: string } }) {
