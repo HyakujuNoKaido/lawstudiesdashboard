@@ -2,9 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Save, Sparkles, BookOpen, Clock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { SOLO_USER_ID } from '../lib/constants';
+import { getCurrentUserId, fetchCourses } from '../services/supabaseService';
 import { toast } from '../lib/toast';
-import { fetchCourses } from '../services/supabaseService';
 
 export function StudyNoteEditor() {
   const { noteId } = useParams<{ noteId: string }>();
@@ -47,6 +46,7 @@ export function StudyNoteEditor() {
           setContent(data.content);
           if (data.course_id) setCourseId(data.course_id);
         }
+
       } catch (err) {
         console.error("Erreur chargement note:", err);
         toast("Impossible de charger la note", "error");
@@ -62,11 +62,13 @@ export function StudyNoteEditor() {
       toast("Veuillez donner un titre à votre note", "warning");
       return;
     }
+
     setSaving(true);
     try {
+      const userId = await getCurrentUserId();
       if (!noteId || noteId === 'new') {
         const { error } = await supabase.from('notes').insert([{
-          user_id: SOLO_USER_ID,
+          user_id: userId,
           course_id: courseId || null,
           title,
           content
@@ -86,6 +88,7 @@ export function StudyNoteEditor() {
         if (error) throw error;
         toast("Note sauvegardée", "success");
       }
+      
       navigate(-1);
     } catch (err) {
       console.error(err);
@@ -101,7 +104,6 @@ export function StudyNoteEditor() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-2rem)] max-w-4xl mx-auto w-full gap-4 pt-2">
-      
       {/* HEADER DE L'ÉDITEUR */}
       <header className="flex items-center justify-between gap-4 bg-surface border border-border p-4 rounded-2xl shadow-sm">
         <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -130,7 +132,6 @@ export function StudyNoteEditor() {
               <option key={c.id} value={c.id}>{c.title}</option>
             ))}
           </select>
-
           <button 
             onClick={handleSave}
             disabled={saving}
@@ -155,7 +156,6 @@ export function StudyNoteEditor() {
           <span>{content.length} caractères</span>
         </div>
       </div>
-
     </div>
   );
 }
