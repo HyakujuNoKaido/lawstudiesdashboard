@@ -34,7 +34,7 @@ export async function extractTextFromPDF(fileUrl: string, startPage?: number, en
 }
 
 /**
- * Cœur de l'appel API avec gestion du mode JSON et typage
+ * Cœur de l'appel API avec authentification par Header et modèle récent
  */
 async function callLawstudiesAI(
   prompt: string, 
@@ -43,16 +43,17 @@ async function callLawstudiesAI(
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("Clé API introuvable.");
 
-  const API_VERSION = 'v1beta'; 
-  const MODEL_NAME = 'gemini-1.5-flash';
-  
-  const url = `https://generativelanguage.googleapis.com/${API_VERSION}/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
+  const MODEL_NAME = 'gemini-2.0-flash'; // Modèle moderne et supporté
+  const API_VERSION = 'v1beta';
+
+  // URL SANS la clé en paramètre (la clé passe dans les headers)
+  const url = `https://generativelanguage.googleapis.com/${API_VERSION}/models/${MODEL_NAME}:generateContent`;
   
   const payload: any = {
     contents: [{ parts: [{ text: prompt }] }],
     systemInstruction: { parts: [{ text: systemInstruction }] },
     generationConfig: {
-      temperature: 0.2, // Bas pour plus de rigueur juridique
+      temperature: 0.2, // Rigueur juridique accrue
       topP: 0.8,
     }
   };
@@ -64,19 +65,31 @@ async function callLawstudiesAI(
   try {
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey // Authentification par header pour les clés format AQ.
+      },
       body: JSON.stringify(payload)
     });
 
     const data = await response.json();
 
     if (!response.ok) {
-      console.error("Détails erreur API:", data);
+      console.error("Détails erreur API Google:", data);
       throw new Error(`Erreur API Gemini (${response.status}): ${data.error?.message || 'Inconnue'}`);
     }
 
     const result = data.candidates[0].content.parts[0].text;
-    return isJsonResponse ? JSON.parse(result) : result;
+    
+    if (isJsonResponse) {
+      let cleanResult = result.trim();
+      if (cleanResult.startsWith("```json")) cleanResult = cleanResult.slice(7);
+      if (cleanResult.startsWith("```")) cleanResult = cleanResult.slice(3);
+      if (cleanResult.endsWith("```")) cleanResult = cleanResult.slice(0, -3);
+      return JSON.parse(cleanResult.trim());
+    }
+
+    return result;
   } catch (err) {
     console.error("Erreur critique Lawstudies AI:", err);
     throw err;
@@ -88,7 +101,7 @@ async function callLawstudiesAI(
  */
 export async function generateAIFlashcards(text: string) {
   const prompt = `Génère des flashcards de révision à partir de ce texte juridique. 
-Format JSON attendu : [{"question": "...", "answer": "..."}]
+Renvoie UNIQUEMENT un tableau JSON valide au format strict : [{"question": "...", "answer": "..."}]. Pas de texte additionnel, pas de markdown autour, juste le JSON brut.
 Texte : ${text.substring(0, 35000)}`;
 
   return callLawstudiesAI(prompt, true);
@@ -115,7 +128,7 @@ Texte : ${text.substring(0, 35000)}`;
  */
 export async function generateCaseLaw(text: string): Promise<any> {
   const prompt = `Analyse cet arrêt de manière structurée.
-Format JSON attendu : 
+Renvoie UNIQUEMENT un objet JSON valide au format strict avec ces clés : 
 {
   "title": "Nom de l'affaire ou résumé court",
   "atf_citation": "Référence (ex: ATF 145 III 1)",
@@ -135,7 +148,7 @@ Texte : ${text.substring(0, 30000)}`;
  */
 export async function generateSubsumption(text: string): Promise<any> {
   const prompt = `Applique la méthode de la subsomption (syllogisme juridique) sur ce cas.
-Format JSON attendu :
+Renvoie UNIQUEMENT un objet JSON valide au format strict avec ces clés :
 {
   "legal_issue": "La question litigieuse",
   "major_premise": "La règle de droit applicable (Majeure)",
@@ -153,7 +166,7 @@ Texte : ${text.substring(0, 30000)}`;
 export async function generateMockExam(courseTitle: string): Promise<any> {
   const prompt = `Génère un cas pratique d'examen pour le cours : ${courseTitle}.
 Le cas doit inclure un état de fait complexe et une solution détaillée basée sur le droit suisse.
-Format JSON attendu : { "title": "...", "facts": "...", "questions": ["..."], "solution_guidelines": "..." }`;
+Renvoie UNIQUEMENT un objet JSON valide au format strict : { "title": "...", "facts": "...", "questions": ["..."], "solution_guidelines": "..." }`;
 
   return callLawstudiesAI(prompt, true);
 }
