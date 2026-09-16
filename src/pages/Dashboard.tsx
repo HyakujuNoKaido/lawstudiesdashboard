@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, BrainCircuit, Calendar, FileText, FileEdit, ChevronRight, Activity, Flame, Clock, Target, CheckCircle2, Circle, AlertCircle, FolderOpen } from 'lucide-react';
+import { Calendar, FileText, FileEdit, ChevronRight, Activity, Flame, Clock, Target, CheckCircle2, Circle, AlertCircle, FolderOpen } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
-import { fetchCourses, fetchNotes, fetchEvents, fetchFlashcards } from '../services/supabaseService';
+import { fetchCourses, fetchNotes, fetchEvents, fetchFlashcards, getCurrentUserId } from '../services/supabaseService';
 import { supabase } from '../lib/supabase';
-import { SOLO_USER_ID } from '../lib/constants';
 
 export function Dashboard() {
   const navigate = useNavigate();
@@ -25,14 +24,16 @@ export function Dashboard() {
   useEffect(() => {
     async function loadDashboard() {
       try {
+        const userId = await getCurrentUserId();
+        
         const [coursesData, eventsData, notesData, cardsData, docsRes] = await Promise.all([
           fetchCourses(),
           fetchEvents(),
           fetchNotes(),
           fetchFlashcards(),
-          supabase.from('documents').select('*, courses(title)').eq('user_id', SOLO_USER_ID).order('created_at', { ascending: false }).limit(5)
+          supabase.from('documents').select('*, courses(title)').eq('user_id', userId).order('created_at', { ascending: false }).limit(5)
         ]);
-        
+
         setCourses(coursesData);
         setEvents(eventsData);
         setRecentDocs(docsRes.data || []);
@@ -51,13 +52,13 @@ export function Dashboard() {
           cardsReviewed: cardsReviewed,
           coursesActive: coursesData.length
         });
-
       } catch (err) {
         console.error("Erreur chargement dashboard", err);
       } finally {
         setLoading(false);
       }
     }
+
     loadDashboard();
   }, []);
 
@@ -73,7 +74,6 @@ export function Dashboard() {
 
   return (
     <div className="flex flex-col gap-8 pt-2 pb-24 animate-in fade-in duration-300">
-      
       {/* HEADER : Salutation & Bouton Mode Amphi */}
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 px-1 border-b border-border pb-6">
         <div>
@@ -98,12 +98,10 @@ export function Dashboard() {
             7 derniers jours
           </span>
         </div>
-
+        
         <div className="bg-surface border border-border/80 rounded-3xl p-6 shadow-sm relative overflow-hidden group hover:border-accent/30 transition-all">
           <div className="absolute -right-20 -top-20 w-48 h-48 bg-accent/5 rounded-full blur-3xl pointer-events-none"></div>
-
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
-            
             <div className="flex items-start gap-4 max-w-lg">
               <div className="w-12 h-12 rounded-2xl bg-accent/10 border border-accent/20 text-accent flex items-center justify-center shrink-0 shadow-inner">
                 <Flame size={22} />
@@ -116,30 +114,26 @@ export function Dashboard() {
                 </p>
               </div>
             </div>
-
+            
             <div className="grid grid-cols-3 gap-3 w-full lg:w-auto shrink-0">
               <div className="bg-surface-elevated border border-border/60 rounded-2xl p-4 text-center flex flex-col items-center justify-center min-w-[95px] shadow-sm">
                 <span className="font-serif text-2xl md:text-3xl font-bold text-accent mb-0.5">{weeklyStats.docsAdded}</span>
                 <span className="text-[9px] uppercase tracking-wider text-text-muted font-bold">Documents</span>
               </div>
-              
               <div className="bg-surface-elevated border border-border/60 rounded-2xl p-4 text-center flex flex-col items-center justify-center min-w-[95px] shadow-sm">
                 <span className="font-serif text-2xl md:text-3xl font-bold text-warning mb-0.5">{weeklyStats.cardsReviewed}</span>
                 <span className="text-[9px] uppercase tracking-wider text-text-muted font-bold">Flashcards</span>
               </div>
-              
               <div className="bg-surface-elevated border border-border/60 rounded-2xl p-4 text-center flex flex-col items-center justify-center min-w-[95px] shadow-sm">
                 <span className="font-serif text-2xl md:text-3xl font-bold text-success mb-0.5">{weeklyStats.notesUpdated}</span>
                 <span className="text-[9px] uppercase tracking-wider text-text-muted font-bold">Notes</span>
               </div>
             </div>
-
           </div>
         </div>
       </section>
-      
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
         {/* COLONNE GAUCHE : AGENDA DU JOUR */}
         <section className="lg:col-span-1 flex flex-col gap-4">
           <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
@@ -180,7 +174,6 @@ export function Dashboard() {
               Voir toute la bibliothèque <ChevronRight size={14} />
             </button>
           </div>
-
           <div className="flex flex-col gap-3">
             {recentDocs.length === 0 ? (
               <div className="text-center py-8 text-text-muted border border-dashed border-border rounded-2xl text-sm">
@@ -217,7 +210,6 @@ export function Dashboard() {
             )}
           </div>
         </section>
-
       </div>
     </div>
   );
