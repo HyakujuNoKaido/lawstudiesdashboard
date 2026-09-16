@@ -30,7 +30,8 @@ export function Onboarding() {
   }, [user]);
 
   const checkProfile = async () => {
-    const { data } = await supabase.from('profiles').select('full_name').eq('id', user?.id).single();
+    if (!user) return;
+    const { data } = await supabase.from('profiles').select('full_name').eq('id', user.id).single();
     if (data?.full_name) {
       navigate('/'); // Profil existant -> Dashboard
     } else {
@@ -55,6 +56,8 @@ export function Onboarding() {
         const { error } = await supabase.auth.signUp({ email: authForm.email, password: authForm.password });
         if (error) throw error;
         toast("Compte créé avec succès", "success");
+        // Si Supabase nécessite une confirmation par email, le user.id pourrait ne pas s'activer immédiatement.
+        // Autrement, on passe à l'étape 2.
         setStep(2);
       }
     } catch (err: any) {
@@ -75,9 +78,14 @@ export function Onboarding() {
   const handlePrev = () => setStep(prev => Math.max(2, prev - 1));
 
   const handleFinish = async () => {
-    if (!user) return;
+    if (!user) {
+      toast("Vous devez être authentifié pour finaliser le profil.", "error");
+      return;
+    }
+    
     setLoading(true);
     try {
+      // UTILISATION DIRECTE DE USER.ID (Résout l'erreur getCurrentUserId())
       const { error } = await supabase
         .from('profiles')
         .upsert({
