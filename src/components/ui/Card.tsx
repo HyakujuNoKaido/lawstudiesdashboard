@@ -9,16 +9,14 @@ interface CardProps {
 
 export function Card({ children, className = '', variant = 'default', onClick }: CardProps) {
   const interactiveClasses = onClick 
-    ? 'cursor-pointer hover:border-text-muted/30 active:scale-[0.99] transition-all duration-200' 
+    ? 'cursor-pointer hover:bg-surface-interactive active:scale-[0.98] transition-all duration-200 card-interactive' 
     : '';
 
   let variantClasses = '';
-  
-  // Différentes matières pour éviter le syndrome "100% de cartes identiques générées par IA"
   switch (variant) {
     case 'editorial':
       // Style "Code annoté" : Marge gauche bordeaux, aspect plus plat et papier
-      variantClasses = 'bg-surface border-y border-r border-l-[3px] border-l-secondary border-y-border border-r-border rounded-r-lg shadow-none';
+      variantClasses = 'bg-surface border-l-[3px] border-l-secondary rounded-card shadow-apple-subtle';
       break;
     case 'minimal':
       // Juste un séparateur en bas, pas de boîte
@@ -26,15 +24,15 @@ export function Card({ children, className = '', variant = 'default', onClick }:
       break;
     case 'default':
     default:
-      // Carte standard allégée en ombres
-      variantClasses = 'bg-surface border border-border rounded-xl shadow-none';
+      // Carte standard : on mise sur le contraste du fond, très peu de bordure
+      variantClasses = 'bg-surface rounded-card shadow-none border border-border/40';
       break;
   }
 
   return (
     <div 
       onClick={onClick}
-      className={`p-4 md:p-5 ${variantClasses} ${interactiveClasses} ${className}`}
+      className={`p-5 ${variantClasses} ${interactiveClasses} ${className}`}
     >
       {children}
     </div>
