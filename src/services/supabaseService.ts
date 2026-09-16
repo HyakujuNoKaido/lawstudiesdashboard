@@ -489,6 +489,7 @@ export async function batchMoveItems(chapterIds: string[], docIds: string[], tar
       .in('id', docIds);
     if (error) throw error;
   }
+
 export async function batchMoveFlashcards(cardIds: string[], targetCourseId: string) {
   if (!cardIds || cardIds.length === 0) return;
   const { error } = await supabase
@@ -506,7 +507,8 @@ export async function batchDeleteFlashcards(cardIds: string[]) {
     .in('id', cardIds);
   if (error) throw error;
 }
-  export async function archiveResource(table: 'courses' | 'documents' | 'flashcards', id: string, isArchived: boolean) {
+
+export async function archiveResource(table: 'courses' | 'documents' | 'flashcards', id: string, isArchived: boolean) {
   const { error } = await supabase
     .from(table)
     .update({ is_archived: isArchived, updated_at: new Date().toISOString() })
