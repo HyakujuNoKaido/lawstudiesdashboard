@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { ChevronLeft, Save, Plus, Trash2, BrainCircuit, ClipboardPaste, X, Sparkles, Loader2 } from 'lucide-react';
 import { fetchCourses, fetchCourseChapters, createFlashcardsBatch } from '../services/supabaseService';
 import { generateAIFlashcardsDetailed, FlashcardGenerationResult } from '../lib/aiService';
-import { toast } from '../lib/toast'; // Le toast utilise la signature: toast(message, type)
+import { toast } from '../lib/toast';
 
 interface FlashcardRow {
   id: string;
@@ -17,7 +17,7 @@ interface FlashcardRow {
 export function CreateFlashcardsBatch() {
   const navigate = useNavigate();
   const location = useLocation();
-  const state = location.state as { courseId?: string; chapterId?: string; extractedText?: string; sourceType?: 'pdf' | 'text' | 'note' } | null;
+  const state = location.state as { courseId?: string; chapterId?: string; extractedText?: string; sourceType?: 'pdf' | 'text' | 'note'; pageCount?: number } | null;
 
   const [courses, setCourses] = useState<any[]>([]);
   const [chapters, setChapters] = useState<any[]>([]);
@@ -48,13 +48,18 @@ export function CreateFlashcardsBatch() {
           setChapters(chapterData);
           if (state?.chapterId) setChapterId(state.chapterId);
 
-          // Lancement IA sécurisé après hydratation du State
           if (state?.extractedText) {
+            const selectedCourse = data.find(c => c.id === initialCourse);
+            const selectedChapter = chapterData.find(c => c.id === state.chapterId);
+            
             await generateCardsFromText(
               state.extractedText,
               state.sourceType || 'pdf',
               initialCourse,
-              state.chapterId || ''
+              state.chapterId || '',
+              selectedCourse?.title,
+              selectedChapter?.title,
+              state.pageCount
             );
           }
         }
@@ -88,7 +93,10 @@ export function CreateFlashcardsBatch() {
     text: string,
     sourceType: 'pdf' | 'text' | 'note',
     selectedCourseId: string,
-    selectedChapterId: string
+    selectedChapterId: string,
+    courseTitle?: string,
+    chapterTitle?: string,
+    maxPages?: number
   ) => {
     if (!selectedCourseId) {
       toast("Veuillez sélectionner un cours avant de générer.", "warning");
@@ -100,17 +108,15 @@ export function CreateFlashcardsBatch() {
     toast("L'IA analyse le document et génère vos cartes...", "info");
     
     try {
-      const selectedCourse = courses.find(c => c.id === selectedCourseId);
-      const selectedChapter = chapters.find(c => c.id === selectedChapterId);
-
       const result = await generateAIFlashcardsDetailed(text, {
         courseId: selectedCourseId,
         chapterId: selectedChapterId || undefined,
-        courseTitle: selectedCourse?.title,
-        chapterTitle: selectedChapter?.title,
+        courseTitle,
+        chapterTitle,
         sourceType,
         count: 30,
-        difficulty: 'mixed'
+        difficulty: 'mixed',
+        maxPages
       });
 
       setGenerationReport(result);
@@ -170,7 +176,9 @@ export function CreateFlashcardsBatch() {
 
   const handleAIGenerationFromModal = () => {
     if (!bulkText.trim()) return;
-    generateCardsFromText(bulkText, 'text', courseId, chapterId);
+    const selectedCourse = courses.find(c => c.id === courseId);
+    const selectedChapter = chapters.find(c => c.id === chapterId);
+    generateCardsFromText(bulkText, 'text', courseId, chapterId, selectedCourse?.title, selectedChapter?.title);
     setShowBulkImport(false);
     setBulkText('');
   };
@@ -182,10 +190,10 @@ export function CreateFlashcardsBatch() {
     
     setSaving(true);
     try {
-      // Conservation du format attendu par le backend supabaseService
+      // payload utilisant le nom des colonnes historiques
       const payload = validCards.map(c => ({
-        course_id: courseId,
-        chapter_id: chapterId || undefined,
+        courseid: courseId,
+        chapterid: chapterId || undefined,
         front: c.front,
         back: c.back
       }));
@@ -251,7 +259,6 @@ export function CreateFlashcardsBatch() {
         </div>
       )}
 
-      {/* RAPPORT DE GÉNÉRATION UI */}
       {generationReport && !generating && (
         <div className="rounded-2xl border border-info/20 bg-info/5 p-5 shadow-sm">
           <div className="flex items-center justify-between gap-4">
@@ -294,7 +301,6 @@ export function CreateFlashcardsBatch() {
         </div>
       )}
 
-      {/* Éditeur de Cartes */}
       {!generating && (
         <div className="flex flex-col gap-4 mt-2">
           <div className="flex items-center justify-between px-1">
@@ -374,7 +380,7 @@ export function CreateFlashcardsBatch() {
             </p>
             <textarea
               autoFocus value={bulkText} onChange={(e) => setBulkText(e.target.value)}
-              placeholder="Collez votre texte de cours ou vos cartes formattées ici..."
+              placeholder="Collez votre texte de cours ou vos cartes formatées ici..."
               className="w-full h-64 bg-background border border-border rounded-input p-4 text-sm font-mono focus:border-accent resize-none whitespace-pre"
             />
             <div className="flex gap-2 mt-2">
