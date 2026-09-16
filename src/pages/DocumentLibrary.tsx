@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, FileText, Download, Trash2, Sparkles, Filter, ExternalLink, FolderOpen, BookOpen } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { SOLO_USER_ID } from '../lib/constants';
+import { getCurrentUserId } from '../services/supabaseService';
 import { toast } from '../lib/toast';
 
 export function DocumentLibrary() {
@@ -23,12 +23,14 @@ export function DocumentLibrary() {
   async function loadLibraryData() {
     setLoading(true);
     try {
+      const userId = await getCurrentUserId();
       const [docsRes, coursesRes] = await Promise.all([
-        supabase.from('documents').select('*, courses(title)').eq('user_id', SOLO_USER_ID).order('created_at', { ascending: false }),
-        supabase.from('courses').select('id, title').eq('user_id', SOLO_USER_ID)
+        supabase.from('documents').select('*, courses(title)').eq('user_id', userId).order('created_at', { ascending: false }),
+        supabase.from('courses').select('id, title').eq('user_id', userId)
       ]);
 
       if (docsRes.error) throw docsRes.error;
+
       setDocuments(docsRes.data || []);
       setCourses(coursesRes.data || []);
     } catch (err) {
@@ -42,7 +44,7 @@ export function DocumentLibrary() {
   const handleDelete = async (id: string, bucketPath: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!window.confirm("Voulez-vous vraiment supprimer ce document ?")) return;
-    
+
     try {
       if (bucketPath) {
         await supabase.storage.from('user-documents').remove([bucketPath]);
@@ -73,14 +75,12 @@ export function DocumentLibrary() {
 
   return (
     <div className="flex flex-col gap-6 pt-2 pb-24 animate-in fade-in duration-300 text-text max-w-5xl mx-auto w-full">
-      
       {/* HEADER DE LA BIBLIOTHÈQUE */}
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-6">
         <div>
           <h1 className="font-serif text-3xl md:text-4xl font-bold tracking-tight mb-1">Bibliothèque</h1>
           <p className="text-text-muted text-sm">Tous vos supports de cours, arrêts et cas pratiques centralisés.</p>
         </div>
-        
         <button 
           onClick={() => navigate('/add/document')}
           className="bg-accent text-background px-4 py-2.5 rounded-xl font-bold text-sm glow-gold hover:scale-[1.02] transition-transform cursor-pointer w-fit"
@@ -91,7 +91,6 @@ export function DocumentLibrary() {
 
       {/* BARRE DE RECHERCHE ET FILTRES RAPIDES */}
       <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
-        
         {/* Recherche */}
         <div className="relative w-full md:w-96">
           <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
@@ -116,7 +115,7 @@ export function DocumentLibrary() {
               <option key={c.id} value={c.id}>{c.title}</option>
             ))}
           </select>
-
+          
           {/* Onglets rapides */}
           <div className="flex bg-surface-elevated border border-border rounded-xl p-1 shrink-0">
             <button onClick={() => setActiveTab('all')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${activeTab === 'all' ? 'bg-accent text-background' : 'text-text-muted'}`}>Tous</button>
@@ -148,7 +147,6 @@ export function DocumentLibrary() {
                   <div className={`p-3 rounded-xl shrink-0 ${isPdf ? 'bg-danger/10 text-danger' : 'bg-info/10 text-info'}`}>
                     <FileText size={22} />
                   </div>
-                  
                   <div className="flex flex-col min-w-0">
                     <h3 className="font-bold text-base text-text truncate group-hover:text-accent transition-colors">
                       {doc.original_name}
@@ -172,7 +170,6 @@ export function DocumentLibrary() {
                   >
                     <Sparkles size={14} className="text-warning" /> Lire & Noter
                   </button>
-
                   <button 
                     onClick={(e) => handleDelete(doc.id, doc.bucket_path, e)}
                     className="p-2 text-text-muted hover:text-danger hover:bg-danger/10 border border-border rounded-xl transition-colors cursor-pointer"
@@ -186,7 +183,6 @@ export function DocumentLibrary() {
           })}
         </div>
       )}
-
     </div>
   );
 }
