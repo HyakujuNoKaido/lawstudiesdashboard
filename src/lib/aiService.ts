@@ -1,7 +1,7 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Configuration du Worker PDF
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+pdfjsLib.GlobalWorkerOptions.workerSrc = '[https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js](https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js)';
 
 export interface ExtractedPdfPage {
   page: number;
@@ -28,6 +28,7 @@ export interface FlashcardGenerationOptions {
   chapterId?: string;
   count?: number;
   difficulty?: 'mixed' | 'basic' | 'intermediate' | 'advanced';
+  sourceType?: 'pdf' | 'text' | 'note';
 }
 
 export interface CaseLawAnalysis {
@@ -117,7 +118,7 @@ ${input.text}
 }
 
 /**
- * Appel sécurisé via le proxy Cloudflare avec tolérance sur le format de réponse
+ * Appel sécurisé unifié via le proxy Cloudflare
  */
 async function callLawstudiesAI(
   action: string,
@@ -153,9 +154,25 @@ async function callLawstudiesAI(
 }
 
 /**
- * Normalisation et validation tolérante des flashcards pour éviter de perdre toute une génération
+ * Normalisation robuste des tableaux de chaînes (runtime safety)
  */
-function normalizeFlashcard(value: unknown): GeneratedFlashcard | null {
+function normalizeStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item): item is string => typeof item === 'string')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  if (typeof value === 'string' && value.trim()) {
+    return [value.trim()];
+  }
+  return [];
+}
+
+/**
+ * Normalisation et validation tolérante d'une flashcard (avec gestion stricte des pages si PDF)
+ */
+function normalizeFlashcard(value: unknown, sourceType?: string): GeneratedFlashcard | null {
   if (!value || typeof value !== 'object') return null;
   const card = value as Record<string, unknown>;
   
@@ -167,20 +184,43 @@ function normalizeFlashcard(value: unknown): GeneratedFlashcard | null {
   const validCategories = ['definition', 'distinction', 'condition', 'exception', 'liste', 'application', 'reference'];
   const validDifficulties = ['basic', 'intermediate', 'advanced'];
 
+  const sourcePages = Array.isArray(card.sourcePages) 
+    ? card.sourcePages.filter((p): p is number => Number.isInteger(p) && p > 0) 
+    : [];
+
+  // Exigence de traçabilité stricte pour les sources de type PDF
+  if (sourceType === 'pdf' && sourcePages.length === 0) {
+    return null; 
+  }
+
   return {
     question: card.question.trim(),
     answer: card.answer.trim(),
     category: validCategories.includes(card.category as string) ? (card.category as any) : 'definition',
     difficulty: validDifficulties.includes(card.difficulty as string) ? (card.difficulty as any) : 'intermediate',
-    sourcePages: Array.isArray(card.sourcePages) 
-      ? card.sourcePages.filter((p): p is number => Number.isInteger(p) && p > 0) 
-      : [],
+    sourcePages,
     sourceQuote: typeof card.sourceQuote === 'string' ? card.sourceQuote : undefined,
   };
 }
 
 /**
- * Synthèse fidèle et structurée intégrant les métadonnées
+ * Dédoublonnage textuel des flashcards
+ */
+function deduplicateFlashcards(cards: GeneratedFlashcard[]): GeneratedFlashcard[] {
+  const seen = new Set<string>();
+  return cards.filter((card) => {
+    const key = `${card.question}::${card.answer}`
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
+ * Synthèse fidèle et structurée
  */
 export async function generateAISummary(
   text: string,
@@ -212,7 +252,7 @@ ${sourceContext}`;
 }
 
 /**
- * Génération de flashcards avec préservation de la signature d'origine (courseId, chapterId) et des options
+ * Génération de flashcards avec préservation de la signature d'origine (courseId, chapterId)
  */
 export async function generateAIFlashcards(
   text: string,
@@ -228,6 +268,8 @@ export async function generateAIFlashcards(
 
   const prompt = `Génère des flashcards universitaires à partir de la SOURCE.
 PARAMÈTRES :
+- Cours associé : ${options.courseId ?? 'Non précisé'}
+- Chapitre associé : ${options.chapterId ?? 'Non précisé'}
 - Nombre cible : ${options.count ?? 'adaptatif'}
 - Difficulté : ${options.difficulty ?? 'mixed'}
 
@@ -257,13 +299,15 @@ ${sourceContext}`;
     ? rawResult 
     : ((rawResult as any)?.flashcards || (rawResult as any)?.cards || []);
 
-  const normalizedCards = arrayResult.map(normalizeFlashcard).filter((c): c is GeneratedFlashcard => c !== null);
+  const normalizedCards = arrayResult
+    .map((card) => normalizeFlashcard(card, options.sourceType))
+    .filter((c): c is GeneratedFlashcard => c !== null);
   
-  return normalizedCards;
+  return deduplicateFlashcards(normalizedCards);
 }
 
 /**
- * Fiche d'arrêt universelle avec adaptateur complet pour CaseLawEditor.tsx
+ * Fiche d'arrêt universelle avec validation runtime (CaseLawAnalysis sécurisée)
  */
 export async function generateCaseLaw(text: string): Promise<any> {
   const sourceContext = buildSourceContext({ text, sourceType: 'arrêt ou décision judiciaire' });
@@ -294,38 +338,62 @@ Retourne uniquement un objet JSON valide :
 
 ${sourceContext}`;
 
-  const analysis: CaseLawAnalysis = await callLawstudiesAI('generate_case_law', { prompt, isJsonResponse: true });
+  const rawAnalysis = await callLawstudiesAI('generate_case_law', { prompt, isJsonResponse: true });
 
   const fallback = "Non précisé dans le support";
-  const legalIssuesStr = Array.isArray(analysis.legal_issues) ? analysis.legal_issues.join('\n') : (analysis.legal_issues || fallback);
-  const citationVal = analysis.citation || fallback;
-  const reasoningVal = analysis.reasoning || fallback;
-  const significanceVal = analysis.significance || fallback;
+  
+  // Validation rigoureuse à l'exécution (runtime safety)
+  const analysis: CaseLawAnalysis = {
+    title: typeof rawAnalysis?.title === 'string' ? rawAnalysis.title : fallback,
+    court: typeof rawAnalysis?.court === 'string' ? rawAnalysis.court : fallback,
+    citation: typeof rawAnalysis?.citation === 'string' ? rawAnalysis.citation : fallback,
+    date: typeof rawAnalysis?.date === 'string' ? rawAnalysis.date : fallback,
+    jurisdiction: typeof rawAnalysis?.jurisdiction === 'string' ? rawAnalysis.jurisdiction : fallback,
+    source_basis: ['explicit', 'incomplete', 'not_found'].includes(rawAnalysis?.source_basis) ? rawAnalysis.source_basis : 'incomplete',
+    facts: typeof rawAnalysis?.facts === 'string' ? rawAnalysis.facts : fallback,
+    procedure: typeof rawAnalysis?.procedure === 'string' ? rawAnalysis.procedure : fallback,
+    claims_and_arguments: typeof rawAnalysis?.claims_and_arguments === 'string' ? rawAnalysis.claims_and_arguments : fallback,
+    legal_issues: normalizeStringArray(rawAnalysis?.legal_issues),
+    applicable_rules: normalizeStringArray(rawAnalysis?.applicable_rules),
+    reasoning: typeof rawAnalysis?.reasoning === 'string' ? rawAnalysis.reasoning : fallback,
+    holding: typeof rawAnalysis?.holding === 'string' ? rawAnalysis.holding : fallback,
+    disposition: typeof rawAnalysis?.disposition === 'string' ? rawAnalysis.disposition : fallback,
+    significance: typeof rawAnalysis?.significance === 'string' ? rawAnalysis.significance : fallback,
+    uncertainties: normalizeStringArray(rawAnalysis?.uncertainties),
+    source_pages: Array.isArray(rawAnalysis?.source_pages) 
+      ? rawAnalysis.source_pages.filter((p: unknown): p is number => Number.isInteger(p) && p > 0) 
+      : [],
+  };
 
-  // Adaptateur double pour couvrir à la fois les conventions snake_case et camelCase/anciennes propriétés de l'éditeur
+  const legalIssuesStr = analysis.legal_issues.length > 0 ? analysis.legal_issues.join('\n') : fallback;
+  const citationVal = analysis.citation;
+  const reasoningVal = analysis.reasoning;
+  const significanceVal = analysis.significance;
+
+  // Adaptateur double pour assurer une rétrocompatibilité complète avec les composants existants
   return {
-    title: analysis.title || fallback,
+    title: analysis.title,
     atf_citation: citationVal,
     atfcitation: citationVal,
     citation: citationVal,
-    court: analysis.court || fallback,
-    date: analysis.date || fallback,
-    jurisdiction: analysis.jurisdiction || fallback,
-    facts: analysis.facts || fallback,
-    procedure: analysis.procedure || fallback,
-    claims_and_arguments: analysis.claims_and_arguments || fallback,
+    court: analysis.court,
+    date: analysis.date,
+    jurisdiction: analysis.jurisdiction,
+    facts: analysis.facts,
+    procedure: analysis.procedure,
+    claims_and_arguments: analysis.claims_and_arguments,
     legal_issues: legalIssuesStr,
     legalissues: legalIssuesStr,
-    applicable_rules: analysis.applicable_rules || [],
+    applicable_rules: analysis.applicable_rules,
     consideranda: reasoningVal,
     reasoning: reasoningVal,
-    holding: analysis.holding || fallback,
-    disposition: analysis.disposition || fallback,
+    holding: analysis.holding,
+    disposition: analysis.disposition,
     pedagogical_takeaway: significanceVal,
     pedagogicaltakeaway: significanceVal,
     significance: significanceVal,
-    uncertainties: analysis.uncertainties || [],
-    source_pages: analysis.source_pages || [],
+    uncertainties: analysis.uncertainties,
+    source_pages: analysis.source_pages,
   };
 }
 
@@ -359,7 +427,7 @@ ${sourceContext}`;
 }
 
 /**
- * Examen blanc avec vérification stricte du texte source en mode fondé sur le cours
+ * Examen blanc avec vérification stricte du mode et rejet si source manquante en mode source_based
  */
 export async function generateMockExam(
   inputOrCourseTitle: string | { 
@@ -385,7 +453,7 @@ export async function generateMockExam(
   });
 
   const prompt = `Génère un examen blanc universitaire fondé sur le cours et la SOURCE fournie.
-- Cours : ${input.courseTitle}
+- Nom du cours : ${input.courseTitle}
 - Difficulté : ${input.difficulty ?? 'advanced'}
 - Durée : ${input.durationMinutes ?? 90} minutes
 
