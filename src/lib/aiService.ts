@@ -3,17 +3,6 @@ import * as pdfjsLib from 'pdfjs-dist';
 // URL stricte, sans aucun markdown
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-export interface ExtractedPdfPage {
-  page: number;
-  text: string;
-}
-
-export interface ExtractedPdfDocument {
-  text: string;
-  pages: ExtractedPdfPage[];
-  pageCount: number;
-}
-
 export interface GeneratedFlashcard {
   question: string;
   answer: string;
@@ -63,22 +52,21 @@ export interface CaseLawAnalysis {
   source_pages: number[];
 }
 
-export async function extractTextFromPDF(fileUrl: string, startPage = 1, endPage?: number): Promise<ExtractedPdfDocument> {
+export async function extractTextFromPDF(fileUrl: string, startPage = 1, endPage?: number): Promise<string> {
   try {
     const loadingTask = pdfjsLib.getDocument({ url: fileUrl, useWorkerFetch: true, isEvalSupported: true });
     const pdf = await loadingTask.promise;
     const firstPage = Math.max(1, startPage);
     const lastPage = Math.min(endPage ?? pdf.numPages, pdf.numPages);
     
-    const pages: ExtractedPdfPage[] = [];
+    let fullText = '';
     for (let pageNumber = firstPage; pageNumber <= lastPage; pageNumber++) {
       const page = await pdf.getPage(pageNumber);
       const content = await page.getTextContent();
       const pageText = content.items.map((item: any) => item.str).join(' ').replace(/\s+/g, ' ').trim();
-      pages.push({ page: pageNumber, text: pageText });
+      fullText += `[PAGE ${pageNumber}]\n${pageText}\n\n`;
     }
-
-    return { pageCount: pdf.numPages, pages, text: pages.map((p) => `[PAGE ${p.page}]\n${p.text}`).join('\n\n') };
+    return fullText.trim();
   } catch (error) {
     console.error('Erreur extraction PDF:', error);
     throw new Error('Impossible de lire le document PDF.');
@@ -143,7 +131,7 @@ function normalizeFlashcard(value: unknown, options: FlashcardGenerationOptions)
   const validCategories = ['definition', 'distinction', 'condition', 'exception', 'liste', 'application', 'reference'];
   const validDifficulties = ['basic', 'intermediate', 'advanced'];
 
-  const sourcePages = Array.isArray(card.sourcePages) ? card.sourcePages.filter((p): p is number => Number.isInteger(p) && p > 0) : [];
+  const sourcePages = Array.isArray(card.sourcePages) ? card.sourcePages.filter((p: any) => Number.isInteger(p) && p > 0) : [];
 
   if (options.sourceType === 'pdf') {
     if (sourcePages.length === 0) {
@@ -334,7 +322,7 @@ ${sourceContext}`;
     disposition: typeof rawAnalysis?.disposition === 'string' ? rawAnalysis.disposition : fallback,
     significance: typeof rawAnalysis?.significance === 'string' ? rawAnalysis.significance : fallback,
     uncertainties: normalizeStringArray(rawAnalysis?.uncertainties),
-    source_pages: Array.isArray(rawAnalysis?.source_pages) ? rawAnalysis.source_pages.filter((p: unknown): p is number => Number.isInteger(p) && p > 0) : [],
+    source_pages: Array.isArray(rawAnalysis?.source_pages) ? rawAnalysis.source_pages.filter((p: any) => Number.isInteger(p) && p > 0) : [],
   };
 
   const legalIssuesStr = analysis.legal_issues.length > 0 ? analysis.legal_issues.join('\n') : fallback;
