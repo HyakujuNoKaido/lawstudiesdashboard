@@ -28,9 +28,10 @@ const MODELS_TO_TRY = [
 ];
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*', // À restreindre à ton domaine de production si nécessaire
+  'Access-Control-Allow-Origin': '*', // À restreindre à votre domaine de production si souhaité
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
+  'Vary': 'Origin',
 };
 
 export async function onRequest(context: { request: Request; env: { GEMINI_API_KEY?: string } }) {
