@@ -1,6 +1,6 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
 import { AppLayout } from './components/layout/AppLayout';
 import { Dashboard } from './pages/Dashboard';
@@ -25,21 +25,6 @@ import { CreateFlashcardsBatch } from './pages/CreateFlashcardsBatch';
 import { Library } from './pages/Library';
 import { DocumentLibrary } from './pages/DocumentLibrary';
 
-// --- COMPOSANT DE PROTECTION DE ROUTE ---
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  
-  if (loading) {
-    return <div className="min-h-screen bg-background flex items-center justify-center text-text-muted font-mono animate-pulse">Authentification sécurisée...</div>;
-  }
-  
-  if (!user) {
-    return <Navigate to="/onboarding" replace />;
-  }
-  
-  return <>{children}</>;
-}
-
 export default function App() {
   return (
     <AuthProvider>
@@ -48,8 +33,8 @@ export default function App() {
           <Routes>
             <Route path="/onboarding" element={<Onboarding />} />
             
-            {/* ROUTES SÉCURISÉES DANS LE LAYOUT */}
-            <Route path="/" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+            {/* L'ACCÈS EST DE NOUVEAU TOTALEMENT LIBRE */}
+            <Route path="/" element={<AppLayout />}>
               <Route index element={<Dashboard />} />
               <Route path="courses" element={<Courses />} />
               <Route path="courses/:courseId" element={<CourseDetail />} />
@@ -72,10 +57,10 @@ export default function App() {
               <Route path="exams/simulator" element={<ExamSimulator />} />
             </Route>
             
-            {/* ROUTES SÉCURISÉES HORS LAYOUT (Plein écran) */}
-            <Route path="/session/:deckId" element={<ProtectedRoute><StudySession /></ProtectedRoute>} />
-            <Route path="/editor/:noteId" element={<ProtectedRoute><StudyNoteEditor /></ProtectedRoute>} />
-            <Route path="/viewer/:docId" element={<ProtectedRoute><DocumentViewer /></ProtectedRoute>} />
+            {/* ROUTES PLEIN ÉCRAN */}
+            <Route path="/session/:deckId" element={<StudySession />} />
+            <Route path="/editor/:noteId" element={<StudyNoteEditor />} />
+            <Route path="/viewer/:docId" element={<DocumentViewer />} />
           </Routes>
         </BrowserRouter>
       </AppProvider>
