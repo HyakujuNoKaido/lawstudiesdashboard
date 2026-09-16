@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarDays, Plus, Trash2, Edit3, ChevronLeft, ChevronRight, Clock, Download, Upload, BookOpen, Timer, Scale, FileText, BrainCircuit, ArrowRight, AlertCircle, LayoutList, Sparkles } from 'lucide-react';
-import { fetchEvents, createEvent, fetchCourses } from '../services/supabaseService';
+import { fetchEvents, createEvent, fetchCourses, fetchFlashcards } from '../services/supabaseService';
 import { supabase } from '../lib/supabase';
 import { toast } from '../lib/toast';
 
@@ -9,6 +9,7 @@ export function Schedule() {
   const navigate = useNavigate();
   const [events, setEvents] = useState<any[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
+  const [dueCardsCount, setDueCardsCount] = useState(0);
   const [loading, setLoading] = useState(true);
   
   const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
@@ -36,9 +37,12 @@ export function Schedule() {
 
   async function loadData() {
     try {
-      const [eventsData, coursesData] = await Promise.all([ fetchEvents(), fetchCourses() ]);
+      const [eventsData, coursesData, cardsData] = await Promise.all([ fetchEvents(), fetchCourses(), fetchFlashcards() ]);
       setEvents(eventsData);
       setCourses(coursesData);
+      const due = cardsData.filter((c: any) => !c.due_at || new Date(c.due_at) <= new Date()).length;
+      setDueCardsCount(due);
+
       if (coursesData.length > 0 && !form.course_id) {
         setForm(f => ({ ...f, course_id: coursesData[0].id }));
       }
@@ -215,6 +219,22 @@ export function Schedule() {
     });
   };
   
+  // Calculateur de charge quotidienne (Point 15)
+  const upcomingExams = events.filter(e => e.category === 'Examen' && new Date(e.event_date) > new Date());
+  const nextExam = upcomingExams.sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime())[0];
+  
+  let dailyTargetWorkload = null;
+  if (nextExam) {
+    const daysLeft = Math.max(1, Math.ceil((new Date(nextExam.event_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+    const totalPendingCards = dueCardsCount || 45; 
+    const cardsPerDay = Math.ceil(totalPendingCards / daysLeft);
+    dailyTargetWorkload = {
+      examTitle: nextExam.title,
+      daysLeft,
+      cardsPerDay
+    };
+  }
+
   const weekDays = getWeekDays(currentDate);
   const selectedDateStr = selectedDate.toISOString().split('T')[0];
   const selectedDayEvents = events.filter(e => e.event_date?.startsWith(selectedDateStr)).sort((a,b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime());
@@ -281,6 +301,25 @@ export function Schedule() {
         </div>
       </header>
 
+      {dailyTargetWorkload && (
+        <div className="bg-surface border border-accent/30 p-4 rounded-card flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center shrink-0">
+              <Sparkles size={20} />
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-accent">Objectif Journalier Recommandé</p>
+              <p className="text-sm font-medium text-text mt-0.5">
+                Pour l'examen <strong className="text-text">{dailyTargetWorkload.examTitle}</strong> dans {dailyTargetWorkload.daysLeft} jours : visez <strong className="text-accent">{dailyTargetWorkload.cardsPerDay} cartes/jour</strong>.
+              </p>
+            </div>
+          </div>
+          <button onClick={() => navigate('/study')} className="bg-accent text-background px-4 py-2 rounded-btn text-xs font-bold glow-gold cursor-pointer shrink-0">
+            Lancer la session
+          </button>
+        </div>
+      )}
+      
       {/* NAVIGATION TEMPORELLE */}
       <div className="flex justify-between items-center bg-surface border border-border rounded-card p-2 shadow-sm">
         <button onClick={handlePrev} className="p-2 text-text-muted hover:text-accent transition-colors cursor-pointer rounded-lg hover:bg-surface-interactive"><ChevronLeft size={20} /></button>
