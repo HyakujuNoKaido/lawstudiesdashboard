@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, X, BookOpen, FileText, Scale, BrainCircuit, Download, Edit3, Play, ArrowRight } from 'lucide-react';
-import { searchGlobal } from '../../services/supabaseService';
+import { searchGlobal, getCurrentUserId } from '../../services/supabaseService';
 import { supabase } from '../../lib/supabase';
-import { SOLO_USER_ID } from '../../lib/constants';
 import { toast } from '../../lib/toast';
 
 interface CommandMenuProps {
@@ -20,10 +19,9 @@ export function CommandMenu({ isOpen, onClose }: CommandMenuProps) {
     caseLaws: [],
     caseStudies: []
   });
-  
   const [loading, setLoading] = useState(false);
   const [contextLoading, setContextLoading] = useState(true);
-
+  
   // --- ÉTATS INTELLIGENTS (Contextuels) ---
   const [lastDoc, setLastDoc] = useState<any>(null);
   const [dueCardsCount, setDueCardsCount] = useState(0);
@@ -53,11 +51,13 @@ export function CommandMenu({ isOpen, onClose }: CommandMenuProps) {
   const loadSmartContext = async () => {
     setContextLoading(true);
     try {
+      const userId = await getCurrentUserId();
+      
       // 1. Récupérer le dernier document importé/modifié
       const { data: docData } = await supabase
         .from('documents')
         .select('id, original_name, bucket_path, document_type')
-        .eq('user_id', SOLO_USER_ID)
+        .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(1)
         .single();
@@ -68,9 +68,9 @@ export function CommandMenu({ isOpen, onClose }: CommandMenuProps) {
       const { count } = await supabase
         .from('flashcards')
         .select('id', { count: 'exact', head: true })
-        .eq('user_id', SOLO_USER_ID)
+        .eq('user_id', userId)
         .lte('due_at', new Date().toISOString());
-        
+      
       setDueCardsCount(count || 0);
     } catch (err) {
       console.error("Erreur contexte intelligent:", err);
@@ -85,6 +85,7 @@ export function CommandMenu({ isOpen, onClose }: CommandMenuProps) {
       setResults({ courses: [], notes: [], caseLaws: [], caseStudies: [] });
       return;
     }
+
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
@@ -96,6 +97,7 @@ export function CommandMenu({ isOpen, onClose }: CommandMenuProps) {
         setLoading(false);
       }
     }, 300);
+
     return () => clearTimeout(timer);
   }, [query]);
 
@@ -109,7 +111,7 @@ export function CommandMenu({ isOpen, onClose }: CommandMenuProps) {
       const { data, error } = await supabase.storage
         .from('user-documents')
         .createSignedUrl(lastDoc.bucket_path, 60);
-        
+      
       if (error) throw error;
       
       const link = document.createElement('a');
@@ -133,7 +135,6 @@ export function CommandMenu({ isOpen, onClose }: CommandMenuProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-background/80 backdrop-blur-sm pt-16 md:pt-24 px-4 animate-in fade-in duration-200">
       <div className="w-full max-w-xl bg-surface border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-top-4 duration-300 text-text">
-        
         {/* BARRE DE RECHERCHE */}
         <div className="flex items-center px-4 py-4 border-b border-border gap-3 bg-surface-elevated">
           <Search size={20} className="text-accent shrink-0" />
@@ -155,13 +156,11 @@ export function CommandMenu({ isOpen, onClose }: CommandMenuProps) {
 
         {/* CONTENU : SUGGESTIONS OU RÉSULTATS */}
         <div className="max-h-[60vh] overflow-y-auto p-2 md:p-3 flex flex-col gap-1">
-          
           {loading ? (
             <div className="text-center py-10 text-text-muted text-sm font-mono animate-pulse">Recherche dans Lexi...</div>
           ) : query.trim() && totalResults === 0 ? (
             <div className="text-center py-10 text-text-muted text-sm">Aucune ressource trouvée pour "{query}".</div>
           ) : !query.trim() ? (
-            
             /* SUGGESTIONS INTELLIGENTES & ACTIONS RAPIDES */
             <div className="flex flex-col gap-1">
               {!contextLoading && (
@@ -203,7 +202,7 @@ export function CommandMenu({ isOpen, onClose }: CommandMenuProps) {
                         </div>
                         <ArrowRight size={16} className="text-text-muted group-hover:text-accent transition-colors shrink-0 mr-2" />
                       </button>
-
+                      
                       <button onClick={handleDownloadLastDoc} className="flex items-center justify-between p-3 rounded-xl hover:bg-surface-elevated cursor-pointer transition-colors text-left group border border-transparent hover:border-info/30">
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="w-8 h-8 rounded-lg bg-info/10 flex items-center justify-center text-info shrink-0 group-hover:scale-110 transition-transform"><Download size={16} /></div>
@@ -218,9 +217,7 @@ export function CommandMenu({ isOpen, onClose }: CommandMenuProps) {
                 </>
               )}
             </div>
-
           ) : (
-            
             /* RÉSULTATS DE RECHERCHE */
             <>
               {results.courses.length > 0 && (
@@ -234,6 +231,7 @@ export function CommandMenu({ isOpen, onClose }: CommandMenuProps) {
                   ))}
                 </div>
               )}
+              
               {results.caseLaws.length > 0 && (
                 <div className="flex flex-col gap-1 mb-2">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted px-3 py-1">Jurisprudence (ATF)</span>
@@ -248,6 +246,7 @@ export function CommandMenu({ isOpen, onClose }: CommandMenuProps) {
                   ))}
                 </div>
               )}
+
               {results.caseStudies.length > 0 && (
                 <div className="flex flex-col gap-1 mb-2">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted px-3 py-1">Cas Pratiques</span>
@@ -259,6 +258,7 @@ export function CommandMenu({ isOpen, onClose }: CommandMenuProps) {
                   ))}
                 </div>
               )}
+
               {results.notes.length > 0 && (
                 <div className="flex flex-col gap-1 mb-2">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted px-3 py-1">Notes de cours</span>
@@ -273,7 +273,7 @@ export function CommandMenu({ isOpen, onClose }: CommandMenuProps) {
             </>
           )}
         </div>
-        
+
         {/* PIED DE PAGE */}
         <div className="bg-surface px-4 py-3 border-t border-border flex justify-between items-center text-[10px] text-text-muted uppercase tracking-wider font-semibold">
           <span>Recherche Globale & Commandes</span>
