@@ -1,18 +1,10 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Configuration rigoureuse et propre du Worker PDF (Corrigé sans syntaxe Markdown)
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+// Configuration rigoureuse et propre du Worker PDF sans markdown
+pdfjsLib.GlobalWorkerOptions.workerSrc = '[https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js](https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js)';
 
-export interface ExtractedPdfPage {
-  page: number;
-  text: string;
-}
-
-export interface ExtractedPdfDocument {
-  text: string;
-  pages: ExtractedPdfPage[];
-  pageCount: number;
-}
+export interface ExtractedPdfPage { page: number; text: string; }
+export interface ExtractedPdfDocument { text: string; pages: ExtractedPdfPage[]; pageCount: number; }
 
 export interface GeneratedFlashcard {
   question: string;
@@ -62,20 +54,9 @@ export interface CaseLawAnalysis {
   source_pages: number[];
 }
 
-/**
- * Extraction PDF structurée par pages avec traçabilité
- */
-export async function extractTextFromPDF(
-  fileUrl: string,
-  startPage = 1,
-  endPage?: number
-): Promise<ExtractedPdfDocument> {
+export async function extractTextFromPDF(fileUrl: string, startPage = 1, endPage?: number): Promise<ExtractedPdfDocument> {
   try {
-    const loadingTask = pdfjsLib.getDocument({
-      url: fileUrl,
-      useWorkerFetch: true,
-      isEvalSupported: true,
-    });
+    const loadingTask = pdfjsLib.getDocument({ url: fileUrl, useWorkerFetch: true, isEvalSupported: true });
     const pdf = await loadingTask.promise;
     const firstPage = Math.max(1, startPage);
     const lastPage = Math.min(endPage ?? pdf.numPages, pdf.numPages);
@@ -84,39 +65,18 @@ export async function extractTextFromPDF(
     for (let pageNumber = firstPage; pageNumber <= lastPage; pageNumber++) {
       const page = await pdf.getPage(pageNumber);
       const content = await page.getTextContent();
-      const pageText = content.items
-        .map((item: any) => item.str)
-        .join(' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-      
-      pages.push({
-        page: pageNumber,
-        text: pageText,
-      });
+      const pageText = content.items.map((item: any) => item.str).join(' ').replace(/\s+/g, ' ').trim();
+      pages.push({ page: pageNumber, text: pageText });
     }
 
-    return {
-      pageCount: pdf.numPages,
-      pages,
-      text: pages.map((p) => `[PAGE ${p.page}]\n${p.text}`).join('\n\n'),
-    };
+    return { pageCount: pdf.numPages, pages, text: pages.map((p) => `[PAGE ${p.page}]\n${p.text}`).join('\n\n') };
   } catch (error) {
     console.error('Erreur extraction PDF:', error);
     throw new Error('Impossible de lire le document PDF.');
   }
 }
 
-/**
- * Construit un contexte structuré pour isoler les métadonnées de la source
- */
-function buildSourceContext(input: {
-  text: string;
-  title?: string;
-  courseTitle?: string;
-  sourceType?: string;
-  jurisdiction?: string;
-}) {
+function buildSourceContext(input: { text: string; title?: string; courseTitle?: string; sourceType?: string; jurisdiction?: string; }) {
   return `[METADONNEES]
 Titre : ${input.title ?? 'Non précisé'}
 Cours : ${input.courseTitle ?? 'Non précisé'}
@@ -128,23 +88,12 @@ ${input.text}
 [FIN DE LA SOURCE]`;
 }
 
-/**
- * Appel sécurisé unifié via le proxy Cloudflare
- */
-async function callLawstudiesAI(
-  action: string,
-  payload: Record<string, unknown>
-): Promise<any> {
+async function callLawstudiesAI(action: string, payload: Record<string, unknown>): Promise<any> {
   try {
     const response = await fetch('/api/gemini-proxy', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action,
-        payload,
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, payload }),
     });
 
     const data = await response.json();
@@ -164,15 +113,9 @@ async function callLawstudiesAI(
   }
 }
 
-/**
- * Normalisation robuste des tableaux de chaînes (runtime safety)
- */
 function normalizeStringArray(value: unknown): string[] {
   if (Array.isArray(value)) {
-    return value
-      .filter((item): item is string => typeof item === 'string')
-      .map((item) => item.trim())
-      .filter(Boolean);
+    return value.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean);
   }
   if (typeof value === 'string' && value.trim()) {
     return [value.trim()];
@@ -180,28 +123,20 @@ function normalizeStringArray(value: unknown): string[] {
   return [];
 }
 
-/**
- * Normalisation tolérante d'une flashcard avec suivi des rejets
- */
 function normalizeFlashcard(value: unknown, sourceType?: string): { card: GeneratedFlashcard | null; reason?: string } {
-  if (!value || typeof value !== 'object') {
-    return { card: null, reason: 'Format objet invalide' };
-  }
+  if (!value || typeof value !== 'object') return { card: null, reason: 'Format objet invalide' };
   const card = value as Record<string, unknown>;
   
-  if (typeof card.question !== 'string' || !card.question.trim() ||
-      typeof card.answer !== 'string' || !card.answer.trim()) {
+  if (typeof card.question !== 'string' || !card.question.trim() || typeof card.answer !== 'string' || !card.answer.trim()) {
     return { card: null, reason: 'Question ou réponse vide' };
   }
 
   const validCategories = ['definition', 'distinction', 'condition', 'exception', 'liste', 'application', 'reference'];
   const validDifficulties = ['basic', 'intermediate', 'advanced'];
 
-  const sourcePages = Array.isArray(card.sourcePages) 
-    ? card.sourcePages.filter((p): p is number => Number.isInteger(p) && p > 0) 
-    : [];
+  const sourcePages = Array.isArray(card.sourcePages) ? card.sourcePages.filter((p): p is number => Number.isInteger(p) && p > 0) : [];
 
-  if (sourceType === 'pdf' && sourcePages.length === 0) {
+  if (sourceType === 'support PDF' && sourcePages.length === 0) {
     return { card: null, reason: 'Pages sources absentes pour un document PDF' };
   }
 
@@ -217,17 +152,11 @@ function normalizeFlashcard(value: unknown, sourceType?: string): { card: Genera
   };
 }
 
-/**
- * Dédoublonnage textuel des flashcards
- */
 function deduplicateFlashcards(cards: GeneratedFlashcard[]): { uniqueCards: GeneratedFlashcard[]; duplicateCount: number } {
   const seen = new Set<string>();
   let duplicateCount = 0;
   const uniqueCards = cards.filter((card) => {
-    const key = `${card.question}::${card.answer}`
-      .toLowerCase()
-      .replace(/\s+/g, ' ')
-      .trim();
+    const key = `${card.question}::${card.answer}`.toLowerCase().replace(/\s+/g, ' ').trim();
     if (seen.has(key)) {
       duplicateCount++;
       return false;
@@ -238,9 +167,6 @@ function deduplicateFlashcards(cards: GeneratedFlashcard[]): { uniqueCards: Gene
   return { uniqueCards, duplicateCount };
 }
 
-/**
- * Synthèse fidèle et structurée
- */
 export async function generateAISummary(
   text: string,
   options: { title?: string; courseTitle?: string; jurisdiction?: string; mode?: 'faithful' | 'exam' } = {}
@@ -254,41 +180,37 @@ export async function generateAISummary(
   });
 
   const prompt = `Analyse le support ci-dessous et rédige une synthèse structurée.
-
 MODE : ${options.mode === 'exam' ? 'Révision d’examen : hiérarchise les notions examinables et les distinctions.' : 'Fidélité maximale : restitue le support sans ajout externe.'}
-
 EXIGENCES :
 1. Couvre toutes les parties substantielles de la SOURCE.
 2. Conserve les définitions, structures, listes et références présentes.
 3. Si une information importante manque, indique explicitement : "Non précisé dans le support."
 4. N’ajoute aucune référence légale extérieure au texte.
 5. Termine par une section "Points à retenir pour l’examen" strictement fondée sur le support.
-
 ${sourceContext}`;
 
   const res = await callLawstudiesAI('generate_summary', { prompt, isJsonResponse: false });
   return typeof res === 'string' ? res : JSON.stringify(res);
 }
 
-/**
- * Génération avancée de flashcards avec rapport détaillé (générées, valides, doublons, rejetées)
- */
 export async function generateAIFlashcardsDetailed(
   text: string,
   optionsOrCourseId?: string | FlashcardGenerationOptions,
   chapterId?: string
 ): Promise<FlashcardGenerationResult> {
-  const options: FlashcardGenerationOptions =
-    typeof optionsOrCourseId === 'string'
-      ? { courseId: optionsOrCourseId, chapterId }
-      : optionsOrCourseId ?? {};
+  const options: FlashcardGenerationOptions = typeof optionsOrCourseId === 'string' ? { courseId: optionsOrCourseId, chapterId } : optionsOrCourseId ?? {};
 
-  const sourceContext = buildSourceContext({ text, sourceType: 'support de cours' });
+  const mappedSourceType = options.sourceType === 'pdf' ? 'support PDF' : options.sourceType === 'note' ? 'note de cours' : 'texte fourni par l’utilisateur';
+
+  const sourceContext = buildSourceContext({ 
+    text, 
+    courseTitle: options.courseTitle,
+    title: options.chapterTitle,
+    sourceType: mappedSourceType 
+  });
 
   const prompt = `Génère des flashcards universitaires à partir de la SOURCE.
 PARAMÈTRES :
-- Cours associé (Contexte) : ${options.courseTitle ?? options.courseId ?? 'Non précisé'}
-- Chapitre associé (Contexte) : ${options.chapterTitle ?? options.chapterId ?? 'Non précisé'}
 - Nombre cible : ${options.count ?? 'adaptatif'}
 - Difficulté : ${options.difficulty ?? 'mixed'}
 
@@ -309,14 +231,11 @@ Retourne uniquement un tableau JSON valide au format strict :
     "sourceQuote": "..."
   }
 ]
-
 ${sourceContext}`;
 
   const rawResult = await callLawstudiesAI('generate_flashcards', { prompt, isJsonResponse: true });
   
-  const arrayResult = Array.isArray(rawResult) 
-    ? rawResult 
-    : ((rawResult as any)?.flashcards || (rawResult as any)?.cards || []);
+  const arrayResult = Array.isArray(rawResult) ? rawResult : ((rawResult as any)?.flashcards || (rawResult as any)?.cards || []);
 
   const generatedCount = arrayResult.length;
   let rejectedCount = 0;
@@ -324,7 +243,7 @@ ${sourceContext}`;
   const parsedCards: GeneratedFlashcard[] = [];
 
   for (const item of arrayResult) {
-    const { card, reason } = normalizeFlashcard(item, options.sourceType);
+    const { card, reason } = normalizeFlashcard(item, mappedSourceType);
     if (card) {
       parsedCards.push(card);
     } else {
@@ -334,26 +253,12 @@ ${sourceContext}`;
   }
 
   const { uniqueCards, duplicateCount } = deduplicateFlashcards(parsedCards);
-  if (duplicateCount > 0) {
-    warnings.push(`${duplicateCount} doublon(s) textuel(s) retiré(s).`);
-  }
-  if (rejectedCount > 0) {
-    warnings.push(`${rejectedCount} carte(s) ignorée(s) pour format incomplet.`);
-  }
+  if (duplicateCount > 0) warnings.push(`${duplicateCount} doublon(s) textuel(s) retiré(s).`);
+  if (rejectedCount > 0) warnings.push(`${rejectedCount} carte(s) ignorée(s) pour format incomplet.`);
 
-  return {
-    cards: uniqueCards,
-    generatedCount,
-    validCount: uniqueCards.length,
-    duplicateCount,
-    rejectedCount,
-    warnings,
-  };
+  return { cards: uniqueCards, generatedCount, validCount: uniqueCards.length, duplicateCount, rejectedCount, warnings };
 }
 
-/**
- * Signature historique conservée pour la rétrocompatibilité (renvoie uniquement le tableau de cartes)
- */
 export async function generateAIFlashcards(
   text: string,
   optionsOrCourseId?: string | FlashcardGenerationOptions,
@@ -363,16 +268,11 @@ export async function generateAIFlashcards(
   return result.cards;
 }
 
-/**
- * Fiche d'arrêt universelle avec validation runtime (CaseLawAnalysis sécurisée)
- */
 export async function generateCaseLaw(text: string): Promise<any> {
   const sourceContext = buildSourceContext({ text, sourceType: 'arrêt ou décision judiciaire' });
   
   const prompt = `Réalise une fiche d’arrêt à partir de la SOURCE uniquement. 
-Si une information (juridiction, citation, faits) est absente, écris "Non précisé dans le support".
-
-Retourne uniquement un objet JSON valide :
+Retourne uniquement un objet JSON valide avec exactement ces clés :
 {
   "title": "",
   "court": "",
@@ -380,7 +280,6 @@ Retourne uniquement un objet JSON valide :
   "date": "",
   "jurisdiction": "",
   "source_basis": "explicit",
-  "incomplete",
   "facts": "",
   "procedure": "",
   "claims_and_arguments": "",
@@ -394,6 +293,12 @@ Retourne uniquement un objet JSON valide :
   "source_pages": []
 }
 
+source_basis doit être exactement :
+- "explicit" si les informations principales sont présentes ;
+- "incomplete" si l’analyse est partielle ;
+- "not_found" si la décision ne peut pas être identifiée.
+
+N'ajoute aucune clé supplémentaire.
 ${sourceContext}`;
 
   const rawAnalysis = await callLawstudiesAI('generate_case_law', { prompt, isJsonResponse: true });
@@ -417,9 +322,7 @@ ${sourceContext}`;
     disposition: typeof rawAnalysis?.disposition === 'string' ? rawAnalysis.disposition : fallback,
     significance: typeof rawAnalysis?.significance === 'string' ? rawAnalysis.significance : fallback,
     uncertainties: normalizeStringArray(rawAnalysis?.uncertainties),
-    source_pages: Array.isArray(rawAnalysis?.source_pages) 
-      ? rawAnalysis.source_pages.filter((p: unknown): p is number => Number.isInteger(p) && p > 0) 
-      : [],
+    source_pages: Array.isArray(rawAnalysis?.source_pages) ? rawAnalysis.source_pages.filter((p: unknown): p is number => Number.isInteger(p) && p > 0) : [],
   };
 
   const legalIssuesStr = analysis.legal_issues.length > 0 ? analysis.legal_issues.join('\n') : fallback;
@@ -453,14 +356,10 @@ ${sourceContext}`;
   };
 }
 
-/**
- * Subsomption juridique rigoureuse
- */
 export async function generateSubsumption(text: string): Promise<any> {
   const sourceContext = buildSourceContext({ text, sourceType: 'cas pratique' });
   
   const prompt = `Résous le cas pratique par une méthode de subsomption en utilisant exclusivement les règles présentes dans la SOURCE.
-
 Retourne uniquement un objet JSON valide :
 {
   "legal_issues": [
@@ -476,36 +375,23 @@ Retourne uniquement un objet JSON valide :
   ],
   "overall_conclusion": ""
 }
-
 ${sourceContext}`;
 
   return callLawstudiesAI('generate_subsumption', { prompt, isJsonResponse: true });
 }
 
-/**
- * Examen blanc avec distinction stricte entre mode fondé sur le support et mode général
- */
 export async function generateMockExam(
-  inputOrCourseTitle: string | { 
-    courseTitle: string; 
-    sourceText?: string; 
-    difficulty?: 'intermediate' | 'advanced'; 
-    durationMinutes?: number;
-    mode?: 'source_based' | 'general';
-  }
+  inputOrCourseTitle: string | { courseTitle: string; sourceText?: string; difficulty?: 'intermediate' | 'advanced'; durationMinutes?: number; mode?: 'source_based' | 'general'; }
 ): Promise<any> {
-  const input = typeof inputOrCourseTitle === 'string' 
-    ? { courseTitle: inputOrCourseTitle, sourceText: '', mode: 'general' as const } 
-    : { mode: 'source_based' as const, ...inputOrCourseTitle };
+  const input = typeof inputOrCourseTitle === 'string' ? { courseTitle: inputOrCourseTitle, sourceText: '', mode: 'general' as const } : { mode: 'source_based' as const, ...inputOrCourseTitle };
 
   if (input.mode === 'source_based' && !input.sourceText?.trim()) {
     throw new Error('Un support est nécessaire pour générer un examen basé sur le cours.');
   }
 
-  const examBasis =
-    input.mode === 'source_based'
-      ? 'L’examen doit être strictement fondé sur la SOURCE fournie.'
-      : 'L’examen est général et fondé uniquement sur le nom du cours. Indique clairement qu’il ne provient pas d’un support importé.';
+  const examBasis = input.mode === 'source_based' 
+    ? 'L’examen doit être strictement fondé sur la SOURCE fournie.' 
+    : 'L’examen est général et fondé uniquement sur le nom du cours. Indique clairement qu’il ne provient pas d’un support importé.';
 
   const sourceContext = buildSourceContext({
     text: input.sourceText ?? '',
@@ -536,7 +422,6 @@ Retourne uniquement un objet JSON valide :
   "solution_guidelines": "",
   "uncertainties": []
 }
-
 ${sourceContext}`;
 
   return callLawstudiesAI('generate_mock_exam', { prompt, isJsonResponse: true });
