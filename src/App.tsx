@@ -23,6 +23,7 @@ import { CaseStudyEditor } from './pages/CaseStudyEditor';
 import { ExamSimulator } from './pages/ExamSimulator';
 import { CreateFlashcardsBatch } from './pages/CreateFlashcardsBatch';
 import { Library } from './pages/Library';
+import { Archives } from './pages/Archives';
 import { DocumentLibrary } from './pages/DocumentLibrary';
 
 export default function App() {
