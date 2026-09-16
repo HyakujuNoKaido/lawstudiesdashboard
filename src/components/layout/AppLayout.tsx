@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation, NavLink } from 'react-router-dom';
-import { Sun, Book, CalendarDays, BrainCircuit, Plus, X, Search, WifiOff, Settings, HelpCircle, LogOut, GraduationCap, FileEdit, Folder, Brain } from 'lucide-react';
+import { Sun, Book, CalendarDays, BrainCircuit, Plus, X, Search, WifiOff, Settings, HelpCircle, LogOut, GraduationCap, FileEdit, Folder, Brain, User } from 'lucide-react';
 import { CommandMenu } from '../ui/CommandMenu';
 import { ToastEventDetail } from '../../lib/toast';
 import { useApp } from '../../context/AppContext';
@@ -225,7 +225,7 @@ export function AppLayout() {
         </>
       )}
 
-      {/* BOTTOM NAV MOBILE (Nouvel Ordre) */}
+      {/* BOTTOM NAV MOBILE */}
       {!isViewer && (
         <nav aria-label="Navigation principale" className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-surface-elevated/90 backdrop-blur-xl border-t border-border px-2 py-2 pb-safe">
           <div className="max-w-md mx-auto flex items-center justify-between relative px-2">
