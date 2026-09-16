@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Scale, ChevronRight, ChevronLeft, CheckCircle2, User, GraduationCap, Calendar } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { SOLO_USER_ID } from '../lib/constants';
+import { getCurrentUserId } from '../services/supabaseService';
 
 export function Onboarding() {
   const navigate = useNavigate();
@@ -31,11 +31,12 @@ export function Onboarding() {
   const handleFinish = async () => {
     setLoading(true);
     try {
+      const userId = await getCurrentUserId();
       // Enregistrement des colonnes de base garanties dans la table profiles de Supabase
       const { error } = await supabase
         .from('profiles')
         .upsert({
-          id: SOLO_USER_ID,
+          id: userId,
           full_name: form.fullName,
           university: form.university,
           updated_at: new Date().toISOString()
@@ -49,7 +50,7 @@ export function Onboarding() {
         passingGrade: form.passingGrade,
         targetECTS: form.targetECTS
       }));
-
+      
       navigate('/');
     } catch (err) {
       console.error("Erreur enregistrement onboarding:", err);
@@ -93,6 +94,7 @@ export function Onboarding() {
               <User size={18} />
               <h2 className="text-xs font-bold uppercase tracking-wider font-mono">1. Identité</h2>
             </div>
+            
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-text-muted">Nom complet *</label>
               <input 
@@ -105,6 +107,7 @@ export function Onboarding() {
                 className="w-full bg-background border border-border rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-secondary transition-colors"
               />
             </div>
+
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-text-muted">Université / Faculté</label>
               <select 
@@ -130,6 +133,7 @@ export function Onboarding() {
               <GraduationCap size={18} />
               <h2 className="text-xs font-bold uppercase tracking-wider font-mono">2. Cursus</h2>
             </div>
+            
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-text-muted">Semestre actuel</label>
               <select 
@@ -146,6 +150,7 @@ export function Onboarding() {
                 <option value="Master en droit (ML)">Master en droit (ML)</option>
               </select>
             </div>
+
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-text-muted">Objectif ECTS (généralement 180 pour un BA)</label>
               <input 
@@ -165,6 +170,7 @@ export function Onboarding() {
               <Calendar size={18} />
               <h2 className="text-xs font-bold uppercase tracking-wider font-mono">3. Barème Suisse</h2>
             </div>
+            
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-text-muted">Seuil de réussite académique</label>
               <select 
@@ -194,6 +200,7 @@ export function Onboarding() {
               <span>Retour</span>
             </button>
           )}
+          
           {step < 3 ? (
             <button 
               type="button"
@@ -215,7 +222,6 @@ export function Onboarding() {
             </button>
           )}
         </div>
-
       </div>
     </div>
   );
