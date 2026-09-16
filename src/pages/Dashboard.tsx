@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Play, Calendar, FileText, BrainCircuit, FileEdit, Clock, Plus, BookOpen } from 'lucide-react';
+import { Play, Calendar, FileText, BrainCircuit, FileEdit, Clock, Plus, BookOpen, Activity } from 'lucide-react';
 import { Card } from '../components/ui/Card';
+import { ActivityTimeline } from '../components/ui/ActivityTimeline';
 import { fetchCourses, fetchEvents, fetchFlashcards, getCurrentUserId } from '../services/supabaseService';
 import { supabase } from '../lib/supabase';
 
@@ -16,7 +17,6 @@ export function Dashboard() {
   const [recentAccess, setRecentAccess] = useState<any[]>([]);
   
   const [weeklyStats, setWeeklyStats] = useState({
-    studyTime: '2h 15m', // Valeur mockée en attendant un timer global
     cardsMastered: 0,
     progress: 0
   });
@@ -39,12 +39,10 @@ export function Dashboard() {
           setProfileName(profileRes.data.full_name.split(' ')[0]);
         }
 
-        // --- À FAIRE AUJOURD'HUI ---
         setEvents(eventsData);
         const dueCards = cardsData.filter(c => !c.due_at || new Date(c.due_at) <= new Date());
         setDueCardsCount(dueCards.length);
 
-        // --- VOTRE SEMAINE ---
         const oneWeekAgo = new Date();
         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
         const mastered = cardsData.filter(c => c.ease_factor >= 2.5 && new Date(c.last_reviewed_at) > oneWeekAgo).length;
@@ -53,7 +51,6 @@ export function Dashboard() {
         
         setWeeklyStats(prev => ({ ...prev, cardsMastered: mastered, progress }));
 
-        // --- ACCÈS RÉCENTS (Fusion des docs, notes et cours) ---
         const combinedRecent = [
           ...(coursesData.slice(0, 1).map(c => ({ id: c.id, title: c.title, type: 'course', date: c.updated_at }))),
           ...(docsRes.data || []).map(d => ({ id: d.id, title: d.original_name, type: 'doc', date: d.created_at })),
@@ -124,69 +121,72 @@ export function Dashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        {/* COLONNE GAUCHE : À FAIRE AUJOURD'HUI */}
-        <div className="flex flex-col gap-4">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted ml-1">À faire aujourd'hui</h2>
+        {/* COLONNE GAUCHE : À FAIRE AUJOURD'HUI & HISTORIQUE */}
+        <div className="flex flex-col gap-8">
           
-          <div className="flex flex-col gap-3">
-            {!hasTasks ? (
-              <Card className="flex flex-col items-center justify-center py-10 gap-3 text-center border-dashed bg-transparent">
-                <div className="w-12 h-12 rounded-full bg-surface-elevated flex items-center justify-center mb-2">
-                  <Calendar size={20} className="text-text-muted opacity-50" />
-                </div>
-                <p className="text-sm font-medium text-text">Votre journée est libre.</p>
-                <p className="text-xs text-text-muted">Ajoutez un cours ou planifiez une session d'étude.</p>
-                <button onClick={() => navigate('/schedule')} className="mt-2 text-xs font-bold text-accent hover:underline cursor-pointer">Ouvrir le planning</button>
-              </Card>
-            ) : (
-              <>
-                {dueCardsCount > 0 && (
-                  <Card className="flex items-center gap-4 p-4 border-l-4 border-l-warning">
-                    <div className="p-2 bg-warning/10 text-warning rounded-lg"><BrainCircuit size={18} /></div>
-                    <div className="flex flex-col">
-                      <span className="font-bold text-sm text-text">Session de mémorisation</span>
-                      <span className="text-xs text-text-muted">{dueCardsCount} cartes en attente</span>
-                    </div>
-                  </Card>
-                )}
-                
-                {todaysEvents.map(evt => (
-                  <Card key={evt.id} className="flex items-center gap-4 p-4 border-l-4 border-l-info">
-                    <div className="p-2 bg-info/10 text-info rounded-lg"><Clock size={18} /></div>
-                    <div className="flex flex-col">
-                      <span className="font-bold text-sm text-text">{evt.title}</span>
-                      <span className="text-xs text-text-muted font-mono">{new Date(evt.event_date).toLocaleTimeString('fr-CH', { hour: '2-digit', minute: '2-digit' })}</span>
-                    </div>
-                  </Card>
-                ))}
-              </>
-            )}
+          <div className="flex flex-col gap-4">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted ml-1">À faire aujourd'hui</h2>
+            <div className="flex flex-col gap-3">
+              {!hasTasks ? (
+                <Card className="flex flex-col items-center justify-center py-10 gap-3 text-center border-dashed bg-transparent">
+                  <div className="w-12 h-12 rounded-full bg-surface-elevated flex items-center justify-center mb-2">
+                    <Calendar size={20} className="text-text-muted opacity-50" />
+                  </div>
+                  <p className="text-sm font-medium text-text">Votre journée est libre.</p>
+                  <p className="text-xs text-text-muted">Ajoutez un cours ou planifiez une session d'étude.</p>
+                  <button onClick={() => navigate('/schedule')} className="mt-2 text-xs font-bold text-accent hover:underline cursor-pointer">Ouvrir le planning</button>
+                </Card>
+              ) : (
+                <>
+                  {dueCardsCount > 0 && (
+                    <Card className="flex items-center gap-4 p-4 border-l-4 border-l-warning">
+                      <div className="p-2 bg-warning/10 text-warning rounded-lg"><BrainCircuit size={18} /></div>
+                      <div className="flex flex-col">
+                        <span className="font-bold text-sm text-text">Session de mémorisation</span>
+                        <span className="text-xs text-text-muted">{dueCardsCount} cartes en attente</span>
+                      </div>
+                    </Card>
+                  )}
+                  {todaysEvents.map(evt => (
+                    <Card key={evt.id} className="flex items-center gap-4 p-4 border-l-4 border-l-info">
+                      <div className="p-2 bg-info/10 text-info rounded-lg"><Clock size={18} /></div>
+                      <div className="flex flex-col">
+                        <span className="font-bold text-sm text-text">{evt.title}</span>
+                        <span className="text-xs text-text-muted font-mono">{new Date(evt.event_date).toLocaleTimeString('fr-CH', { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                    </Card>
+                  ))}
+                </>
+              )}
+            </div>
           </div>
+
+          <div className="flex flex-col gap-4">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted ml-1 flex items-center gap-1.5"><Activity size={14}/> Journal d'activité</h2>
+            <Card className="bg-surface p-5">
+              <ActivityTimeline />
+            </Card>
+          </div>
+
         </div>
 
         {/* COLONNE DROITE : VOTRE SEMAINE & ACCÈS RÉCENTS */}
         <div className="flex flex-col gap-8">
           
-          {/* VOTRE SEMAINE */}
           <div className="flex flex-col gap-4">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted ml-1">Votre semaine</h2>
-            <div className="grid grid-cols-3 gap-3">
-              <Card className="p-4 flex flex-col items-center justify-center text-center gap-1 bg-surface-interactive/50">
-                <span className="text-[10px] text-text-muted font-bold uppercase">Temps d'étude</span>
-                <span className="font-serif text-xl font-bold text-text">{weeklyStats.studyTime}</span>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted ml-1">Statistiques (7 jours)</h2>
+            <div className="grid grid-cols-2 gap-3">
+              <Card className="p-4 flex flex-col justify-center gap-1 bg-surface-interactive/50 border-t-2 border-t-success rounded-t-none">
+                <span className="text-[10px] text-text-muted font-bold uppercase">Cartes maîtrisées</span>
+                <span className="font-serif text-3xl font-bold text-success">{weeklyStats.cardsMastered}</span>
               </Card>
-              <Card className="p-4 flex flex-col items-center justify-center text-center gap-1 bg-surface-interactive/50">
-                <span className="text-[10px] text-text-muted font-bold uppercase">Maîtrise</span>
-                <span className="font-serif text-xl font-bold text-success">{weeklyStats.cardsMastered}</span>
-              </Card>
-              <Card className="p-4 flex flex-col items-center justify-center text-center gap-1 bg-surface-interactive/50">
-                <span className="text-[10px] text-text-muted font-bold uppercase">Progression</span>
-                <span className="font-serif text-xl font-bold text-info">{weeklyStats.progress}%</span>
+              <Card className="p-4 flex flex-col justify-center gap-1 bg-surface-interactive/50 border-t-2 border-t-info rounded-t-none">
+                <span className="text-[10px] text-text-muted font-bold uppercase">Diplôme</span>
+                <span className="font-serif text-3xl font-bold text-info">{weeklyStats.progress}%</span>
               </Card>
             </div>
           </div>
 
-          {/* ACCÈS RÉCENTS */}
           <div className="flex flex-col gap-4">
             <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted ml-1">Accès récents</h2>
             <div className="flex flex-col bg-surface border border-border/50 rounded-card overflow-hidden">
