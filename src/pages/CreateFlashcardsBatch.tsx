@@ -34,12 +34,13 @@ export function CreateFlashcardsBatch() {
   
   const [generationReport, setGenerationReport] = useState<FlashcardGenerationResult | null>(null);
 
+  // ÉTATS POUR LA BARRE DE PROGRESSION IA
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState('');
 
   // GESTION DE LA BARRE DE PROGRESSION INTELLIGENTE
   useEffect(() => {
-    // CORRECTION ICI : Utilisation d'un type universel reconnu par le navigateur
+    // CORRECTION TYPE NAVIGATEUR : ReturnType<typeof setInterval>
     let interval: ReturnType<typeof setInterval>;
     
     if (generating) {
@@ -226,9 +227,10 @@ export function CreateFlashcardsBatch() {
     
     setSaving(true);
     try {
+      // CORRECTION DU PAYLOAD : course_id et chapter_id
       const payload = validCards.map(c => ({
-        courseid: courseId,
-        chapterid: chapterId || undefined,
+        course_id: courseId,
+        chapter_id: chapterId || undefined,
         front: c.front,
         back: c.back
       }));
@@ -242,45 +244,45 @@ export function CreateFlashcardsBatch() {
     }
   };
 
-  if (loading) return <div className="p-8 text-center text-gray-500">Chargement...</div>;
+  if (loading) return <div className="p-8 text-center text-text-muted">Chargement...</div>;
 
   return (
-    <div className="flex flex-col gap-6 pt-2 pb-24 max-w-4xl mx-auto w-full relative">
+    <div className="flex flex-col gap-6 pt-2 pb-24 animate-in fade-in duration-300 max-w-4xl mx-auto w-full text-text relative">
       <header className="flex flex-col gap-4">
-        <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-gray-500 hover:text-gray-900 transition-colors -ml-2 p-2 w-fit cursor-pointer">
+        <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-text-muted hover:text-text transition-colors -ml-2 p-2 w-fit cursor-pointer">
           <ChevronLeft size={20} />
           <span className="text-sm font-medium">Retour</span>
         </button>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center shadow-inner">
+            <div className="w-12 h-12 rounded-xl bg-info/10 border border-info/20 text-info flex items-center justify-center shadow-inner">
               <BrainCircuit size={24} />
             </div>
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Créateur de Set</h1>
-              <p className="text-gray-500 text-xs md:text-sm">Vérifiez et éditez vos cartes avant de les sauvegarder.</p>
+              <h1 className="font-serif text-2xl md:text-3xl font-bold">Créateur de Set</h1>
+              <p className="text-text-muted text-xs md:text-sm">Vérifiez et éditez vos cartes avant de les sauvegarder.</p>
             </div>
           </div>
           <button 
             onClick={() => setShowBulkImport(true)}
-            className="flex items-center gap-2 bg-white border border-gray-200 px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-gray-50 transition-colors cursor-pointer shadow-sm text-gray-800"
+            className="flex items-center gap-2 bg-surface border border-border px-4 py-2.5 rounded-btn text-xs font-bold hover:bg-surface-interactive transition-colors cursor-pointer text-text shadow-sm"
           >
-            <ClipboardPaste size={16} className="text-blue-600" />
+            <ClipboardPaste size={16} className="text-accent" />
             <span className="hidden sm:inline">Générer via texte</span>
           </button>
         </div>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white border border-gray-200 p-5 rounded-2xl shadow-sm">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-surface border border-border p-5 rounded-card shadow-sm">
         <div className="flex flex-col gap-1.5">
-          <label className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Set de destination (Cours) *</label>
-          <select value={courseId} onChange={handleCourseChange} className="w-full bg-gray-50 border border-gray-200 rounded-lg py-3 px-3 text-sm focus:outline-none focus:border-blue-500 appearance-none cursor-pointer">
+          <label className="text-[10px] uppercase font-bold text-text-muted tracking-wider">Set de destination (Cours) *</label>
+          <select value={courseId} onChange={handleCourseChange} className="w-full bg-surface-elevated border border-border/50 rounded-input py-3 px-3 text-sm focus:outline-none focus:border-accent appearance-none cursor-pointer">
             {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
           </select>
         </div>
         <div className="flex flex-col gap-1.5">
-          <label className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Tag optionnel (Chapitre)</label>
-          <select value={chapterId} onChange={(e) => setChapterId(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-lg py-3 px-3 text-sm focus:outline-none focus:border-blue-500 appearance-none cursor-pointer">
+          <label className="text-[10px] uppercase font-bold text-text-muted tracking-wider">Tag optionnel (Chapitre)</label>
+          <select value={chapterId} onChange={(e) => setChapterId(e.target.value)} className="w-full bg-surface-elevated border border-border/50 rounded-input py-3 px-3 text-sm focus:outline-none focus:border-accent appearance-none cursor-pointer">
             <option value="">Général (Aucun chapitre)</option>
             {chapters.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
           </select>
@@ -288,31 +290,31 @@ export function CreateFlashcardsBatch() {
       </div>
 
       {generating && (
-        <div className="flex flex-col items-center justify-center p-10 bg-blue-50/50 border border-blue-100 rounded-2xl gap-6 shadow-sm overflow-hidden relative">
-          <div className="absolute inset-0 bg-blue-400 blur-[80px] opacity-10 rounded-full"></div>
+        <div className="flex flex-col items-center justify-center p-10 bg-info/5 border border-info/20 rounded-card gap-6 shadow-sm overflow-hidden relative">
+          <div className="absolute inset-0 bg-info/20 blur-[80px] opacity-20 rounded-full"></div>
           
           <div className="relative">
-            <BrainCircuit size={48} className="text-blue-600 relative z-10 animate-pulse" />
-            <Sparkles size={20} className="text-yellow-500 absolute -top-2 -right-2 animate-spin-slow" />
+            <BrainCircuit size={48} className="text-info relative z-10 animate-pulse" />
+            <Sparkles size={20} className="text-warning absolute -top-2 -right-2 animate-spin-slow" />
           </div>
           
           <div className="w-full max-w-md flex flex-col gap-3 relative z-10">
             <div className="flex justify-between items-end">
-              <p className="text-sm font-semibold text-gray-700 transition-all duration-300">
+              <p className="text-sm font-semibold text-text transition-all duration-300">
                 {statusMessage}
               </p>
-              <span className="text-sm font-bold text-blue-600 font-mono">
+              <span className="text-sm font-bold text-info font-mono">
                 {Math.round(progress)}%
               </span>
             </div>
             
-            <div className="h-2.5 w-full bg-blue-100 rounded-full overflow-hidden shadow-inner">
+            <div className="h-2.5 w-full bg-surface-elevated rounded-full overflow-hidden shadow-inner">
               <div 
-                className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-300 ease-out"
+                className="h-full bg-accent transition-all duration-300 ease-out"
                 style={{ width: `${progress}%` }}
               ></div>
             </div>
-            <p className="text-[10px] text-gray-400 text-center mt-1 uppercase tracking-wide">
+            <p className="text-[10px] text-text-muted text-center mt-1 uppercase tracking-wide">
               Veuillez ne pas quitter cette page
             </p>
           </div>
@@ -320,38 +322,38 @@ export function CreateFlashcardsBatch() {
       )}
 
       {generationReport && !generating && (
-        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 shadow-sm">
+        <div className="rounded-card border border-info/20 bg-info/5 p-5 shadow-sm">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold text-gray-900">Génération terminée</p>
-              <p className="mt-1 text-xs text-gray-600">Les cartes sont prêtes à être vérifiées ci-dessous.</p>
+              <p className="text-sm font-semibold text-text">Génération terminée</p>
+              <p className="mt-1 text-xs text-text-muted">Les cartes sont prêtes à être vérifiées ci-dessous.</p>
             </div>
-            <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700 border border-green-200">
+            <span className="rounded-full bg-success/10 px-3 py-1 text-xs font-bold text-success border border-success/20">
               {generationReport.validCount} Valides
             </span>
           </div>
 
           <div className="mt-5 grid grid-cols-3 gap-3">
-            <div className="rounded-xl bg-white border border-gray-200 p-4 text-center shadow-sm">
-              <p className="text-xl font-bold text-gray-900">{generationReport.generatedCount}</p>
-              <p className="text-[10px] uppercase tracking-wide text-gray-500 mt-1">Générées</p>
+            <div className="rounded-card bg-surface border border-border/50 p-4 text-center shadow-sm">
+              <p className="text-xl font-bold text-text">{generationReport.generatedCount}</p>
+              <p className="text-[10px] uppercase tracking-wide text-text-muted mt-1">Générées</p>
             </div>
-            <div className="rounded-xl bg-white border border-gray-200 p-4 text-center shadow-sm">
-              <p className="text-xl font-bold text-yellow-600">{generationReport.duplicateCount}</p>
-              <p className="text-[10px] uppercase tracking-wide text-gray-500 mt-1">Doublons</p>
+            <div className="rounded-card bg-surface border border-border/50 p-4 text-center shadow-sm">
+              <p className="text-xl font-bold text-warning">{generationReport.duplicateCount}</p>
+              <p className="text-[10px] uppercase tracking-wide text-text-muted mt-1">Doublons</p>
             </div>
-            <div className="rounded-xl bg-white border border-gray-200 p-4 text-center shadow-sm">
-              <p className="text-xl font-bold text-red-600">{generationReport.rejectedCount}</p>
-              <p className="text-[10px] uppercase tracking-wide text-gray-500 mt-1">Ignorées</p>
+            <div className="rounded-card bg-surface border border-border/50 p-4 text-center shadow-sm">
+              <p className="text-xl font-bold text-danger">{generationReport.rejectedCount}</p>
+              <p className="text-[10px] uppercase tracking-wide text-text-muted mt-1">Ignorées</p>
             </div>
           </div>
 
           {generationReport.warnings.length > 0 && (
             <details className="mt-4">
-              <summary className="cursor-pointer text-xs font-semibold text-gray-600 hover:text-gray-900 transition-colors">
+              <summary className="cursor-pointer text-xs font-semibold text-text-muted hover:text-text transition-colors">
                 Voir les détails de nettoyage
               </summary>
-              <ul className="mt-2 space-y-1 text-xs text-gray-600 list-disc list-inside bg-white p-3 rounded-lg border border-gray-200">
+              <ul className="mt-2 space-y-1 text-xs text-text-muted list-disc list-inside bg-surface p-3 rounded-lg border border-border/50">
                 {generationReport.warnings.slice(0, 5).map((warning, index) => (
                   <li key={`${warning}-${index}`}>{warning}</li>
                 ))}
@@ -364,43 +366,43 @@ export function CreateFlashcardsBatch() {
       {!generating && (
         <div className="flex flex-col gap-4 mt-2">
           <div className="flex items-center justify-between px-1">
-             <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">{cards.length} carte(s) à valider</span>
+             <span className="text-xs font-bold text-text-muted uppercase tracking-wider">{cards.length} carte(s) à valider</span>
           </div>
           {cards.map((card, index) => (
-            <div key={card.id} className="bg-white border border-gray-200 p-5 rounded-2xl flex flex-col gap-3 relative group shadow-sm focus-within:border-blue-300 transition-colors">
-              <div className="flex justify-between items-center border-b border-gray-100 pb-2">
+            <div key={card.id} className="bg-surface border border-border p-5 rounded-card flex flex-col gap-3 relative group shadow-sm focus-within:border-accent/40 transition-colors">
+              <div className="flex justify-between items-center border-b border-border/50 pb-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Carte {index + 1}</span>
+                  <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Carte {index + 1}</span>
                   {card.category && (
-                    <span className="text-[9px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full uppercase">
+                    <span className="text-[9px] font-bold bg-accent/10 text-accent px-2 py-0.5 rounded-full uppercase">
                       {card.category}
                     </span>
                   )}
                   {card.sourcePages && card.sourcePages.length > 0 && (
-                    <span className="text-[9px] font-bold bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full uppercase">
+                    <span className="text-[9px] font-bold bg-surface-elevated text-text-muted px-2 py-0.5 rounded-full uppercase border border-border">
                       Page(s) {card.sourcePages.join(', ')}
                     </span>
                   )}
                 </div>
-                <button onClick={() => removeCardRow(card.id)} className="text-gray-400 hover:text-red-500 p-1 rounded-md hover:bg-red-50 transition-colors cursor-pointer opacity-0 group-hover:opacity-100">
+                <button onClick={() => removeCardRow(card.id)} className="text-text-muted hover:text-danger p-1 rounded-md hover:bg-danger/10 transition-colors cursor-pointer opacity-0 group-hover:opacity-100">
                   <Trash2 size={16} />
                 </button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-1">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Recto (Question)</label>
+                  <label className="text-[10px] text-text-muted uppercase font-bold tracking-wider">Recto (Question)</label>
                   <textarea 
                     rows={2} value={card.front} onChange={(e) => updateCard(card.id, 'front', e.target.value)} 
                     placeholder="Le concept juridique..." 
-                    className="w-full bg-gray-50 border border-gray-200 focus:border-blue-500 rounded-lg p-3 text-sm font-medium resize-none transition-colors"
+                    className="w-full bg-background border border-border/50 focus:border-accent rounded-input p-3 text-sm font-medium resize-none transition-colors"
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] text-blue-600 uppercase font-bold tracking-wider">Verso (Réponse)</label>
+                  <label className="text-[10px] text-accent uppercase font-bold tracking-wider">Verso (Réponse)</label>
                   <textarea 
                     rows={2} value={card.back} onChange={(e) => updateCard(card.id, 'back', e.target.value)} 
                     placeholder="La définition ou réponse..." 
-                    className="w-full bg-gray-50 border border-gray-200 focus:border-blue-500 rounded-lg p-3 text-sm font-medium resize-none transition-colors"
+                    className="w-full bg-background border border-border/50 focus:border-accent rounded-input p-3 text-sm font-medium resize-none transition-colors"
                   />
                 </div>
               </div>
@@ -411,16 +413,16 @@ export function CreateFlashcardsBatch() {
 
       {!generating && (
         <div className="flex justify-center mt-4">
-          <button onClick={addCardRow} className="flex items-center gap-2 bg-white border border-gray-200 px-5 py-3 rounded-full text-sm font-bold hover:bg-gray-50 transition-colors cursor-pointer text-gray-700 shadow-sm">
-            <Plus size={18} className="text-gray-500" /> Ajouter une carte manuelle
+          <button onClick={addCardRow} className="flex items-center gap-2 bg-surface border border-border px-5 py-3 rounded-full text-sm font-bold hover:bg-surface-interactive transition-colors cursor-pointer text-text shadow-sm">
+            <Plus size={18} className="text-text-muted" /> Ajouter une carte manuelle
           </button>
         </div>
       )}
 
       {!generating && (
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-xl border-t border-gray-200 z-40 flex justify-center">
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/80 backdrop-blur-xl border-t border-border z-40 flex justify-center">
           <div className="max-w-4xl w-full flex justify-end">
-            <button onClick={handleSubmit} disabled={saving} className="bg-blue-600 text-white px-8 py-3.5 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition-transform active:scale-[0.98] cursor-pointer disabled:opacity-50 shadow-lg">
+            <button onClick={handleSubmit} disabled={saving} className="bg-accent text-background px-8 py-3.5 rounded-btn font-bold flex items-center gap-2 glow-gold hover:bg-accent-strong transition-transform active:scale-[0.98] cursor-pointer disabled:opacity-50 shadow-apple">
               {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
               {saving ? 'Injection dans la mémoire...' : 'Valider et Sauvegarder le Set'}
             </button>
@@ -429,25 +431,25 @@ export function CreateFlashcardsBatch() {
       )}
 
       {showBulkImport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-2xl bg-white border border-gray-200 rounded-3xl p-6 shadow-2xl flex flex-col gap-4">
-            <div className="flex justify-between items-center pb-2 border-b border-gray-100">
-              <h3 className="text-xl font-bold text-gray-900">Importer du texte</h3>
-              <button onClick={() => setShowBulkImport(false)} className="p-1.5 hover:bg-gray-100 rounded-full text-gray-500 cursor-pointer"><X size={20} /></button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-2xl bg-surface-elevated border border-border rounded-modal p-6 shadow-apple flex flex-col gap-4">
+            <div className="flex justify-between items-center pb-2 border-b border-border/50">
+              <h3 className="font-serif text-xl font-bold">Importer du texte</h3>
+              <button onClick={() => setShowBulkImport(false)} className="p-1.5 hover:bg-surface rounded-full text-text-muted cursor-pointer"><X size={20} /></button>
             </div>
-            <p className="text-xs text-gray-500 leading-relaxed">
+            <p className="text-xs text-text-muted leading-relaxed">
               Vous pouvez importer des cartes exactes (Format : "Question - Réponse") ou demander à l'IA de concevoir des cartes depuis vos notes.
             </p>
             <textarea
               autoFocus value={bulkText} onChange={(e) => setBulkText(e.target.value)}
               placeholder="Collez votre texte de cours ou vos cartes formatées ici..."
-              className="w-full h-64 bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm font-mono focus:border-blue-500 resize-none whitespace-pre"
+              className="w-full h-64 bg-background border border-border rounded-input p-4 text-sm font-mono focus:border-accent resize-none whitespace-pre"
             />
             <div className="flex gap-2 mt-2">
-              <button onClick={handleBulkImportProcess} className="flex-1 bg-white border border-gray-200 py-3 rounded-xl text-sm font-bold hover:bg-gray-50 cursor-pointer text-gray-700">
+              <button onClick={handleBulkImportProcess} className="flex-1 bg-surface border border-border py-3 rounded-btn text-sm font-bold hover:bg-surface-interactive cursor-pointer text-text">
                 Parser (Format exact)
               </button>
-              <button onClick={handleAIGenerationFromModal} className="flex-1 bg-blue-600 text-white py-3 rounded-xl text-sm font-bold hover:bg-blue-700 cursor-pointer">
+              <button onClick={handleAIGenerationFromModal} className="flex-1 bg-accent text-background py-3 rounded-btn text-sm font-bold glow-gold hover:bg-accent-strong cursor-pointer">
                 Générer avec l'IA
               </button>
             </div>
