@@ -26,24 +26,29 @@ const MODELS_TO_TRY = [
   'gemini-1.5-flash',
 ];
 
-// Whitelist des domaines autorisés (A MODIFIER selon ton projet)
 const ALLOWED_ORIGINS = new Set([
   'http://localhost:5173',
   'http://localhost:3000',
-  'https://lexi-suisse.pages.dev', // Remplacer par l'URL de ton front
+  'https://lexi-suisse.pages.dev', // Remplacer par ton vrai domaine
 ]);
 
 export async function onRequest(context: { request: Request; env: { GEMINI_API_KEY?: string } }) {
-  
   const requestOrigin = context.request.headers.get('Origin');
-  const allowedOrigin = requestOrigin && ALLOWED_ORIGINS.has(requestOrigin) 
-    ? requestOrigin 
-    : 'https://lexi-suisse.pages.dev'; // Fallback par défaut
+  
+  // Sécurité CORS stricte
+  if (requestOrigin && !ALLOWED_ORIGINS.has(requestOrigin)) {
+    return new Response(JSON.stringify({ error: 'Origin non autorisée.' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const allowedOrigin = requestOrigin || 'https://lexi-suisse.pages.dev';
 
   const corsHeaders = {
     'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type', // Sécurisé, x-goog-api-key n'y est pas
+    'Access-Control-Allow-Headers': 'Content-Type',
     'Vary': 'Origin',
   };
 
@@ -117,10 +122,7 @@ export async function onRequest(context: { request: Request; env: { GEMINI_API_K
           lastError = "Réponse vide reçue du modèle.";
         } else {
           lastError = data.error?.message ?? `Erreur modèle ${model}`;
-          // Bloquer le fallback sur les erreurs prompt/auth
-          if ([400, 401, 403].includes(responseStatus)) {
-            break; 
-          }
+          if ([400, 401, 403].includes(responseStatus)) break; 
         }
       } catch (netErr: any) {
         lastError = netErr.message ?? `Erreur réseau avec ${model}`;
