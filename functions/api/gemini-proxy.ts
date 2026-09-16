@@ -20,21 +20,30 @@ const ALLOWED_ACTIONS = new Set([
 
 const MAX_PROMPT_LENGTH = 120_000;
 
-// Utilise uniquement les modèles auxquels tu as explicitement accès avec ta clé API
 const MODELS_TO_TRY = [
   'gemini-3.6-flash',
   'gemini-2.5-flash',
   'gemini-1.5-flash',
 ];
 
+// Whitelist des domaines autorisés (A MODIFIER selon ton projet)
+const ALLOWED_ORIGINS = new Set([
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'https://lexi-suisse.pages.dev', // Remplacer par l'URL de ton front
+]);
+
 export async function onRequest(context: { request: Request; env: { GEMINI_API_KEY?: string } }) {
-  // Sécurisation CORS : Idéalement, remplace par l'URL exacte de ton frontend (ex: 'https://monapp.pages.dev')
-  const allowedOrigin = context.request.headers.get('Origin') || '*'; 
+  
+  const requestOrigin = context.request.headers.get('Origin');
+  const allowedOrigin = requestOrigin && ALLOWED_ORIGINS.has(requestOrigin) 
+    ? requestOrigin 
+    : 'https://lexi-suisse.pages.dev'; // Fallback par défaut
 
   const corsHeaders = {
     'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization', // Ne pas inclure x-goog-api-key ici
+    'Access-Control-Allow-Headers': 'Content-Type', // Sécurisé, x-goog-api-key n'y est pas
     'Vary': 'Origin',
   };
 
@@ -50,17 +59,9 @@ export async function onRequest(context: { request: Request; env: { GEMINI_API_K
   }
 
   try {
-    /* 
-    // TODO: Décommenter et adapter ceci si tu as une authentification Supabase
-    const authHeader = context.request.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Non autorisé" }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-    */
-
     const apiKey = context.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: "Clé API Gemini non configurée dans l'environnement serveur." }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: "Clé API Gemini non configurée." }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const body = await context.request.json() as { action?: string; payload?: { prompt?: string; isJsonResponse?: boolean } };
@@ -94,7 +95,6 @@ export async function onRequest(context: { request: Request; env: { GEMINI_API_K
     let responseOk = false;
     let responseStatus = 500;
 
-    // Fallback intelligent (ne tente le modèle suivant que si l'erreur est récupérable)
     for (const model of MODELS_TO_TRY) {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
       
@@ -117,7 +117,7 @@ export async function onRequest(context: { request: Request; env: { GEMINI_API_K
           lastError = "Réponse vide reçue du modèle.";
         } else {
           lastError = data.error?.message ?? `Erreur modèle ${model}`;
-          // Si l'erreur vient du payload (ex: 400 Bad Request) ou de l'auth (401, 403), on stoppe le fallback
+          // Bloquer le fallback sur les erreurs prompt/auth
           if ([400, 401, 403].includes(responseStatus)) {
             break; 
           }
@@ -144,7 +144,7 @@ export async function onRequest(context: { request: Request; env: { GEMINI_API_K
       try {
         result = JSON.parse(clean.trim());
       } catch (parseErr) {
-        return new Response(JSON.stringify({ error: "Le format généré par l'IA est invalide. Aucun contenu n'a pu être enregistré. Réessayez." }), {
+        return new Response(JSON.stringify({ error: "Le format généré par l'IA est invalide. Aucun contenu n'a pu être enregistré." }), {
           status: 422,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
