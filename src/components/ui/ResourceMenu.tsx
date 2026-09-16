@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MoreHorizontal, Edit3, Copy, Archive, Trash2, FolderInput } from 'lucide-react';
+import { MoreHorizontal, Edit3, Copy, Archive, Trash2, FolderInput, Star, StarOff } from 'lucide-react';
 
 interface ResourceMenuProps {
+  isFavorite?: boolean;
+  onToggleFavorite?: () => void;
   onEdit?: () => void;
   onDuplicate?: () => void;
   onMove?: () => void;
@@ -9,7 +11,7 @@ interface ResourceMenuProps {
   onDelete?: () => void;
 }
 
-export function ResourceMenu({ onEdit, onDuplicate, onMove, onArchive, onDelete }: ResourceMenuProps) {
+export function ResourceMenu({ isFavorite, onToggleFavorite, onEdit, onDuplicate, onMove, onArchive, onDelete }: ResourceMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -19,14 +21,11 @@ export function ResourceMenu({ onEdit, onDuplicate, onMove, onArchive, onDelete 
         setIsOpen(false);
       }
     }
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
+    if (isOpen) document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
 
-  // Si aucune action n'est fournie, on n'affiche pas le menu
-  if (!onEdit && !onDuplicate && !onMove && !onArchive && !onDelete) return null;
+  if (!onEdit && !onDuplicate && !onMove && !onArchive && !onDelete && !onToggleFavorite) return null;
 
   return (
     <div className="relative" ref={menuRef}>
@@ -39,6 +38,14 @@ export function ResourceMenu({ onEdit, onDuplicate, onMove, onArchive, onDelete 
 
       {isOpen && (
         <div className="absolute right-0 top-full mt-2 w-48 bg-surface-elevated border border-border/60 rounded-modal shadow-apple z-50 py-1.5 animate-in fade-in zoom-in-95">
+          
+          {onToggleFavorite && (
+            <button onClick={(e) => { e.stopPropagation(); setIsOpen(false); onToggleFavorite(); }} className="w-full px-4 py-2 text-sm text-text hover:bg-surface-interactive flex items-center gap-3 cursor-pointer transition-colors">
+              {isFavorite ? <StarOff size={15} className="text-warning" /> : <Star size={15} className="text-warning" />}
+              {isFavorite ? 'Désépingler' : 'Épingler'}
+            </button>
+          )}
+          
           {onEdit && (
             <button onClick={(e) => { e.stopPropagation(); setIsOpen(false); onEdit(); }} className="w-full px-4 py-2 text-sm text-text hover:bg-surface-interactive flex items-center gap-3 cursor-pointer transition-colors">
               <Edit3 size={15} className="text-text-muted" /> Modifier
@@ -62,7 +69,7 @@ export function ResourceMenu({ onEdit, onDuplicate, onMove, onArchive, onDelete 
           
           {onDelete && (
             <>
-              {(onEdit || onDuplicate || onMove || onArchive) && <div className="h-px bg-border/50 my-1 mx-2"></div>}
+              {(onEdit || onDuplicate || onMove || onArchive || onToggleFavorite) && <div className="h-px bg-border/50 my-1 mx-2"></div>}
               <button onClick={(e) => { e.stopPropagation(); setIsOpen(false); onDelete(); }} className="w-full px-4 py-2 text-sm text-danger hover:bg-danger/10 flex items-center gap-3 cursor-pointer transition-colors">
                 <Trash2 size={15} /> Supprimer
               </button>
