@@ -1,6 +1,6 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
-// URL stricte, sans aucun markdown
+// URL STRICTE, PAS DE MARKDOWN
 pdfjsLib.GlobalWorkerOptions.workerSrc = '[https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js](https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js)';
 
 export interface ExtractedPdfPage { page: number; text: string; }
@@ -32,6 +32,7 @@ export interface FlashcardGenerationOptions {
   count?: number;
   difficulty?: 'mixed' | 'basic' | 'intermediate' | 'advanced';
   sourceType?: 'pdf' | 'text' | 'note';
+  maxPages?: number; // Permet de rejeter les pages sources inventées
 }
 
 export interface CaseLawAnalysis {
@@ -123,7 +124,7 @@ function normalizeStringArray(value: unknown): string[] {
   return [];
 }
 
-function normalizeFlashcard(value: unknown, sourceType?: string): { card: GeneratedFlashcard | null; reason?: string } {
+function normalizeFlashcard(value: unknown, options: FlashcardGenerationOptions): { card: GeneratedFlashcard | null; reason?: string } {
   if (!value || typeof value !== 'object') return { card: null, reason: 'Format objet invalide' };
   const card = value as Record<string, unknown>;
   
@@ -136,9 +137,13 @@ function normalizeFlashcard(value: unknown, sourceType?: string): { card: Genera
 
   const sourcePages = Array.isArray(card.sourcePages) ? card.sourcePages.filter((p): p is number => Number.isInteger(p) && p > 0) : [];
 
-  // Exigence de traçabilité stricte basée sur le type exact
-  if (sourceType === 'pdf' && sourcePages.length === 0) {
-    return { card: null, reason: 'Pages sources absentes pour un document PDF' };
+  if (options.sourceType === 'pdf') {
+    if (sourcePages.length === 0) {
+      return { card: null, reason: 'Pages sources absentes pour un document PDF' };
+    }
+    if (options.maxPages && sourcePages.some(p => p > options.maxPages!)) {
+      return { card: null, reason: `Numéro de page source inexistant (max ${options.maxPages})` };
+    }
   }
 
   return {
@@ -235,7 +240,6 @@ Retourne uniquement un tableau JSON valide au format strict :
 ${sourceContext}`;
 
   const rawResult = await callLawstudiesAI('generate_flashcards', { prompt, isJsonResponse: true });
-  
   const arrayResult = Array.isArray(rawResult) ? rawResult : ((rawResult as any)?.flashcards || (rawResult as any)?.cards || []);
 
   const generatedCount = arrayResult.length;
@@ -244,8 +248,7 @@ ${sourceContext}`;
   const parsedCards: GeneratedFlashcard[] = [];
 
   for (const item of arrayResult) {
-    // On passe le vrai type d'option ('pdf', 'text', 'note') à la validation
-    const { card, reason } = normalizeFlashcard(item, options.sourceType);
+    const { card, reason } = normalizeFlashcard(item, options);
     if (card) {
       parsedCards.push(card);
     } else {
