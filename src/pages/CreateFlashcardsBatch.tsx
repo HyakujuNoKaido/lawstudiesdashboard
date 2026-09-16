@@ -34,24 +34,23 @@ export function CreateFlashcardsBatch() {
   
   const [generationReport, setGenerationReport] = useState<FlashcardGenerationResult | null>(null);
 
-  // ÉTATS POUR LA BARRE DE PROGRESSION IA
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState('');
 
   // GESTION DE LA BARRE DE PROGRESSION INTELLIGENTE
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    // CORRECTION ICI : Utilisation d'un type universel reconnu par le navigateur
+    let interval: ReturnType<typeof setInterval>;
+    
     if (generating) {
       setProgress(0);
       setStatusMessage("Initialisation de l'IA...");
       
       interval = setInterval(() => {
         setProgress(old => {
-          // Approche asymptotique vers 95% (ralentit au fur et à mesure)
           const step = (95 - old) * 0.05; 
           const next = old + step;
           
-          // Changement dynamique du texte selon l'avancement simulé
           if (next < 20) setStatusMessage("Lecture et structuration du document...");
           else if (next < 50) setStatusMessage("Analyse juridique du contenu...");
           else if (next < 80) setStatusMessage("Rédaction des questions et réponses...");
@@ -61,7 +60,6 @@ export function CreateFlashcardsBatch() {
         });
       }, 500);
     } else {
-      // Quand la génération est finie, on bloque à 100% brièvement avant que le bloc ne disparaisse
       setProgress(100);
       setStatusMessage("Génération terminée !");
     }
@@ -182,7 +180,6 @@ export function CreateFlashcardsBatch() {
       console.error('Erreur génération IA :', err);
       toast(err.message || "La génération IA a échoué.", "error");
     } finally {
-      // Petit délai pour laisser l'utilisateur voir "100%"
       setTimeout(() => {
         setGenerating(false);
       }, 600);
@@ -230,8 +227,8 @@ export function CreateFlashcardsBatch() {
     setSaving(true);
     try {
       const payload = validCards.map(c => ({
-        course_id: courseId,
-        chapter_id: chapterId || undefined,
+        courseid: courseId,
+        chapterid: chapterId || undefined,
         front: c.front,
         back: c.back
       }));
@@ -292,7 +289,6 @@ export function CreateFlashcardsBatch() {
 
       {generating && (
         <div className="flex flex-col items-center justify-center p-10 bg-blue-50/50 border border-blue-100 rounded-2xl gap-6 shadow-sm overflow-hidden relative">
-          {/* Lueur d'arrière-plan */}
           <div className="absolute inset-0 bg-blue-400 blur-[80px] opacity-10 rounded-full"></div>
           
           <div className="relative">
