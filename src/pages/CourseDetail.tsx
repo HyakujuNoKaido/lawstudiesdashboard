@@ -8,7 +8,7 @@ import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { InlineEditableTitle } from '../components/ui/InlineEditableTitle';
 import { ResourceMenu } from '../components/ui/ResourceMenu';
 import { BulkSelectionToolbar } from '../components/ui/BulkSelectionToolbar';
-import { fetchCourseById, updateCourse, fetchCourseChapters, fetchCourseDocuments, fetchCourseGrades, fetchNotes, fetchFlashcards, fetchCourses, deleteDocument, createChapter, parseAndCreateChaptersFromSyllabus, fetchEvents, updateChapterParent, batchMoveItems, batchMoveFlashcards, batchDeleteFlashcards, getCurrentUserId, updateFlashcard, createFlashcard, deleteFlashcard } from '../services/supabaseService';
+import { fetchCourseById, updateCourse, fetchCourseChapters, fetchCourseDocuments, fetchCourseGrades, fetchNotes, fetchFlashcards, fetchCourses, deleteDocument, createChapter, parseAndCreateChaptersFromSyllabus, fetchEvents, updateChapterParent, batchMoveItems, batchMoveFlashcards, batchDeleteFlashcards, getCurrentUserId, updateFlashcard, createFlashcard, deleteFlashcard, deleteNote } from '../services/supabaseService';
 import { supabase } from '../lib/supabase';
 import { toast } from '../lib/toast';
 import { extractTextFromPDF, generateAISummary } from '../lib/aiService';
@@ -38,6 +38,7 @@ export function CourseDetail() {
   const [parentChapterId, setParentChapterId] = useState<string | null>(null);
   const [chapterToDelete, setChapterToDelete] = useState<string | null>(null);
   const [docToDelete, setDocToDelete] = useState<{id: string, path: string} | null>(null);
+  const [noteToDelete, setNoteToDelete] = useState<string | null>(null);
   const [openChapters, setOpenChapters] = useState<Record<string, boolean>>({});
   
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
@@ -153,6 +154,18 @@ export function CourseDetail() {
   const confirmDeleteChapter = async () => {
     if (!chapterToDelete) return;
     try { await supabase.from('chapters').delete().eq('id', chapterToDelete); setChapterToDelete(null); toast("Chapitre supprimé", "success"); loadData(); } catch (err) { toast("Erreur lors de la suppression", "error"); }
+  };
+
+  const confirmDeleteNote = async () => {
+    if (!noteToDelete) return;
+    try {
+      await deleteNote(noteToDelete);
+      setNoteToDelete(null);
+      toast("Note supprimée", "success");
+      loadData();
+    } catch (err) {
+      toast("Erreur lors de la suppression de la note", "error");
+    }
   };
 
   const handleBulkImport = async () => {
@@ -426,10 +439,17 @@ export function CourseDetail() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {notes.map(note => (
-                  <Card key={note.id} onClick={() => navigate(`/editor/${note.id}`)} className="p-5 flex flex-col gap-3 cursor-pointer hover:border-accent/50 group">
-                    <h3 className="font-serif font-bold text-lg text-text group-hover:text-accent transition-colors truncate">{note.title}</h3>
-                    <p className="text-sm text-text-muted line-clamp-3 font-serif">{note.content}</p>
-                    <span className="text-[10px] text-text-muted font-mono mt-2">Mise à jour : {new Date(note.updated_at).toLocaleDateString()}</span>
+                  <Card key={note.id} onClick={() => navigate(`/editor/${note.id}`)} className="p-5 flex flex-col justify-between gap-3 cursor-pointer hover:border-accent/50 group">
+                    <div className="flex flex-col gap-2">
+                      <h3 className="font-serif font-bold text-lg text-text group-hover:text-accent transition-colors truncate">{note.title}</h3>
+                      <p className="text-sm text-text-muted line-clamp-3 font-serif">{note.content}</p>
+                    </div>
+                    <div className="flex items-center justify-between pt-2 border-t border-border/50 mt-2">
+                      <span className="text-[10px] text-text-muted font-mono">Mise à jour : {new Date(note.updated_at).toLocaleDateString()}</span>
+                      <div onClick={e => e.stopPropagation()}>
+                        <ResourceMenu onDelete={() => setNoteToDelete(note.id)} />
+                      </div>
+                    </div>
                   </Card>
                 ))}
               </div>
@@ -608,6 +628,7 @@ export function CourseDetail() {
 
       <ConfirmModal isOpen={!!docToDelete} title="Supprimer le document ?" message="Ce document sera effacé." confirmText="Supprimer" isDanger={true} onConfirm={handleDeleteDocument} onClose={() => setDocToDelete(null)} />
       <ConfirmModal isOpen={!!chapterToDelete} title="Supprimer le chapitre ?" message="Les sous-chapitres associés seront également supprimés." confirmText="Supprimer" isDanger={true} onConfirm={confirmDeleteChapter} onClose={() => setChapterToDelete(null)} />
+      <ConfirmModal isOpen={!!noteToDelete} title="Supprimer la note ?" message="Cette note sera définitivement effacée." confirmText="Supprimer" isDanger={true} onConfirm={confirmDeleteNote} onClose={() => setNoteToDelete(null)} />
       <ConfirmModal isOpen={isBatchDeleteModalOpen} title="Supprimer la sélection ?" message={`Supprimer les ${totalSelectedCount} éléments ?`} confirmText="Tout supprimer" isDanger={true} onConfirm={handleBatchDelete} onClose={() => setIsBatchDeleteModalOpen(false)} />
       <ConfirmModal isOpen={!!cardToDelete} title="Supprimer la flashcard ?" message="Cette carte sera définitivement effacée." confirmText="Supprimer" isDanger={true} onConfirm={confirmDeleteCard} onClose={() => setCardToDelete(null)} />
     </div>
