@@ -1,6 +1,5 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Utilisation d'une version fixe et stable pour le worker PDF.js afin d'éviter les erreurs de template d'URL en production
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 const getApiKey = () => import.meta.env.VITE_GEMINI_API_KEY;
@@ -28,7 +27,10 @@ export async function extractTextFromPDF(fileUrl: string, startPage?: number, en
 async function callGeminiKeyAuthorized(payload: any, retries = 4, delay = 3000): Promise<any> {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("Clé API Gemini introuvable.");
-  const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  
+  // Utilisation de v1beta pour supporter correctement gemini-1.5-flash
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  
   for (let i = 0; i < retries; i++) {
     try {
       const response = await fetch(url, {
@@ -60,11 +62,6 @@ Renvoie UNIQUEMENT un tableau JSON valide au format strict : [{"question": "..."
 Texte :
 ${text.substring(0, 30000)}`;
   
-  const data = await callGeminitKeyAuthorizedHelper(prompt);
-  return data;
-}
-
-async function callGeminitKeyAuthorizedHelper(prompt: string) {
   const data = await callGeminiKeyAuthorized({
     contents: [{ parts: [{ text: prompt }] }]
   });
