@@ -1,11 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, FileText, Scale, FileEdit, ChevronRight, Folder, Calendar, BookOpen, Filter, Download, ExternalLink } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
-import { fetchNotes, fetchCaseLaws, fetchCourses } from '../services/supabaseService';
+import { fetchNotes, fetchCaseLaws, fetchCourses, getCurrentUserId } from '../services/supabaseService';
 import { supabase } from '../lib/supabase';
-import { SOLO_USER_ID } from '../lib/constants';
 
 export function Library() {
   const navigate = useNavigate();
@@ -24,6 +24,7 @@ export function Library() {
   useEffect(() => {
     async function loadLibrary() {
       try {
+        const userId = await getCurrentUserId();
         const [notesData, caseLawsData, coursesData, docsRes] = await Promise.all([
           fetchNotes(),
           fetchCaseLaws(),
@@ -31,9 +32,10 @@ export function Library() {
           supabase
             .from('documents')
             .select('*, courses(id, title), chapters(title)')
-            .eq('user_id', SOLO_USER_ID)
+            .eq('user_id', userId)
             .order('created_at', { ascending: false })
         ]);
+
         setNotes(notesData);
         setCaseLaws(caseLawsData);
         setCourses(coursesData);
@@ -67,7 +69,6 @@ export function Library() {
 
   return (
     <div className="flex flex-col gap-8 pt-2 pb-20 animate-in fade-in duration-300 text-text">
-      
       {/* HEADER ET RECHERCHE GLOBALE */}
       <header className="flex flex-col gap-5 px-1 border-b border-border pb-6">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -77,7 +78,6 @@ export function Library() {
               Vue d'ensemble de vos supports, arrêts et notes avec traçabilité complète des cours et chapitres.
             </p>
           </div>
-          
           {/* Onglets principaux */}
           <div className="flex bg-surface border border-border rounded-xl p-1 self-start">
             <button 
@@ -114,7 +114,6 @@ export function Library() {
                 className="w-full bg-surface-elevated border border-border rounded-xl py-3 pl-11 pr-4 text-sm focus:outline-none focus:border-accent transition-colors"
               />
             </div>
-
             <div className="flex items-center gap-2 w-full md:w-auto">
               {/* Filtre par cours */}
               <select 
@@ -127,7 +126,6 @@ export function Library() {
                   <option key={c.id} value={c.id}>{c.title}</option>
                 ))}
               </select>
-
               {/* Filtre par type de document */}
               <select 
                 value={selectedType}
@@ -164,7 +162,6 @@ export function Library() {
                     const isPdf = doc.mime_type === 'application/pdf' || doc.original_name?.toLowerCase().endsWith('.pdf');
                     const isPpt = doc.original_name?.toLowerCase().match(/\.pptx?$/);
                     const isWord = doc.original_name?.toLowerCase().match(/\.docx?$/);
-                    
                     const formattedDate = new Date(doc.created_at).toLocaleDateString('fr-CH', {
                       day: 'numeric',
                       month: 'short',
@@ -187,12 +184,10 @@ export function Library() {
                           `}>
                             <FileText size={22} />
                           </div>
-                          
                           <div className="min-w-0 flex-1 flex flex-col gap-1">
                             <h3 className="font-semibold text-sm md:text-base text-text truncate group-hover:text-accent transition-colors">
                               {doc.original_name}
                             </h3>
-
                             {/* Fil d'ariane contextuel (Cours > Chapitre) */}
                             <div className="flex flex-wrap items-center gap-1.5 text-xs text-text-muted font-medium">
                               <span className="text-secondary font-bold flex items-center gap-1">
@@ -212,12 +207,11 @@ export function Library() {
 
                         {/* Méta-détails (Format, Type/But, Date) à voir au premier coup d'œil */}
                         <div className="flex items-center justify-between md:justify-end gap-3 shrink-0 pt-3 md:pt-0 border-t md:border-t-0 border-border/50">
-                          
                           {/* Badge Type / But */}
                           <Badge variant="outline" className="text-[10px] font-sans">
                             {doc.document_type || 'Support'}
                           </Badge>
-
+                          
                           {/* Badge Format */}
                           <span className={`text-[10px] font-mono px-2 py-1 rounded font-bold uppercase
                             ${isPdf ? 'bg-danger/10 text-danger border border-danger/20' : ''}
