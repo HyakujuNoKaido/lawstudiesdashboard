@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarDays, Plus, Trash2, Edit3, ChevronLeft, ChevronRight, Clock, Download, Upload, BookOpen, Timer, Scale, FileText, BrainCircuit, ArrowRight, AlertCircle, LayoutList } from 'lucide-react';
+import { CalendarDays, Plus, Trash2, Edit3, ChevronLeft, ChevronRight, Clock, Download, Upload, BookOpen, Timer, Scale, FileText, BrainCircuit, ArrowRight, AlertCircle, LayoutList, Sparkles } from 'lucide-react';
 import { fetchEvents, createEvent, fetchCourses } from '../services/supabaseService';
 import { supabase } from '../lib/supabase';
 import { toast } from '../lib/toast';
@@ -155,20 +155,22 @@ export function Schedule() {
       } else {
         await createEvent(form);
         
-        // --- GÉNÉRATION DU PLAN DE PRÉPARATION (Étape 6) ---
+        // --- GÉNÉRATION DU PLAN DE PRÉPARATION (Point 15) ---
         if (form.category === 'Examen' && generatePrepPlan && form.course_id) {
            const examDate = new Date(form.event_date);
-           for(let i=1; i<=3; i++) {
-              const prepDate = new Date(examDate);
-              prepDate.setDate(prepDate.getDate() - (i*7));
-              await createEvent({
-                 title: `Prep. Examen : ${form.title} (J-${i*7})`,
-                 event_date: prepDate.toISOString().substring(0, 16),
-                 category: 'Révision',
-                 course_id: form.course_id
-              });
+           const intervals = [28, 21, 14, 7, 3];
+           for(const daysBefore of intervals) {
+              const prepDate = new Date(examDate.getTime() - daysBefore * 24 * 60 * 60 * 1000);
+              if (prepDate > new Date()) {
+                await createEvent({
+                   title: `Révision ${form.title} (J-${daysBefore})`,
+                   event_date: prepDate.toISOString().substring(0, 16),
+                   category: 'Révision',
+                   course_id: form.course_id
+                });
+              }
            }
-           toast("Plan de révision généré sur 3 semaines", "info");
+           toast("Plan de révision généré sur plusieurs semaines", "info");
         } else {
           toast("Événement ajouté", "success");
         }
@@ -227,7 +229,7 @@ export function Schedule() {
     <div className="flex flex-col gap-6 pt-2 pb-16 animate-in fade-in duration-300 text-text">
       
       {/* HEADER & MINI-MENU CONTEXTUEL */}
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-1 border-b border-border pb-6">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-1 border-b border-border/50 pb-6">
         <div>
           <h1 className="font-serif text-3xl font-bold">Mon planning</h1>
           <p className="text-text-muted text-sm mt-1">Gérez votre emploi du temps et vos échéances.</p>
@@ -501,7 +503,7 @@ export function Schedule() {
                   />
                   <label htmlFor="genPlan" className="text-xs text-text cursor-pointer">
                     <span className="font-bold text-warning block mb-1">Plan de préparation</span>
-                    Générer automatiquement 3 sessions de révision espacées (J-7, J-14, J-21) pour cet examen.
+                    Générer automatiquement des sessions de révision espacées (J-3, J-7, J-14, J-21, J-28) pour cet examen.
                   </label>
                 </div>
               )}
