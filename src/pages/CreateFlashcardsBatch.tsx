@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { ChevronLeft, Save, Plus, Trash2, BrainCircuit, ClipboardPaste, X, Sparkles, Loader2 } from 'lucide-react';
 import { fetchCourses, fetchCourseChapters, createFlashcardsBatch } from '../services/supabaseService';
 import { generateAIFlashcardsDetailed, FlashcardGenerationResult } from '../lib/aiService';
-import { toast } from '../lib/toast';
+import { toast } from '../lib/toast'; // Le toast utilise la signature: toast(message, type)
 
 interface FlashcardRow {
   id: string;
@@ -25,36 +25,53 @@ export function CreateFlashcardsBatch() {
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   
-  const [courseId, setCourseId] = useState(state?.courseId || '');
-  const [chapterId, setChapterId] = useState(state?.chapterId || '');
+  const [courseId, setCourseId] = useState('');
+  const [chapterId, setChapterId] = useState('');
 
   const [cards, setCards] = useState<FlashcardRow[]>([{ id: Date.now().toString(), front: '', back: '' }]);
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [bulkText, setBulkText] = useState('');
   
-  // NOUVEAU: Etat pour le rapport de génération
   const [generationReport, setGenerationReport] = useState<FlashcardGenerationResult null |>(null);
 
   useEffect(() => {
-    fetchCourses().then(data => {
-      setCourses(data);
-      if (data.length > 0) {
-        const initialCourse = state?.courseId || data[0].id;
-        setCourseId(initialCourse);
-        loadChapters(initialCourse);
-      }
-      setLoading(false);
-    });
+    async function initialize() {
+      try {
+        const data = await fetchCourses();
+        setCourses(data);
 
-    if (state?.extractedText) {
-      handleAIGeneration(state.extractedText, state.sourceType || 'pdf');
+        const initialCourse = state?.courseId || data[0]?.id;
+
+        if (initialCourse) {
+          setCourseId(initialCourse);
+          const chapterData = await fetchCourseChapters(initialCourse);
+          setChapters(chapterData);
+          if (state?.chapterId) setChapterId(state.chapterId);
+
+          // Lancement IA sécurisé après hydratation du State
+          if (state?.extractedText) {
+            await generateCardsFromText(
+              state.extractedText,
+              state.sourceType || 'pdf',
+              initialCourse,
+              state.chapterId || ''
+            );
+          }
+        }
+      } catch (err) {
+        console.error("Erreur initialisation:", err);
+      } finally {
+        setLoading(false);
+      }
     }
+
+    initialize();
   }, []);
 
   const loadChapters = async (cId: string) => {
     const data = await fetchCourseChapters(cId);
     setChapters(data);
-    if (!state?.chapterId) setChapterId(''); 
+    setChapterId(''); 
   };
 
   const handleCourseChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -67,8 +84,13 @@ export function CreateFlashcardsBatch() {
   const removeCardRow = (id: string) => { if (cards.length > 1) setCards(cards.filter(c => c.id !== id)); };
   const updateCard = (id: string, field: 'front' | 'back', value: string) => setCards(cards.map(c => c.id === id ? { ...c, [field]: value } : c));
 
-  const handleAIGeneration = async (text: string, forceSourceType?: 'pdf' | 'text' | 'note') => {
-    if (!courseId) {
+  const generateCardsFromText = async (
+    text: string,
+    sourceType: 'pdf' | 'text' | 'note',
+    selectedCourseId: string,
+    selectedChapterId: string
+  ) => {
+    if (!selectedCourseId) {
       toast("Veuillez sélectionner un cours avant de générer.", "warning");
       return;
     }
@@ -78,15 +100,15 @@ export function CreateFlashcardsBatch() {
     toast("L'IA analyse le document et génère vos cartes...", "info");
     
     try {
-      const selectedCourse = courses.find(c => c.id === courseId);
-      const selectedChapter = chapters.find(c => c.id === chapterId);
+      const selectedCourse = courses.find(c => c.id === selectedCourseId);
+      const selectedChapter = chapters.find(c => c.id === selectedChapterId);
 
       const result = await generateAIFlashcardsDetailed(text, {
-        courseId,
-        chapterId,
+        courseId: selectedCourseId,
+        chapterId: selectedChapterId || undefined,
         courseTitle: selectedCourse?.title,
         chapterTitle: selectedChapter?.title,
-        sourceType: forceSourceType || 'text',
+        sourceType,
         count: 30,
         difficulty: 'mixed'
       });
@@ -94,12 +116,12 @@ export function CreateFlashcardsBatch() {
       setGenerationReport(result);
 
       if (result.cards.length === 0) {
-        toast("Aucune flashcard valide n’a été générée. Vérifiez le contenu puis réessayez.", "warning");
+        toast("Aucune flashcard valide n’a été générée. Vérifiez le contenu.", "warning");
         return;
       }
 
-      const mappedCards = result.cards.map((c, i) => ({
-        id: `${Date.now()}_${i}`,
+      const mappedCards = result.cards.map((c, index) => ({
+        id: `${Date.now()}-${index}`,
         front: c.question,
         back: c.answer,
         category: c.category,
@@ -108,11 +130,11 @@ export function CreateFlashcardsBatch() {
       }));
 
       setCards((currentCards) => {
-        const hasEmptyCard = currentCards.length === 1 && !currentCards[0].front.trim() && !currentCards[0].back.trim();
-        return hasEmptyCard ? mappedCards : [...currentCards, ...mappedCards];
+        const isEmpty = currentCards.length === 1 && !currentCards[0].front.trim() && !currentCards[0].back.trim();
+        return isEmpty ? mappedCards : [...currentCards, ...mappedCards];
       });
 
-      toast(`${result.validCount} flashcards générées. ${result.duplicateCount} doublon(s) retiré(s).`, result.rejectedCount > 0 ? 'warning' : 'success');
+      toast(`${result.validCount} flashcard(s) générée(s).`, result.rejectedCount > 0 ? 'warning' : 'success');
 
     } catch (err: any) {
       console.error('Erreur génération IA :', err);
@@ -124,9 +146,31 @@ export function CreateFlashcardsBatch() {
 
   const handleBulkImportProcess = () => {
     if (!bulkText.trim()) return;
-    
-    // Si c'est un copier-coller manuel et qu'on souhaite que l'IA s'en occupe
-    handleAIGeneration(bulkText, 'text');
+    const lines = bulkText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    const newCards: FlashcardRow[] = [];
+    lines.forEach((line, i) => {
+      let separator = '\t';
+      if (!line.includes('\t') && line.includes(' - ')) separator = ' - ';
+      if (!line.includes('\t') && !line.includes(' - ') && line.includes(';')) separator = ';';
+      const parts = line.split(separator);
+      if (parts.length >= 2) {
+        newCards.push({ id: `${Date.now()}_${i}`, front: parts[0].trim(), back: parts.slice(1).join(separator).trim() });
+      }
+    });
+    if (newCards.length > 0) {
+      const currentCards = (cards.length === 1 && !cards[0].front && !cards[0].back) ? [] : cards;
+      setCards([...currentCards, ...newCards]);
+      setBulkText(''); 
+      setShowBulkImport(false);
+      toast(`${newCards.length} cartes importées avec succès.`, "success");
+    } else {
+      toast("Aucune carte n'a pu être extraite. Vérifiez le séparateur.", "warning");
+    }
+  };
+
+  const handleAIGenerationFromModal = () => {
+    if (!bulkText.trim()) return;
+    generateCardsFromText(bulkText, 'text', courseId, chapterId);
     setShowBulkImport(false);
     setBulkText('');
   };
@@ -138,6 +182,7 @@ export function CreateFlashcardsBatch() {
     
     setSaving(true);
     try {
+      // Conservation du format attendu par le backend supabaseService
       const payload = validCards.map(c => ({
         course_id: courseId,
         chapter_id: chapterId || undefined,
@@ -321,20 +366,24 @@ export function CreateFlashcardsBatch() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
           <div className="w-full max-w-2xl bg-surface-elevated border border-border rounded-modal p-6 shadow-apple flex flex-col gap-4">
             <div className="flex justify-between items-center pb-2 border-b border-border/50">
-              <h3 className="font-serif text-xl font-bold">Générer depuis un texte libre</h3>
+              <h3 className="font-serif text-xl font-bold">Importer du texte</h3>
               <button onClick={() => setShowBulkImport(false)} className="p-1.5 hover:bg-surface rounded-full text-text-muted cursor-pointer"><X size="{20}"/></button>
             </div>
             <p className="text-xs text-text-muted leading-relaxed">
-              Collez vos notes, un article de loi ou un résumé. L'IA va l'analyser et le transformer en flashcards.
+              Vous pouvez importer des cartes exactes (Format : "Question - Réponse") ou demander à l'IA de concevoir des cartes depuis vos notes.
             </p>
             <textarea
               autoFocus value={bulkText} onChange={(e) => setBulkText(e.target.value)}
-              placeholder="Collez votre texte de cours ici..."
+              placeholder="Collez votre texte de cours ou vos cartes formattées ici..."
               className="w-full h-64 bg-background border border-border rounded-input p-4 text-sm font-mono focus:border-accent resize-none whitespace-pre"
             />
             <div className="flex gap-2 mt-2">
-              <button onClick={() => setShowBulkImport(false)} className="flex-1 bg-surface border border-border py-3 rounded-btn text-sm font-bold hover:bg-surface-interactive cursor-pointer">Annuler</button>
-              <button onClick={handleBulkImportProcess} className="flex-1 bg-accent text-background py-3 rounded-btn text-sm font-bold glow-gold hover:bg-accent-strong cursor-pointer">Demander à l'IA</button>
+              <button onClick={handleBulkImportProcess} className="flex-1 bg-surface border border-border py-3 rounded-btn text-sm font-bold hover:bg-surface-interactive cursor-pointer">
+                Parser (Format exact)
+              </button>
+              <button onClick={handleAIGenerationFromModal} className="flex-1 bg-accent text-background py-3 rounded-btn text-sm font-bold glow-gold hover:bg-accent-strong cursor-pointer">
+                Générer avec l'IA
+              </button>
             </div>
           </div>
         </div>
