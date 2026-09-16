@@ -3,12 +3,54 @@ import * as pdfjsLib from 'pdfjs-dist';
 // Configuration du Worker PDF
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-const getApiKey = () => import.meta.env.VITE_GEMINI_API_KEY;
+export interface ExtractedPdfPage {
+  page: number;
+  text: string;
+}
+
+export interface ExtractedPdfDocument {
+  text: string;
+  pages: ExtractedPdfPage[];
+  pageCount: number;
+}
+
+export interface GeneratedFlashcard {
+  question: string;
+  answer: string;
+  category: 'definition' | 'distinction' | 'condition' | 'exception' | 'liste' | 'application' | 'reference';
+  difficulty: 'basic' | 'intermediate' | 'advanced';
+  sourcePages: number[];
+  sourceQuote?: string;
+}
+
+export interface CaseLawAnalysis {
+  title: string;
+  court: string;
+  citation: string;
+  date: string;
+  jurisdiction: string;
+  source_basis: 'explicit' | 'incomplete' | 'not_found';
+  facts: string;
+  procedure: string;
+  claims_and_arguments: string;
+  legal_issues: string[];
+  applicable_rules: string[];
+  reasoning: string;
+  holding: string;
+  disposition: string;
+  significance: string;
+  uncertainties: string[];
+  source_pages: number[];
+}
 
 /**
- * Extraction améliorée et structurée du texte PDF avec repérage des pages
+ * Extraction PDF structurée par pages (permet la traçabilité des sources)
  */
-export async function extractTextFromPDF(fileUrl: string, startPage = 1, endPage?: number): Promise<string> {
+export async function extractTextFromPDF(
+  fileUrl: string,
+  startPage = 1,
+  endPage?: number
+): Promise<ExtractedPdfDocument> {
   try {
     const loadingTask = pdfjsLib.getDocument({
       url: fileUrl,
@@ -19,195 +61,270 @@ export async function extractTextFromPDF(fileUrl: string, startPage = 1, endPage
     const firstPage = Math.max(1, startPage);
     const lastPage = Math.min(endPage ?? pdf.numPages, pdf.numPages);
     
-    let fullText = '';
+    const pages: ExtractedPdfPage[] = [];
     for (let pageNumber = firstPage; pageNumber <= lastPage; pageNumber++) {
       const page = await pdf.getPage(pageNumber);
       const content = await page.getTextContent();
       const pageText = content.items
         .map((item: any) => item.str)
         .join(' ')
-        .replace(/\s+/g, ' ');
-      fullText += `[PAGE ${pageNumber}]\n${pageText}\n\n`;
+        .replace(/\s+/g, ' ')
+        .trim();
+      
+      pages.push({
+        page: pageNumber,
+        text: pageText,
+      });
     }
-    return fullText.trim();
+
+    return {
+      pageCount: pdf.numPages,
+      pages,
+      text: pages.map((p) => `[PAGE ${p.page}]\n${p.text}`).join('\n\n'),
+    };
   } catch (error) {
-    console.error("Erreur d'extraction PDF:", error);
-    throw new Error("Impossible de lire le document PDF.");
+    console.error('Erreur extraction PDF:', error);
+    throw new Error('Impossible de lire le document PDF.');
   }
 }
 
 /**
- * Prompt système universel et strict (Empêche l'IA d'inventer ou de plaquer du droit suisse par défaut)
+ * Prompt système universel et strict (Indépendant du droit suisse par défaut, interdiction d'inventer)
  */
 const UNIVERSAL_LEGAL_SYSTEM_PROMPT = `Tu es un assistant académique juridique de niveau universitaire. 
-Ta mission est d'analyser des supports de cours, textes doctrinaux et documents pédagogiques dans tous les domaines du droit.
+Ta mission est d'analyser des supports de cours, textes doctrinaux, articles de loi et décisions judiciaires dans tous les domaines du droit.
 
 RÈGLE ABSOLUE DE FIDÉLITÉ :
-1. Utilise en priorité et explicitement le contenu de la SOURCE fournie.
-2. N'ajoute aucune règle, référence légale, jurisprudence ou doctrine absente de la SOURCE (ex: n'ajoute pas d'articles du CO ou du CC s'ils ne figurent pas dans le texte).
+1. Utilise en priorité et explicitement le contenu de la SOURCE.
+2. N'ajoute aucune règle, référence légale, jurisprudence ou doctrine absente de la SOURCE (ex: n'ajoute pas de droit suisse si le document traite de droit romain, français ou international).
 3. Si une information n'est pas présente ou ne peut pas être déduite avec certitude, écris : "Non précisé dans le support".
 4. Ne fabrique jamais un article, un arrêt, une date, une citation ou un auteur.
 5. Distingue ce que le support affirme de ce qui relève d'une déduction logique.
-6. Ne suppose pas par défaut qu'il s'agit du droit suisse si le document concerne un autre système (ex: droit romain).
-7. Conserve les termes latins et les citations exactement tels qu'ils apparaissent dans la SOURCE.`;
+6. Conserve les termes latins, les articles et les citations exactement tels qu'ils apparaissent dans la SOURCE.`;
 
-/**
- * Construit un contexte structuré pour isoler les métadonnées du contenu brut
- */
-function buildSourceContext(text: string, sourceType = 'support de cours') {
+function buildSourceContext(input: {
+  text: string;
+  title?: string;
+  courseTitle?: string;
+  sourceType?: string;
+  jurisdiction?: string;
+}) {
   return `[METADONNEES]
-Type de source : ${sourceType}
+Titre : ${input.title ?? 'Non précisé'}
+Cours : ${input.courseTitle ?? 'Non précisé'}
+Type de source : ${input.sourceType ?? 'Support de cours'}
+Juridiction : ${input.jurisdiction ?? 'Non précisée'}
+
 [SOURCE À ANALYSER]
-${text}
+${input.text}
 [FIN DE LA SOURCE]`;
 }
 
 /**
- * Cœur de l'appel API sécurisé par header (Clé AQ.)
+ * Appel sécurisé via le proxy backend/Cloudflare (Évite d'exposer la clé au client)
  */
 async function callLawstudiesAI(
-  prompt: string, 
-  isJsonResponse: boolean = false
+  action: string,
+  payload: Record<string, unknown>
 ): Promise<any> {
-  const apiKey = getApiKey();
-  if (!apiKey) throw new Error("Clé API manquante.");
-
-  const MODEL_NAME = 'gemini-3.6-flash';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent`;
-  
-  const payload = {
-    contents: [{ parts: [{ text: prompt }] }],
-    systemInstruction: { parts: [{ text: UNIVERSAL_LEGAL_SYSTEM_PROMPT }] },
-    generationConfig: {
-      temperature: 0.1, // Rigueur maximale pour éliminer les hallucinations
-      responseMimeType: isJsonResponse ? "application/json" : "text/plain",
-    }
-  };
-
   try {
-    const response = await fetch(url, {
+    const response = await fetch('/api/gemini-proxy', {
       method: 'POST',
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey 
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({
+        action,
+        payload: {
+          ...payload,
+          systemInstruction: UNIVERSAL_LEGAL_SYSTEM_PROMPT,
+        },
+      }),
     });
 
     const data = await response.json();
-
     if (!response.ok) {
-      throw new Error(`Erreur Lawstudies AI (${response.status}): ${data.error?.message}`);
+      throw new Error(data.error ?? 'Erreur du service IA via le proxy.');
     }
 
-    const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!resultText) throw new Error("Réponse vide de l'IA.");
-
-    if (isJsonResponse) {
-      let cleanResult = resultText.trim();
-      if (cleanResult.startsWith("```json")) cleanResult = cleanResult.slice(7);
-      if (cleanResult.startsWith("```")) cleanResult = cleanResult.slice(3);
-      if (cleanResult.endsWith("```")) cleanResult = cleanResult.slice(0, -3);
-      return JSON.parse(cleanResult.trim());
-    }
-
-    return resultText;
+    return data.result;
   } catch (err) {
-    console.error("Erreur critique:", err);
+    console.error("Erreur critique d'appel IA:", err);
     throw err;
   }
 }
 
 /**
- * Résumé fidèle et structuré sans ajouts externes non sollicités
+ * Synthèse fidèle et structurée
  */
-export async function generateAISummary(text: string): Promise<string> {
-  const sourceContext = buildSourceContext(text);
-  const prompt = `Analyse la SOURCE ci-dessous et rédige une synthèse structurée pour des révisions d'examen universitaire.
+export async function generateAISummary(
+  text: string,
+  options: { title?: string; courseTitle?: string; jurisdiction?: string; mode?: 'faithful' | 'exam' } = {}
+): Promise<string> {
+  const sourceContext = buildSourceContext({
+    text,
+    title: options.title,
+    courseTitle: options.courseTitle,
+    jurisdiction: options.jurisdiction,
+    sourceType: 'support de cours',
+  });
+
+  const prompt = `Analyse le support ci-dessous et rédige une synthèse structurée.
+
+MODE : ${options.mode === 'exam' ? 'Révision d’examen : hiérarchise les notions examinables et les distinctions.' : 'Fidélité maximale : restitue le support sans ajout externe.'}
 
 EXIGENCES :
 1. Couvre toutes les parties substantielles de la SOURCE.
-2. Restitue fidèlement les définitions, structures et notions présentes (ex: notions de structure patriarcale, statuts, esclavage, travail, etc., selon ce que contient le texte).
-3. N’ajoute aucune référence légale ou jurisprudentielle (comme des articles de code moderne) si elles ne figurent pas explicitement dans la SOURCE.
-4. Si une information importante manque, indique explicitement : "Non précisé dans le support."
+2. Conserve les définitions, structures, listes et références présentes.
+3. Si une information importante manque, indique explicitement : "Non précisé dans le support."
+4. N’ajoute aucune référence légale extérieure au texte.
 5. Termine par une section "Points à retenir pour l’examen" strictement fondée sur le support.
 
 ${sourceContext}`;
 
-  return callLawstudiesAI(prompt, false);
+  return callLawstudiesAI('generate_summary', { prompt, isJsonResponse: false });
 }
 
 /**
- * Génération de flashcards strictement ancrées dans la source
+ * Génération de flashcards avec traçabilité par page et catégories
  */
-export async function generateAIFlashcards(text: string) {
-  const sourceContext = buildSourceContext(text);
-  const prompt = `Génère des flashcards universitaires rigoureuses basées EXCLUSIVEMENT sur la SOURCE.
+export async function generateAIFlashcards(
+  text: string,
+  options: { count?: number; difficulty?: 'mixed' | 'basic' | 'intermediate' | 'advanced' } = {}
+): Promise<GeneratedFlashcard[]> {
+  const sourceContext = buildSourceContext({ text, sourceType: 'support de cours' });
+  
+  const prompt = `Génère des flashcards universitaires à partir de la SOURCE.
+PARAMÈTRES :
+- Nombre cible : ${options.count ?? 'adaptatif'}
+- Difficulté : ${options.difficulty ?? 'mixed'}
 
 RÈGLES :
 1. Une carte = une seule idée vérifiable.
-2. Ne crée aucune carte dont la réponse n'est pas soutenue par la SOURCE.
-3. N'ajoute pas de connaissances externes ou d'articles de lois absents du texte.
-4. Crée des cartes variées (définitions, distinctions, conditions, listes).
+2. Ne crée aucune carte dont la réponse n'est pas soutenue par la SOURCE (pas d'extrapolation).
+3. Indique les numéros de pages sources concernés ([PAGE X]) dans le tableau.
 
 Retourne uniquement un tableau JSON valide au format strict :
 [
   {
     "question": "...",
-    "answer": "..."
+    "answer": "...",
+    "category": "definition",
+    "difficulty": "intermediate",
+    "sourcePages": [1],
+    "sourceQuote": "..."
   }
 ]
 
 ${sourceContext}`;
 
-  return callLawstudiesAI(prompt, true);
+  const rawResult = await callLawstudiesAI('generate_flashcards', { prompt, isJsonResponse: true });
+  return Array.isArray(rawResult) ? rawResult : [];
 }
 
-export async function generateCaseLaw(text: string): Promise<any> {
-  const sourceContext = buildSourceContext(text, 'arrêt ou décision judiciaire');
-  const prompt = `Réalise une fiche d’arrêt à partir de la SOURCE uniquement. Si une information (juridiction, citation, faits) est absente, écris "Non précisé dans le support". Ne l'invente pas.
+/**
+ * Fiche d'arrêt universelle (Indépendante du droit suisse)
+ */
+export async function generateCaseLaw(text: string): Promise<CaseLawAnalysis> {
+  const sourceContext = buildSourceContext({ text, sourceType: 'arrêt ou décision judiciaire' });
+  
+  const prompt = `Réalise une fiche d’arrêt à partir de la SOURCE uniquement. 
+Si une information (juridiction, citation, faits) est absente, écris "Non précisé dans le support".
 
 Retourne uniquement un objet JSON valide :
 {
   "title": "",
-  "atf_citation": "",
+  "court": "",
+  "citation": "",
+  "date": "",
+  "jurisdiction": "",
+  "source_basis": "explicit",
   "facts": "",
   "procedure": "",
-  "legal_issues": "",
-  "holding": ""
+  "claims_and_arguments": "",
+  "legal_issues": [],
+  "applicable_rules": [],
+  "reasoning": "",
+  "holding": "",
+  "disposition": "",
+  "significance": "",
+  "uncertainties": [],
+  "source_pages": []
 }
 
 ${sourceContext}`;
 
-  return callLawstudiesAI(prompt, true);
+  return callLawstudiesAI('generate_case_law', { prompt, isJsonResponse: true });
 }
 
+/**
+ * Subsomption juridique rigoureuse basée sur les faits et règles de la source
+ */
 export async function generateSubsumption(text: string): Promise<any> {
-  const sourceContext = buildSourceContext(text, 'cas pratique');
-  const prompt = `Effectue une subsomption juridique basée sur les règles et les faits présents dans la SOURCE. Ne forge pas de bases légales absentes.
+  const sourceContext = buildSourceContext({ text, sourceType: 'cas pratique' });
+  
+  const prompt = `Résous le cas pratique par une méthode de subsomption en utilisant exclusivement les règles présentes dans la SOURCE.
 
-Format JSON strict : 
-{ 
-  "legal_issue": "...", 
-  "major_premise": "...", 
-  "minor_premise": "...", 
-  "conclusion": "..." 
+Retourne uniquement un objet JSON valide :
+{
+  "legal_issues": [
+    {
+      "question": "",
+      "major_premise": "",
+      "minor_premise": "",
+      "counterarguments": "",
+      "conclusion": "",
+      "source_basis": "explicit",
+      "uncertainties": []
+    }
+  ],
+  "overall_conclusion": ""
 }
 
 ${sourceContext}`;
 
-  return callLawstudiesAI(prompt, true);
+  return callLawstudiesAI('generate_subsumption', { prompt, isJsonResponse: true });
 }
 
-export async function generateMockExam(courseTitle: string): Promise<any> {
-  const prompt = `Génère un cas pratique d'examen universitaire pour le cours : ${courseTitle}.
-Format JSON strict : 
-{ 
-  "title": "...", 
-  "facts": "...", 
-  "questions": ["..."], 
-  "solution_guidelines": "..." 
-}`;
+/**
+ * Examen blanc ancré dans le contenu réel du support
+ */
+export async function generateMockExam(input: {
+  courseTitle: string;
+  sourceText?: string;
+  difficulty?: 'intermediate' | 'advanced';
+  durationMinutes?: number;
+}): Promise<any> {
+  const sourceContext = buildSourceContext({
+    text: input.sourceText ?? '',
+    courseTitle: input.courseTitle,
+    sourceType: 'support d’examen',
+  });
 
-  return callLawstudiesAI(prompt, true);
+  const prompt = `Génère un examen blanc universitaire fondé sur le cours et la SOURCE fournie.
+- Cours : ${input.courseTitle}
+- Difficulté : ${input.difficulty ?? 'advanced'}
+- Durée : ${input.durationMinutes ?? 90} minutes
+
+Retourne uniquement un objet JSON valide :
+{
+  "title": "",
+  "instructions": "",
+  "facts": "",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "",
+      "points": 0,
+      "source_pages": []
+    }
+  ],
+  "grading_rubric": [],
+  "solution_guidelines": "",
+  "uncertainties": []
+}
+
+${sourceContext}`;
+
+  return callLawstudiesAI('generate_mock_exam', { prompt, isJsonResponse: true });
 }
