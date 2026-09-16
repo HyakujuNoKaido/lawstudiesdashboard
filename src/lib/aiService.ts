@@ -30,17 +30,15 @@ export async function extractTextFromPDF(fileUrl: string, startPage?: number, en
 }
 
 /**
- * Appel à l'API Lawstudies (Gemini 3.6 Flash)
+ * Appel à l'API Lawstudies (Gemini Flash)
  */
 async function callLawstudiesAI(
   prompt: string, 
   isJsonResponse: boolean = false,
-  systemInstruction: string = "Tu es un expert en droit suisse (juriste/avocat). Réponds avec une terminologie juridique précise (CO, CC, LTF, etc.)."
-): Promise<any> {
+  systemInstruction: string = "Tu es un expert en droit suisse (juriste/avocat). Réponds avec une terminologie juridique précise (CO, CC, LTF, etc.)."): Promise<any> {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("Clé API manquante.");
 
-  // MISE À JOUR : Modèle 3.6 Flash imposé par Google
   const MODEL_NAME = 'gemini-3.6-flash';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent`;
   
@@ -80,7 +78,6 @@ async function callLawstudiesAI(
 /**
  * Fonctions métiers pour Lawstudies
  */
-
 export async function generateAISummary(text: string): Promise<string> {
   const prompt = `Résume ce texte juridique suisse de manière concise et structurée :\n\n${text.substring(0, 35000)}`;
   return callLawstudiesAI(prompt, false);
@@ -111,4 +108,11 @@ export async function generateSubsumption(text: string): Promise<any> {
 Format JSON : { "legal_issue": "...", "major_premise": "...", "minor_premise": "...", "conclusion": "..." }
 Texte : ${text.substring(0, 30000)}`;
   return callLawstudiesAI(prompt, true, "Tu es un expert en méthodologie juridique suisse.");
+}
+
+export async function generateMockExam(courseTitle: string): Promise<any> {
+  const prompt = `Génère un cas pratique d'examen pour le cours : ${courseTitle}.
+Le cas doit inclure un état de fait complexe et une solution détaillée basée sur le droit suisse.
+Format JSON : { "title": "...", "facts": "...", "questions": ["..."], "solution_guidelines": "..." }`;
+  return callLawstudiesAI(prompt, true);
 }
