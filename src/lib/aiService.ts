@@ -1,10 +1,17 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
-// URL STRICTE, PAS DE MARKDOWN
-pdfjsLib.GlobalWorkerOptions.workerSrc = '[https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js](https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js)';
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-export interface ExtractedPdfPage { page: number; text: string; }
-export interface ExtractedPdfDocument { text: string; pages: ExtractedPdfPage[]; pageCount: number; }
+export interface ExtractedPdfPage {
+  page: number;
+  text: string;
+}
+
+export interface ExtractedPdfDocument {
+  text: string;
+  pages: ExtractedPdfPage[];
+  pageCount: number;
+}
 
 export interface GeneratedFlashcard {
   question: string;
@@ -32,7 +39,7 @@ export interface FlashcardGenerationOptions {
   count?: number;
   difficulty?: 'mixed' | 'basic' | 'intermediate' | 'advanced';
   sourceType?: 'pdf' | 'text' | 'note';
-  maxPages?: number; // Permet de rejeter les pages sources inventées
+  availablePages?: number[];
 }
 
 export interface CaseLawAnalysis {
@@ -141,8 +148,8 @@ function normalizeFlashcard(value: unknown, options: FlashcardGenerationOptions)
     if (sourcePages.length === 0) {
       return { card: null, reason: 'Pages sources absentes pour un document PDF' };
     }
-    if (options.maxPages && sourcePages.some(p => p > options.maxPages!)) {
-      return { card: null, reason: `Numéro de page source inexistant (max ${options.maxPages})` };
+    if (options.availablePages && sourcePages.some(p => !options.availablePages!.includes(p))) {
+      return { card: null, reason: 'Une page source indiquée n’existe pas dans le document analysé' };
     }
   }
 
