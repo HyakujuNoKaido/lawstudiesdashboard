@@ -1,12 +1,9 @@
 import { supabase } from '../lib/supabase';
+import { SOLO_USER_ID } from '../lib/constants';
 
-// NOUVEAU : On utilise getSession() qui est instantané et local, au lieu de getUser() qui fait une requête serveur
+// BYPASS : Récupération instantanée de ton ID personnel
 export async function getCurrentUserId(): Promise<string> {
-  const { data: { session }, error } = await supabase.auth.getSession();
-  if (error || !session?.user) {
-    throw new Error("Utilisateur non authentifié. Veuillez vous connecter.");
-  }
-  return session.user.id;
+  return SOLO_USER_ID;
 }
 
 export async function fetchCourses(semester?: string) {
@@ -60,7 +57,6 @@ export async function updateCourse(
   return data[0];
 }
 
-// --- CYCLE DE VIE DES DOCUMENTS ---
 export async function updateDocumentMetadata(docId: string, updates: { original_name: string; document_type: string; atf_ref?: string }) {
   const { data, error } = await supabase
     .from('documents')
