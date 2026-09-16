@@ -1,13 +1,12 @@
-
 import { supabase } from '../lib/supabase';
 
-// Nouvelle fonction utilitaire pour récupérer dynamiquement l'utilisateur authentifié
+// NOUVEAU : On utilise getSession() qui est instantané et local, au lieu de getUser() qui fait une requête serveur
 export async function getCurrentUserId(): Promise<string> {
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) {
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error || !session?.user) {
     throw new Error("Utilisateur non authentifié. Veuillez vous connecter.");
   }
-  return user.id;
+  return session.user.id;
 }
 
 export async function fetchCourses(semester?: string) {
