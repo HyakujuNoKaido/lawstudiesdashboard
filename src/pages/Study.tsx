@@ -2,37 +2,23 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
-import { fetchFlashcards, fetchCourses, createFlashcard, updateFlashcard, deleteFlashcard } from '../services/supabaseService';
+import { ProgressBar } from '../components/ui/ProgressBar';
+import { fetchFlashcards, fetchCourses } from '../services/supabaseService';
 import { useApp } from '../context/AppContext';
 import { LexiIcons } from '../lib/icons';
 import { toast } from '../lib/toast';
-import { BrainCircuit, BookOpen, Trash2, Edit3, X, Zap } from 'lucide-react';
+import { BrainCircuit, Play, Zap, CheckCircle2, ChevronRight, AlertCircle } from 'lucide-react';
 
 export function Study() {
   const navigate = useNavigate();
-  
-  // On récupère les données pré-chargées et les réglages depuis notre "cerveau" global
-  const { settings, flashcards: contextCards, courses: contextCourses } = useApp();
+  const { flashcards: contextCards, courses: contextCourses } = useApp();
   
   const [cards, setCards] = useState<any[]>(contextCards);
   const [courses, setCourses] = useState<any[]>(contextCourses);
   const [loading, setLoading] = useState(false);
 
-  // Modal State pour Ajout / Édition d'une carte unique
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    front: '',
-    back: '',
-    course_id: ''
-  });
-
-  // Le mode résumé dynamique
-  const isCompact = settings.listDensity === 'compact';
-
   useEffect(() => {
-    // Si le contexte est vide (ex: rafraîchissement forcé), on recharge
-    if (cards.length === 0) {
+    if (cards.length === 0 || courses.length === 0) {
       loadData();
     }
   }, []);
@@ -46,9 +32,6 @@ export function Study() {
       ]);
       setCards(cardsData);
       setCourses(coursesData);
-      if (coursesData.length > 0 && !form.course_id) {
-        setForm(f => ({ ...f, course_id: coursesData[0].id }));
-      }
     } catch (err) {
       console.error("Erreur chargement révisions:", err);
       toast("Erreur lors du chargement des cartes", "error");
@@ -57,63 +40,24 @@ export function Study() {
     }
   }
 
-  const handleOpenAdd = () => {
-    setEditingId(null);
-    setForm({ front: '', back: '', course_id: courses[0]?.id || '' });
-    setIsModalOpen(true);
-  };
+  // --- LOGIQUE DES SETS (DECKS) ---
+  // On regroupe les cartes par cours. Chaque cours devient un "Set" de révision.
+  const decks = courses.map(course => {
+    const courseCards = cards.filter(c => c.course_id === course.id);
+    const dueCardsCount = courseCards.filter(c => !c.due_at || new Date(c.due_at) <= new Date()).length;
+    // Une carte est "maîtrisée" si son ease_factor est au dessus de 2.5
+    const masteredCardsCount = courseCards.filter(c => c.ease_factor >= 2.5).length;
+    const progressPercent = courseCards.length > 0 ? Math.round((masteredCardsCount / courseCards.length) * 100) : 0;
+    
+    return {
+      ...course,
+      totalCards: courseCards.length,
+      dueCardsCount,
+      progressPercent
+    };
+  }).filter(deck => deck.totalCards > 0); // On n'affiche que les sets qui ont des cartes
 
-  const handleOpenEdit = (card: any, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setEditingId(card.id);
-    setForm({
-      front: card.front || card.question, // Compatibilité au cas où ta DB utilise 'question'
-      back: card.back || card.answer,     // Compatibilité au cas où ta DB utilise 'answer'
-      course_id: card.course_id || courses[0]?.id || ''
-    });
-    setIsModalOpen(true);
-  };
-
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!window.confirm("Voulez-vous vraiment supprimer cette flashcard ?")) return;
-    try {
-      await deleteFlashcard(id);
-      toast("Flashcard supprimée avec succès", "success");
-      loadData();
-    } catch (err) {
-      console.error("Erreur suppression flashcard:", err);
-      toast("Impossible de supprimer la carte", "error");
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.front || !form.back || !form.course_id) return;
-    try {
-      if (editingId) {
-        await updateFlashcard(editingId, form);
-        toast("Flashcard mise à jour", "success");
-      } else {
-        await createFlashcard(form);
-        toast("Nouvelle flashcard ajoutée", "success");
-      }
-      setIsModalOpen(false);
-      loadData();
-    } catch (err) {
-      console.error("Erreur sauvegarde flashcard:", err);
-      toast("Échec de l'enregistrement", "error");
-    }
-  };
-
-  // --- ANALYSE DE LA MÉMOIRE (Algorithme) ---
-  const dueCards = cards.filter(f => !f.due_at || new Date(f.due_at) <= new Date());
-  const dueCardsCount = dueCards.length;
-  
-  const averageEase = cards.length > 0 
-    ? cards.reduce((acc, c) => acc + (Number(c.ease_factor) || 2.5), 0) / cards.length 
-    : 2.5;
-  const memoryHealthScore = Math.min(100, Math.max(0, Math.round(((averageEase - 1.3) / 1.7) * 100)));
+  const totalDueCards = cards.filter(f => !f.due_at || new Date(f.due_at) <= new Date()).length;
 
   return (
     <div className="flex flex-col gap-8 pt-2 pb-16 animate-in fade-in duration-300 text-text">
@@ -121,232 +65,120 @@ export function Study() {
       {/* HEADER */}
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 px-1 border-b border-border pb-6">
         <div>
-          <h1 className="font-serif text-3xl md:text-4xl font-bold tracking-tight mb-2">Mémoire & Répétition</h1>
+          <h1 className="font-serif text-3xl md:text-4xl font-bold tracking-tight mb-2">Révisions</h1>
           <p className="text-text-muted text-sm max-w-md">
-            Pilotez votre apprentissage à long terme grâce à l'algorithme d'espacement (SM-2).
+            L'algorithme calcule le moment idéal pour réviser chaque carte afin d'optimiser votre mémoire à long terme.
           </p>
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <button 
-            onClick={handleOpenAdd}
-            className="bg-surface border border-border text-text px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 hover:border-accent/50 transition-colors cursor-pointer"
-          >
-            <LexiIcons.Add size={16} className="text-text-muted" />
-            <span className="hidden sm:inline">Carte unique</span>
-          </button>
-          <button 
             onClick={() => navigate('/add/flashcards/batch')}
-            className="bg-surface-elevated border border-border text-text px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:border-accent/50 transition-colors cursor-pointer"
+            className="bg-surface-elevated border border-border text-text px-4 py-2.5 rounded-btn text-sm font-bold flex items-center gap-2 hover:bg-surface-interactive transition-colors cursor-pointer shadow-sm"
           >
             <Zap size={16} className="text-warning" />
-            <span>Créer un lot (IA)</span>
+            <span>Générer (IA)</span>
           </button>
         </div>
       </header>
 
-      {/* DASHBOARD MÉMOIRE */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-        
-        {/* Call to action de révision (7 col) */}
-        <Card variant="editorial" className="md:col-span-7 flex flex-col justify-center relative overflow-hidden">
-          <div className="absolute -right-10 -top-10 w-40 h-40 bg-accent/5 rounded-full blur-3xl pointer-events-none"></div>
+      {/* DASHBOARD RÉVISIONS GLOBALES */}
+      <Card variant="editorial" className="flex flex-col justify-center relative overflow-hidden p-6 md:p-8">
+        <div className="absolute -right-10 -top-10 w-48 h-48 bg-accent/5 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
           
-          <div className="flex items-center gap-3 mb-2 relative z-10">
-            <div className={`p-2 rounded-lg ${dueCardsCount > 0 ? 'bg-info/10 text-info' : 'bg-success/10 text-success'}`}>
-              <BrainCircuit size={20} />
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <div className={`p-2 rounded-xl ${totalDueCards > 0 ? 'bg-warning/10 text-warning' : 'bg-success/10 text-success'}`}>
+                {totalDueCards > 0 ? <AlertCircle size={20} /> : <CheckCircle2 size={20} />}
+              </div>
+              <h2 className="text-sm font-bold uppercase tracking-wider text-text-muted">Statut Global</h2>
             </div>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-text-muted">Session du jour</h2>
+            
+            {totalDueCards > 0 ? (
+              <div className="flex items-baseline gap-3 mt-1">
+                <span className="font-serif text-5xl font-bold text-text">{totalDueCards}</span>
+                <span className="text-sm font-medium text-text-muted pb-1">cartes à réviser aujourd'hui</span>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1 mt-1">
+                <span className="font-serif text-3xl font-bold text-success">Mémoire à jour</span>
+                <span className="text-sm font-medium text-text-muted">Toutes vos cartes sont programmées pour plus tard.</span>
+              </div>
+            )}
           </div>
-          
-          <div className="flex items-end gap-3 mb-4 relative z-10">
-            <span className="font-serif text-5xl font-bold text-text">{dueCardsCount}</span>
-            <span className="text-sm font-medium text-text-muted pb-1">cartes en attente</span>
-          </div>
-          
-          {/* Smart Back : On passe la route actuelle pour que la session sache où revenir */}
+
           <button 
             onClick={() => navigate('/session/all', { state: { from: '/study' } })}
-            disabled={dueCardsCount === 0}
-            className={`w-full py-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all duration-300 relative z-10 ${
-              dueCardsCount > 0 
+            disabled={totalDueCards === 0}
+            className={`w-full md:w-auto px-8 py-4 rounded-btn text-sm font-bold flex items-center justify-center gap-2 transition-all duration-300 relative z-10 shrink-0 ${
+              totalDueCards > 0 
                 ? 'bg-accent text-background glow-gold hover:bg-accent-strong hover:scale-[1.02] cursor-pointer' 
-                : 'bg-surface-elevated border border-border text-text-muted cursor-not-allowed'
+                : 'bg-surface border border-border text-text-muted cursor-not-allowed'
             }`}
           >
             <LexiIcons.Forward size={18} />
-            {dueCardsCount > 0 ? 'Démarrer la révision' : 'Aucune révision pour le moment'}
+            {totalDueCards > 0 ? 'Réviser maintenant' : 'Session terminée'}
           </button>
-        </Card>
-
-        {/* Statistiques (5 col) */}
-        <div className="md:col-span-5 flex flex-col gap-4">
-          <Card className="flex-1 bg-surface flex flex-col justify-center p-4 hover:border-accent/30 transition-colors">
-            <div className="flex justify-between items-start mb-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Cartes Actives</span>
-              <BookOpen size={14} className="text-text-muted" />
-            </div>
-            <span className="font-serif text-2xl font-bold text-text">{cards.length}</span>
-          </Card>
-          
-          <Card className="flex-1 bg-surface flex flex-col justify-center p-4 hover:border-accent/30 transition-colors">
-            <div className="flex justify-between items-start mb-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">Santé de la mémoire</span>
-              <LexiIcons.Success size={14} className={memoryHealthScore > 75 ? 'text-success' : memoryHealthScore > 50 ? 'text-warning' : 'text-danger'} />
-            </div>
-            <div className="flex items-baseline gap-2">
-              <span className="font-serif text-2xl font-bold text-text">{memoryHealthScore}%</span>
-              <span className="text-[10px] text-text-muted">Taux de rétention global</span>
-            </div>
-          </Card>
         </div>
-      </div>
+      </Card>
 
-      {/* LISTE DES CARTES */}
-      <section className="flex flex-col gap-3 mt-4">
-        <h3 className="font-serif text-xl font-bold px-1">Bibliothèque de cartes</h3>
+      {/* LISTE DES SETS (DECKS) */}
+      <section className="flex flex-col gap-4 mt-2">
+        <h3 className="font-serif text-2xl font-bold px-1">Mes Sets d'Étude</h3>
         
         {loading ? (
           <div className="text-center py-12 text-text-muted text-sm font-mono animate-pulse">Chargement de la base de connaissances...</div>
-        ) : cards.length === 0 ? (
-          <div className="text-center py-16 border border-dashed border-border rounded-xl text-text-muted text-sm flex flex-col items-center gap-3">
-            <BrainCircuit size={32} className="text-text-muted opacity-30" />
-            <p>Votre mémoire est vide. Créez des flashcards à partir de vos cours.</p>
+        ) : decks.length === 0 ? (
+          <div className="text-center py-16 border border-dashed border-border rounded-card text-text-muted text-sm flex flex-col items-center gap-4 bg-surface/30">
+            <div className="w-16 h-16 rounded-full bg-surface-elevated flex items-center justify-center">
+              <BrainCircuit size={32} className="text-text-muted opacity-50" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <p className="font-bold text-text">Aucun set de révision</p>
+              <p className="text-xs">Créez des flashcards à partir de vos documents pour commencer à mémoriser.</p>
+            </div>
+            <button onClick={() => navigate('/add/flashcards/batch')} className="text-accent font-bold text-sm bg-accent/10 px-4 py-2 rounded-btn mt-2 cursor-pointer hover:bg-accent/20 transition-colors">
+              Générer mon premier set
+            </button>
           </div>
         ) : (
-          <div className={`flex flex-col ${isCompact ? 'border border-border bg-surface rounded-2xl overflow-hidden shadow-sm' : 'gap-3'}`}>
-            {cards.map((card, index) => {
-              const isDue = !card.due_at || new Date(card.due_at) <= new Date();
-              return (
-                <div 
-                  key={card.id}
-                  onClick={(e) => handleOpenEdit(card, e)}
-                  className={`flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors group hover:bg-surface-elevated cursor-pointer ${
-                    isCompact 
-                      ? `p-3 ${index !== cards.length - 1 ? 'border-b border-border/50' : ''}` 
-                      : 'bg-surface border border-border p-4 rounded-xl shadow-sm'
-                  }`}
-                >
-                  <div className="flex-1 min-w-0 pr-4">
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <Badge variant="outline" className="text-[9px] truncate max-w-[150px]">{card.courses?.title || 'Matière générale'}</Badge>
-                      {isDue && <Badge variant="warning" className="px-1.5 py-0 text-[9px] bg-warning/10 text-warning border-transparent">À réviser</Badge>}
-                    </div>
-                    <div className="flex flex-col gap-0.5">
-                      <p className="font-medium text-sm text-text truncate group-hover:text-accent transition-colors">
-                        <span className="text-text-muted font-mono mr-2">Q:</span>{card.front || card.question}
-                      </p>
-                      {/* En mode compact, on masque le verso pour aérer la liste */}
-                      {!isCompact && (
-                        <p className="text-sm text-text-muted truncate mt-1">
-                          <span className="text-text-muted opacity-50 font-mono mr-2">R:</span>{card.back || card.answer}
-                        </p>
-                      )}
-                    </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {decks.map((deck) => (
+              <Card 
+                key={deck.id} 
+                onClick={() => navigate(`/session/${deck.id}`, { state: { from: '/study' } })}
+                className="flex flex-col gap-4 group hover:border-accent/40 cursor-pointer"
+              >
+                <div className="flex justify-between items-start gap-3">
+                  <h4 className="font-bold text-base text-text group-hover:text-accent transition-colors leading-tight">
+                    {deck.title}
+                  </h4>
+                  {deck.dueCardsCount > 0 ? (
+                    <Badge variant="warning" className="shrink-0 text-[10px] px-2">{deck.dueCardsCount} dues</Badge>
+                  ) : (
+                    <CheckCircle2 size={16} className="text-success shrink-0" />
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-1 mt-auto">
+                  <div className="flex justify-between items-center text-[10px] font-bold text-text-muted uppercase tracking-wider mb-1">
+                    <span>{deck.totalCards} cartes</span>
+                    <span>Maîtrise : {deck.progressPercent}%</span>
                   </div>
+                  <ProgressBar value={deck.progressPercent} max={100} colorClass={deck.progressPercent === 100 ? 'bg-success' : 'bg-accent'} />
+                </div>
 
-                  <div className="flex items-center justify-between md:justify-end gap-6 shrink-0 md:pl-4 md:border-l md:border-border/50">
-                    <div className="flex flex-col text-right">
-                      <span className="text-[10px] text-text-muted uppercase font-bold tracking-wider mb-0.5">
-                        Prochaine
-                      </span>
-                      <span className="text-xs font-mono text-text">
-                        {card.due_at ? new Date(card.due_at).toLocaleDateString('fr-CH', { day: '2-digit', month: '2-digit', year: '2-digit' }) : 'Aujourd\'hui'}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-1">
-                      <button 
-                        onClick={(e) => handleOpenEdit(card, e)}
-                        className="p-2 text-text-muted hover:text-accent transition-colors rounded-lg cursor-pointer opacity-0 group-hover:opacity-100"
-                        title="Modifier"
-                      >
-                        <Edit3 size={16} />
-                      </button>
-                      <button 
-                        onClick={(e) => handleDelete(card.id, e)}
-                        className="p-2 text-text-muted hover:text-danger hover:bg-danger/10 transition-colors rounded-lg cursor-pointer opacity-0 group-hover:opacity-100"
-                        title="Supprimer"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
+                <div className="pt-4 border-t border-border/50 flex items-center justify-between text-xs font-bold text-text-muted group-hover:text-text transition-colors mt-1">
+                  <span>Étudier ce set</span>
+                  <div className="w-6 h-6 rounded-full bg-surface-elevated flex items-center justify-center group-hover:bg-accent group-hover:text-background transition-colors">
+                    <ChevronRight size={14} />
                   </div>
                 </div>
-              );
-            })}
+              </Card>
+            ))}
           </div>
         )}
       </section>
-
-      {/* Modal Ajout / Édition Flashcard Unique */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-surface border border-border rounded-2xl p-6 shadow-2xl">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="font-serif text-xl font-bold">{editingId ? "Modifier la carte" : "Nouvelle carte"}</h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-text-muted hover:text-text p-1 cursor-pointer">
-                <X size={20} />
-              </button>
-            </div>
-            
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-text-muted">Cours associé</label>
-                <select 
-                  value={form.course_id}
-                  onChange={(e) => setForm({ ...form, course_id: e.target.value })}
-                  className="w-full bg-surface-elevated border border-border rounded-xl py-3 px-3 text-sm focus:outline-none focus:border-accent appearance-none cursor-pointer"
-                >
-                  {courses.map(c => (
-                    <option key={c.id} value={c.id}>{c.title}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-text-muted">Question (Recto)</label>
-                <textarea 
-                  rows={3}
-                  required
-                  value={form.front}
-                  onChange={(e) => setForm({ ...form, front: e.target.value })}
-                  placeholder="ex: Quelles sont les conditions de la responsabilité civile ?"
-                  className="w-full bg-surface-elevated border border-border rounded-xl p-3 text-sm focus:outline-none focus:border-accent resize-none font-serif"
-                />
-              </div>
-              
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-text-muted">Réponse (Verso)</label>
-                <textarea 
-                  rows={3}
-                  required
-                  value={form.back}
-                  onChange={(e) => setForm({ ...form, back: e.target.value })}
-                  placeholder="ex: 1. Acte illicite, 2. Dommage, 3. Faute, 4. Causalité adéquate."
-                  className="w-full bg-surface-elevated border border-border rounded-xl p-3 text-sm focus:outline-none focus:border-accent resize-none font-serif"
-                />
-              </div>
-              
-              <div className="flex gap-3 mt-4">
-                <button 
-                  type="button" 
-                  onClick={() => setIsModalOpen(false)}
-                  className="flex-1 bg-surface-elevated border border-border text-text py-3.5 rounded-xl text-sm font-medium hover:bg-border cursor-pointer transition-colors"
-                >
-                  Annuler
-                </button>
-                <button 
-                  type="submit" 
-                  className="flex-1 bg-accent text-background py-3.5 rounded-xl text-sm font-bold glow-gold hover:bg-accent-strong flex items-center justify-center gap-2 cursor-pointer transition-colors"
-                >
-                  <Edit3 size={16} />
-                  <span>{editingId ? 'Mettre à jour' : 'Enregistrer'}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
