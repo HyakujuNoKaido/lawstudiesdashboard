@@ -1,24 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, FileText, FileEdit, ChevronRight, Activity, Flame, Clock, Target, CheckCircle2, Circle, AlertCircle, FolderOpen } from 'lucide-react';
+import { Play, Calendar, FileText, BrainCircuit, FileEdit, Clock, Plus, BookOpen } from 'lucide-react';
 import { Card } from '../components/ui/Card';
-import { Badge } from '../components/ui/Badge';
-import { fetchCourses, fetchNotes, fetchEvents, fetchFlashcards, getCurrentUserId } from '../services/supabaseService';
+import { fetchCourses, fetchEvents, fetchFlashcards, getCurrentUserId } from '../services/supabaseService';
 import { supabase } from '../lib/supabase';
 
 export function Dashboard() {
   const navigate = useNavigate();
-  const [courses, setCourses] = useState<any[]>([]);
-  const [events, setEvents] = useState<any[]>([]);
-  const [recentDocs, setRecentDocs] = useState<any[]>([]);
+  
+  const [profileName, setProfileName] = useState('Étudiant');
   const [loading, setLoading] = useState(true);
-
-  // Métriques du Journal de Bord
+  
+  const [events, setEvents] = useState<any[]>([]);
+  const [dueCardsCount, setDueCardsCount] = useState(0);
+  const [recentAccess, setRecentAccess] = useState<any[]>([]);
+  
   const [weeklyStats, setWeeklyStats] = useState({
-    docsAdded: 0,
-    cardsReviewed: 0,
-    notesUpdated: 0,
-    coursesActive: 0
+    studyTime: '2h 15m', // Valeur mockée en attendant un timer global
+    cardsMastered: 0,
+    progress: 0
   });
 
   useEffect(() => {
@@ -26,32 +26,42 @@ export function Dashboard() {
       try {
         const userId = await getCurrentUserId();
         
-        const [coursesData, eventsData, notesData, cardsData, docsRes] = await Promise.all([
+        const [profileRes, coursesData, eventsData, cardsData, docsRes, notesRes] = await Promise.all([
+          supabase.from('profiles').select('full_name').eq('id', userId).single(),
           fetchCourses(),
           fetchEvents(),
-          fetchNotes(),
           fetchFlashcards(),
-          supabase.from('documents').select('*, courses(title)').eq('user_id', userId).order('created_at', { ascending: false }).limit(5)
+          supabase.from('documents').select('id, original_name, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(2),
+          supabase.from('notes').select('id, title, updated_at').eq('user_id', userId).order('updated_at', { ascending: false }).limit(2)
         ]);
 
-        setCourses(coursesData);
-        setEvents(eventsData);
-        setRecentDocs(docsRes.data || []);
+        if (profileRes.data?.full_name) {
+          setProfileName(profileRes.data.full_name.split(' ')[0]);
+        }
 
-        // --- CALCUL DU JOURNAL DE BORD (7 derniers jours) ---
+        // --- À FAIRE AUJOURD'HUI ---
+        setEvents(eventsData);
+        const dueCards = cardsData.filter(c => !c.due_at || new Date(c.due_at) <= new Date());
+        setDueCardsCount(dueCards.length);
+
+        // --- VOTRE SEMAINE ---
         const oneWeekAgo = new Date();
         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+        const mastered = cardsData.filter(c => c.ease_factor >= 2.5 && new Date(c.last_reviewed_at) > oneWeekAgo).length;
+        const totalEcts = coursesData.reduce((acc, c) => acc + (c.ects || 0), 0);
+        const progress = totalEcts > 0 ? Math.min(100, Math.round(((coursesData.filter(c => c.status === 'Validé').length) / coursesData.length) * 100)) : 0;
+        
+        setWeeklyStats(prev => ({ ...prev, cardsMastered: mastered, progress }));
 
-        const docsCount = (docsRes.data || []).filter((d: any) => new Date(d.created_at) > oneWeekAgo).length;
-        const recentNotes = notesData.filter((n: any) => new Date(n.updated_at) > oneWeekAgo).length;
-        const cardsReviewed = cardsData.filter((c: any) => c.last_reviewed_at && new Date(c.last_reviewed_at) > oneWeekAgo).length || cardsData.length;
+        // --- ACCÈS RÉCENTS (Fusion des docs, notes et cours) ---
+        const combinedRecent = [
+          ...(coursesData.slice(0, 1).map(c => ({ id: c.id, title: c.title, type: 'course', date: c.updated_at }))),
+          ...(docsRes.data || []).map(d => ({ id: d.id, title: d.original_name, type: 'doc', date: d.created_at })),
+          ...(notesRes.data || []).map(n => ({ id: n.id, title: n.title, type: 'note', date: n.updated_at }))
+        ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 3);
+        
+        setRecentAccess(combinedRecent);
 
-        setWeeklyStats({
-          docsAdded: docsCount,
-          notesUpdated: recentNotes,
-          cardsReviewed: cardsReviewed,
-          coursesActive: coursesData.length
-        });
       } catch (err) {
         console.error("Erreur chargement dashboard", err);
       } finally {
@@ -62,154 +72,155 @@ export function Dashboard() {
     loadDashboard();
   }, []);
 
-  // Filtrer les événements pour "Aujourd'hui"
   const today = new Date().toISOString().split('T')[0];
   const todaysEvents = events.filter(e => e.event_date.startsWith(today));
+  const hasTasks = dueCardsCount > 0 || todaysEvents.length > 0;
 
-  // Salutation dynamique
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? 'Bonjour' : hour < 18 ? 'Bon après-midi' : 'Bonsoir';
-
-  if (loading) return <div className="text-center p-12 text-text-muted font-mono animate-pulse">Chargement de votre espace...</div>;
+  if (loading) {
+    return <div className="text-center p-12 text-text-muted font-mono animate-pulse">Ouverture du cockpit...</div>;
+  }
 
   return (
-    <div className="flex flex-col gap-8 pt-2 pb-24 animate-in fade-in duration-300">
-      {/* HEADER : Salutation & Bouton Mode Amphi */}
-      <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 px-1 border-b border-border pb-6">
+    <div className="flex flex-col gap-8 pt-4 pb-24 animate-in fade-in duration-300 max-w-4xl mx-auto">
+      
+      {/* HEADER : COCKPIT */}
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
         <div>
-          <h1 className="font-serif text-3xl md:text-4xl font-bold tracking-tight mb-2">{greeting}, Maître.</h1>
-          <p className="text-text-muted text-sm">Voici votre journal de bord et vos priorités du jour.</p>
+          <h1 className="font-serif text-3xl md:text-4xl font-bold tracking-tight mb-1 text-text">
+            Bonjour, {profileName}
+          </h1>
+          <p className="text-text-muted text-sm font-medium">
+            Voici ce qui mérite votre attention aujourd'hui.
+          </p>
         </div>
         <button 
           onClick={() => navigate('/editor/new')}
-          className="bg-accent text-background px-4 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 glow-gold hover:scale-[1.02] transition-transform shadow-lg cursor-pointer"
+          className="bg-surface-elevated border border-border text-text hover:bg-surface-interactive px-5 py-3 rounded-btn text-sm font-bold flex items-center justify-center gap-2 shadow-sm cursor-pointer transition-all active:scale-[0.98]"
         >
-          <FileEdit size={18} /> Je suis en cours (Note rapide)
+          <Plus size={16} /> Note rapide
         </button>
       </header>
 
-      {/* JOURNAL DE BORD : LE BILAN ANTI-CULPABILITÉ */}
-      <section className="flex flex-col gap-4">
-        <div className="flex items-center justify-between px-1">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
-            <Activity size={16} className="text-accent" /> Dynamique & Bilan hebdomadaire
-          </h2>
-          <span className="text-[10px] font-mono text-text-muted bg-surface border border-border px-2.5 py-1 rounded-full">
-            7 derniers jours
-          </span>
-        </div>
+      {/* ACTION PRINCIPALE : CONTINUER LA RÉVISION */}
+      {dueCardsCount > 0 && (
+        <button 
+          onClick={() => navigate('/session/all', { state: { from: '/' } })}
+          className="w-full bg-accent text-background rounded-card p-5 flex items-center justify-between shadow-apple-subtle hover:scale-[1.01] hover:shadow-apple transition-all cursor-pointer group"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-background/20 rounded-xl flex items-center justify-center shrink-0">
+              <BrainCircuit size={24} className="text-background" />
+            </div>
+            <div className="text-left">
+              <h3 className="font-bold text-lg leading-tight">Continuer la révision</h3>
+              <p className="text-background/80 text-sm font-medium">{dueCardsCount} flashcards dues. Environ {Math.ceil(dueCardsCount * 0.5)} minutes.</p>
+            </div>
+          </div>
+          <div className="w-10 h-10 rounded-full bg-background/20 flex items-center justify-center group-hover:bg-background/30 transition-colors">
+            <Play size={18} className="text-background fill-background ml-1" />
+          </div>
+        </button>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        <div className="bg-surface border border-border/80 rounded-3xl p-6 shadow-sm relative overflow-hidden group hover:border-accent/30 transition-all">
-          <div className="absolute -right-20 -top-20 w-48 h-48 bg-accent/5 rounded-full blur-3xl pointer-events-none"></div>
-          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
-            <div className="flex items-start gap-4 max-w-lg">
-              <div className="w-12 h-12 rounded-2xl bg-accent/10 border border-accent/20 text-accent flex items-center justify-center shrink-0 shadow-inner">
-                <Flame size={22} />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-accent mb-1">Analyse de régularité</span>
-                <h3 className="font-serif text-xl font-bold text-text mb-1.5">Cap maintenu avec constance</h3>
-                <p className="text-sm text-text-muted leading-relaxed">
-                  Chaque document analysé et chaque flashcard révisée consolide votre progression. Votre rigueur actuelle fait toute la différence pour les examens.
-                </p>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-3 gap-3 w-full lg:w-auto shrink-0">
-              <div className="bg-surface-elevated border border-border/60 rounded-2xl p-4 text-center flex flex-col items-center justify-center min-w-[95px] shadow-sm">
-                <span className="font-serif text-2xl md:text-3xl font-bold text-accent mb-0.5">{weeklyStats.docsAdded}</span>
-                <span className="text-[9px] uppercase tracking-wider text-text-muted font-bold">Documents</span>
-              </div>
-              <div className="bg-surface-elevated border border-border/60 rounded-2xl p-4 text-center flex flex-col items-center justify-center min-w-[95px] shadow-sm">
-                <span className="font-serif text-2xl md:text-3xl font-bold text-warning mb-0.5">{weeklyStats.cardsReviewed}</span>
-                <span className="text-[9px] uppercase tracking-wider text-text-muted font-bold">Flashcards</span>
-              </div>
-              <div className="bg-surface-elevated border border-border/60 rounded-2xl p-4 text-center flex flex-col items-center justify-center min-w-[95px] shadow-sm">
-                <span className="font-serif text-2xl md:text-3xl font-bold text-success mb-0.5">{weeklyStats.notesUpdated}</span>
-                <span className="text-[9px] uppercase tracking-wider text-text-muted font-bold">Notes</span>
-              </div>
-            </div>
+        {/* COLONNE GAUCHE : À FAIRE AUJOURD'HUI */}
+        <div className="flex flex-col gap-4">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted ml-1">À faire aujourd'hui</h2>
+          
+          <div className="flex flex-col gap-3">
+            {!hasTasks ? (
+              <Card className="flex flex-col items-center justify-center py-10 gap-3 text-center border-dashed bg-transparent">
+                <div className="w-12 h-12 rounded-full bg-surface-elevated flex items-center justify-center mb-2">
+                  <Calendar size={20} className="text-text-muted opacity-50" />
+                </div>
+                <p className="text-sm font-medium text-text">Votre journée est libre.</p>
+                <p className="text-xs text-text-muted">Ajoutez un cours ou planifiez une session d'étude.</p>
+                <button onClick={() => navigate('/schedule')} className="mt-2 text-xs font-bold text-accent hover:underline cursor-pointer">Ouvrir le planning</button>
+              </Card>
+            ) : (
+              <>
+                {dueCardsCount > 0 && (
+                  <Card className="flex items-center gap-4 p-4 border-l-4 border-l-warning">
+                    <div className="p-2 bg-warning/10 text-warning rounded-lg"><BrainCircuit size={18} /></div>
+                    <div className="flex flex-col">
+                      <span className="font-bold text-sm text-text">Session de mémorisation</span>
+                      <span className="text-xs text-text-muted">{dueCardsCount} cartes en attente</span>
+                    </div>
+                  </Card>
+                )}
+                
+                {todaysEvents.map(evt => (
+                  <Card key={evt.id} className="flex items-center gap-4 p-4 border-l-4 border-l-info">
+                    <div className="p-2 bg-info/10 text-info rounded-lg"><Clock size={18} /></div>
+                    <div className="flex flex-col">
+                      <span className="font-bold text-sm text-text">{evt.title}</span>
+                      <span className="text-xs text-text-muted font-mono">{new Date(evt.event_date).toLocaleTimeString('fr-CH', { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                  </Card>
+                ))}
+              </>
+            )}
           </div>
         </div>
-      </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* COLONNE GAUCHE : AGENDA DU JOUR */}
-        <section className="lg:col-span-1 flex flex-col gap-4">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
-            <Calendar size={16} /> Aujourd'hui
-          </h2>
-          <Card className="bg-surface-elevated flex flex-col gap-3">
-            {todaysEvents.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-text-muted gap-2">
-                <CheckCircle2 size={32} className="opacity-20" />
-                <p className="text-sm">Aucun cours ni séminaire prévu aujourd'hui.</p>
-              </div>
-            ) : (
-              todaysEvents.map(evt => (
-                <div key={evt.id} className="flex items-center gap-3 p-3 bg-background border border-border rounded-xl">
-                  <div className="w-1.5 h-full min-h-[40px] bg-accent rounded-full"></div>
-                  <div className="flex flex-col flex-1 min-w-0">
-                    <span className="font-bold text-sm text-text truncate">{evt.title}</span>
-                    <span className="text-xs text-text-muted flex items-center gap-1 font-mono">
-                      <Clock size={12} /> {new Date(evt.event_date).toLocaleTimeString('fr-CH', { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                </div>
-              ))
-            )}
-            <button onClick={() => navigate('/schedule')} className="mt-2 text-xs font-bold text-accent hover:underline text-center cursor-pointer">
-              Voir tout l'agenda
-            </button>
-          </Card>
-        </section>
-
-        {/* COLONNE DROITE : DOCUMENTS RÉCENTS & À TRAITER */}
-        <section className="lg:col-span-2 flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
-              <FolderOpen size={16} /> Documents récents & Bibliothèque
-            </h2>
-            <button onClick={() => navigate('/documents')} className="text-xs font-bold text-accent hover:underline flex items-center gap-1 cursor-pointer">
-              Voir toute la bibliothèque <ChevronRight size={14} />
-            </button>
+        {/* COLONNE DROITE : VOTRE SEMAINE & ACCÈS RÉCENTS */}
+        <div className="flex flex-col gap-8">
+          
+          {/* VOTRE SEMAINE */}
+          <div className="flex flex-col gap-4">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted ml-1">Votre semaine</h2>
+            <div className="grid grid-cols-3 gap-3">
+              <Card className="p-4 flex flex-col items-center justify-center text-center gap-1 bg-surface-interactive/50">
+                <span className="text-[10px] text-text-muted font-bold uppercase">Temps d'étude</span>
+                <span className="font-serif text-xl font-bold text-text">{weeklyStats.studyTime}</span>
+              </Card>
+              <Card className="p-4 flex flex-col items-center justify-center text-center gap-1 bg-surface-interactive/50">
+                <span className="text-[10px] text-text-muted font-bold uppercase">Maîtrise</span>
+                <span className="font-serif text-xl font-bold text-success">{weeklyStats.cardsMastered}</span>
+              </Card>
+              <Card className="p-4 flex flex-col items-center justify-center text-center gap-1 bg-surface-interactive/50">
+                <span className="text-[10px] text-text-muted font-bold uppercase">Progression</span>
+                <span className="font-serif text-xl font-bold text-info">{weeklyStats.progress}%</span>
+              </Card>
+            </div>
           </div>
-          <div className="flex flex-col gap-3">
-            {recentDocs.length === 0 ? (
-              <div className="text-center py-8 text-text-muted border border-dashed border-border rounded-2xl text-sm">
-                Aucun document importé pour l'instant.
-              </div>
-            ) : (
-              recentDocs.map(doc => {
-                const isPdf = doc.mime_type === 'application/pdf' || doc.original_name.toLowerCase().endsWith('.pdf');
-                return (
+
+          {/* ACCÈS RÉCENTS */}
+          <div className="flex flex-col gap-4">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted ml-1">Accès récents</h2>
+            <div className="flex flex-col bg-surface border border-border/50 rounded-card overflow-hidden">
+              {recentAccess.length === 0 ? (
+                <div className="p-6 text-center text-xs text-text-muted">Aucune activité récente.</div>
+              ) : (
+                recentAccess.map((item, idx) => (
                   <div 
-                    key={doc.id}
-                    onClick={() => navigate(`/viewer/${doc.id}`)}
-                    className="bg-surface border border-border p-3.5 rounded-2xl flex items-center justify-between cursor-pointer hover:border-accent/50 transition-colors group shadow-sm"
+                    key={`${item.type}-${item.id}`}
+                    onClick={() => {
+                      if (item.type === 'course') navigate(`/courses/${item.id}`);
+                      if (item.type === 'doc') navigate(`/viewer/${item.id}`);
+                      if (item.type === 'note') navigate(`/editor/${item.id}`);
+                    }}
+                    className={`flex items-center gap-4 p-4 hover:bg-surface-interactive cursor-pointer transition-colors ${idx !== recentAccess.length - 1 ? 'border-b border-border/50' : ''}`}
                   >
-                    <div className="flex items-center gap-3 min-w-0 flex-1 pr-2">
-                      <div className={`p-2.5 rounded-xl shrink-0 ${isPdf ? 'bg-danger/10 text-danger' : 'bg-info/10 text-info'}`}>
-                        <FileText size={18} />
-                      </div>
-                      <div className="min-w-0 flex flex-col">
-                        <p className="font-bold text-sm text-text truncate group-hover:text-accent transition-colors">
-                          {doc.original_name}
-                        </p>
-                        <span className="text-xs text-text-muted truncate">
-                          {doc.courses?.title || 'Fichier global'} • {new Date(doc.created_at).toLocaleDateString('fr-CH', { day: 'numeric', month: 'short' })}
-                        </span>
-                      </div>
+                    <div className="p-2 rounded-lg bg-surface-elevated text-text-muted shrink-0">
+                      {item.type === 'course' && <BookOpen size={16} />}
+                      {item.type === 'doc' && <FileText size={16} />}
+                      {item.type === 'note' && <FileEdit size={16} />}
                     </div>
-                    <Badge variant="warning" className="text-[10px] bg-warning/10 text-warning border-transparent shrink-0">
-                      À lire
-                    </Badge>
+                    <div className="flex flex-col min-w-0">
+                      <span className="font-medium text-sm text-text truncate">{item.title}</span>
+                      <span className="text-[10px] text-text-muted uppercase tracking-wider mt-0.5">
+                        {item.type === 'course' ? 'Cours' : item.type === 'doc' ? 'Document' : 'Note'}
+                      </span>
+                    </div>
                   </div>
-                );
-              })
-            )}
+                ))
+              )}
+            </div>
           </div>
-        </section>
+
+        </div>
       </div>
     </div>
   );
