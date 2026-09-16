@@ -1,5 +1,4 @@
 import * as pdfjsLib from 'pdfjs-dist';
-import { createFlashcard } from '../services/supabaseService';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
@@ -12,7 +11,6 @@ export async function extractTextFromPDF(fileUrl: string, startPage?: number, en
     let fullText = '';
     const start = startPage && startPage > 0 ? startPage : 1;
     const end = endPage && endPage <= pdf.numPages ? endPage : pdf.numPages;
-
     for (let i = start; i <= end; i++) {
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
@@ -26,14 +24,10 @@ export async function extractTextFromPDF(fileUrl: string, startPage?: number, en
   }
 }
 
-// Fonction blindée pour gemini-3.6-flash avec réessais automatiques en cas de 503 (High Demand)
 async function callGeminiKeyAuthorized(payload: any, retries = 4, delay = 3000): Promise<any> {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("Clé API Gemini introuvable.");
-
-  // Modèle validé et autorisé par ta clé API
-  const url = `https://generativelanguage.googleapis.com/v1/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
-
+  const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
   for (let i = 0; i < retries; i++) {
     try {
       const response = await fetch(url, {
@@ -41,20 +35,15 @@ async function callGeminiKeyAuthorized(payload: any, retries = 4, delay = 3000):
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-
       if (response.ok) {
         return await response.json();
       }
-
       const errText = await response.text();
-      
-      // Si le modèle est surchargé (503), on patiente et on réessaie automatiquement
       if (response.status === 503 && i < retries - 1) {
-        console.warn(`Modèle gemini-3.6-flash surchargé (503). Nouvelle tentative (${i + 1}/${retries - 1}) dans ${(delay * (i + 1)) / 1000}s...`);
+        console.warn(`Modèle surchargé (503). Nouvelle tentative (${i + 1}/${retries - 1}) dans ${(delay * (i + 1)) / 1000}s...`);
         await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
         continue;
       }
-
       throw new Error(`Erreur API Gemini (${response.status}): ${errText}`);
     } catch (err: any) {
       if (i === retries - 1) throw err;
@@ -64,78 +53,15 @@ async function callGeminiKeyAuthorized(payload: any, retries = 4, delay = 3000):
   throw new Error("Le serveur Gemini est fortement sollicité. Veuillez patienter quelques secondes et relancer la génération.");
 }
 
-export async function generateAIFlashcards(text: string, courseId: string, chapterId?: string) {
-  const prompt = `Tu es un assistant de faculté de droit en Suisse. Génère une liste de flashcards de révision (SM-2) basées sur le texte juridique ci-dessous. 
+// NOUVEAU : Retourne uniquement les données JSON, sans les sauvegarder !
+export async function generateAIFlashcards(text: string) {
+  const prompt = `Tu es un assistant de faculté de droit en Suisse. Génère une liste de flashcards de révision basées sur le texte juridique ci-dessous. 
 Renvoie UNIQUEMENT un tableau JSON valide au format strict : [{"question": "...", "answer": "..."}]. Pas de texte additionnel, pas de markdown autour, juste le JSON brut.
-
 Texte :
 ${text.substring(0, 30000)}`;
-
   const data = await callGeminiKeyAuthorized({
     contents: [{ parts: [{ text: prompt }] }]
   });
-
   let rawText = data.candidates[0].content.parts[0].text.trim();
-
   if (rawText.startsWith('```json')) {
-    rawText = rawText.replace(/^```json/, '').replace(/```$/, '').trim();
-  } else if (rawText.startsWith('```')) {
-    rawText = rawText.replace(/^```/, '').replace(/```$/, '').trim();
-  }
-
-  const flashcardsData = JSON.parse(rawText);
-
-  for (const card of flashcardsData) {
-    await createFlashcard({
-      course_id: courseId,
-      chapter_id: chapterId ? chapterId : undefined,
-      front: card.question,
-      back: card.answer
-    });
-  }
-  return flashcardsData.length;
-}
-
-export async function generateAISummary(text: string): Promise<string> {
-  const prompt = `Tu es un juriste suisse. Résume le texte juridique fourni en Markdown :\n\n${text.substring(0, 30000)}`;
-  
-  const data = await callGeminiKeyAuthorized({
-    contents: [{ parts: [{ text: prompt }] }]
-  });
-
-  return data.candidates[0].content.parts[0].text;
-}
-
-export async function generateCaseLaw(text: string): Promise<any> {
-  const summary = await generateAISummary(text);
-  return {
-    title: "Arrêt analysé par l'IA",
-    atf_citation: "ATF non spécifié",
-    facts: summary,
-    procedure: "Procédure standard",
-    legal_issues: "Problématique juridique",
-    consideranda: "Considérants clés",
-    holding: "Dispositif"
-  };
-}
-
-export async function generateSubsumption(text: string): Promise<any> {
-  const summary = await generateAISummary(text);
-  return {
-    legal_issue: "Question juridique du cas",
-    major_premise: "Base légale applicable",
-    minor_premise: "Application aux faits",
-    conclusion: "Solution juridique"
-  };
-}
-
-export async function generateMockExam(courseTitle: string): Promise<any> {
-  return {
-    title: `Examen blanc : ${courseTitle}`,
-    facts: "Faits de l'examen simulé...",
-    legal_issue: "Questions à résoudre",
-    major_premise: "Règles applicables",
-    minor_premise: "Subsumption",
-    conclusion: "Solution"
-  };
-}
+    rawText = rawText.replace(/^
