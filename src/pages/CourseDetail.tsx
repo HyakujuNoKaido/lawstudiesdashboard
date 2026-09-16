@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, FileText, LayoutGrid, Scale, Plus, X, CheckSquare, Square, FolderInput, UploadCloud, Sparkles, Calendar, BookOpen, FileEdit, BrainCircuit, CheckCircle2, Circle, AlertCircle, ChevronDown, ChevronRight, ClipboardPaste, Trash2 } from 'lucide-react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { ChevronLeft, FileText, LayoutGrid, Scale, Plus, X, CheckSquare, Square, FolderInput, UploadCloud, Sparkles, Calendar, BookOpen, FileEdit, BrainCircuit, CheckCircle2, Circle, AlertCircle, ChevronDown, ChevronRight, ClipboardPaste, Trash2, Edit3 } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
 import { Card } from '../components/ui/Card';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { InlineEditableTitle } from '../components/ui/InlineEditableTitle';
 import { ResourceMenu } from '../components/ui/ResourceMenu';
-import { fetchCourseById, updateCourse, fetchCourseChapters, fetchCourseDocuments, fetchCourseGrades, fetchNotes, fetchFlashcards, deleteDocument, createChapter, parseAndCreateChaptersFromSyllabus, fetchEvents, updateChapterParent, batchMoveItems, getCurrentUserId } from '../services/supabaseService';
+import { fetchCourseById, updateCourse, fetchCourseChapters, fetchCourseDocuments, fetchCourseGrades, fetchNotes, fetchFlashcards, deleteDocument, createChapter, parseAndCreateChaptersFromSyllabus, fetchEvents, updateChapterParent, batchMoveItems, getCurrentUserId, updateFlashcard, createFlashcard, deleteFlashcard } from '../services/supabaseService';
 import { supabase } from '../lib/supabase';
 import { toast } from '../lib/toast';
 import { extractTextFromPDF, generateAIFlashcards, generateAISummary } from '../lib/aiService';
@@ -17,8 +17,11 @@ type TabType = 'overview' | 'chapters' | 'resources' | 'notes' | 'flashcards' | 
 export function CourseDetail() {
   const { courseId } = useParams<{ courseId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
+  // Ouvre le bon onglet si on vient de Study.tsx par exemple
+  const [activeTab, setActiveTab] = useState<TabType>((location.state as any)?.tab || 'overview');
+  
   const [course, setCourse] = useState<any>(null);
   const [chapters, setChapters] = useState<any[]>([]);
   const [documents, setDocuments] = useState<any[]>([]);
@@ -28,13 +31,13 @@ export function CourseDetail() {
   const [courseEvents, setCourseEvents] = useState<any[]>([]);
   
   const [loading, setLoading] = useState(true);
-  const [docToDelete, setDocToDelete] = useState<{id: string, path: string} | null>(null);
   
+  // États Modales Générales
+  const [docToDelete, setDocToDelete] = useState<{id: string, path: string} | null>(null);
   const [isAddingChapter, setIsAddingChapter] = useState(false);
   const [newChapterTitle, setNewChapterTitle] = useState('');
   const [parentChapterId, setParentChapterId] = useState<string | null>(null);
   const [chapterToDelete, setChapterToDelete] = useState<string | null>(null);
-  
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkSyllabusText, setBulkSyllabusText] = useState('');
   const [openChapters, setOpenChapters] = useState<Record<string, boolean>>({});
@@ -44,10 +47,15 @@ export function CourseDetail() {
   const [isBatchDeleteModalOpen, setIsBatchDeleteModalOpen] = useState(false);
   const [isBatchMoveModalOpen, setIsBatchMoveModalOpen] = useState(false);
   const [batchTargetParentId, setBatchTargetParentId] = useState<string | null>(null);
-
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [aiTarget, setAiTarget] = useState<{ type: 'document' | 'chapter', id: string, name: string } | null>(null);
   const [aiConfig, setAiConfig] = useState({ action: 'flashcards', pageStart: '', pageEnd: '' });
+
+  // États pour la gestion individuelle des Flashcards
+  const [isCardModalOpen, setIsCardModalOpen] = useState(false);
+  const [editingCardId, setEditingCardId] = useState<string | null>(null);
+  const [cardForm, setCardForm] = useState({ front: '', back: '' });
+  const [cardToDelete, setCardToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     if (courseId) loadData();
@@ -183,6 +191,33 @@ export function CourseDetail() {
     } catch (err: any) { toast(err.message || "L'analyse a échoué.", "error"); }
   };
 
+  // --- GESTION INDIVIDUELLE DES FLASHCARDS ---
+  const handleSaveCard = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cardForm.front || !cardForm.back || !courseId) return;
+    try {
+      if (editingCardId) {
+        await updateFlashcard(editingCardId, { ...cardForm, course_id: courseId });
+        toast("Carte modifiée", "success");
+      } else {
+        await createFlashcard({ ...cardForm, course_id: courseId });
+        toast("Carte ajoutée", "success");
+      }
+      setIsCardModalOpen(false);
+      loadData();
+    } catch (err) { toast("Erreur lors de la sauvegarde", "error"); }
+  };
+
+  const confirmDeleteCard = async () => {
+    if (!cardToDelete) return;
+    try {
+      await deleteFlashcard(cardToDelete);
+      toast("Carte supprimée", "success");
+      setCardToDelete(null);
+      loadData();
+    } catch (err) { toast("Erreur lors de la suppression", "error"); }
+  };
+
   const buildChapterTree = (flatChapters: any[]) => {
     const map = new Map(); const roots: any[] = [];
     flatChapters.forEach(ch => map.set(ch.id, { ...ch, children: [] }));
@@ -204,7 +239,7 @@ export function CourseDetail() {
   const masteredCards = flashcards.filter(f => f.ease_factor >= 2.5).length;
   const progressPercent = flashcards.length > 0 ? Math.round((masteredCards / flashcards.length) * 100) : 0;
 
-  // --- RENDU D'UN CHAPITRE AVEC LES NOUVEAUX COMPOSANTS ---
+  // --- RENDU D'UN CHAPITRE ---
   const renderChapterItem = (chapter: any, depth = 0) => {
     const chapterDocs = documents.filter(d => d.chapter_id === chapter.id);
     const chapterCards = flashcards.filter(f => f.chapter_id === chapter.id);
@@ -227,7 +262,6 @@ export function CourseDetail() {
                 {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
               </div>
               
-              {/* TITRE INLINE DU CHAPITRE */}
               <div className="flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
                 <InlineEditableTitle 
                   initialTitle={chapter.title} 
@@ -365,6 +399,7 @@ export function CourseDetail() {
       {/* CONTENU DES ONGLETS */}
       <div className="mt-2">
         {activeTab === 'overview' && (
+           // [Même code que précédemment]
           <div className="flex flex-col gap-8 animate-in fade-in">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Card className="md:col-span-2 bg-surface p-6 flex flex-col gap-4">
@@ -433,6 +468,7 @@ export function CourseDetail() {
         )}
 
         {activeTab === 'chapters' && (
+          // [Même code que précédemment]
           <div className="flex flex-col gap-4 animate-in fade-in">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-2 bg-surface p-4 rounded-2xl border border-border">
               <div className="flex items-center gap-3">
@@ -551,21 +587,49 @@ export function CourseDetail() {
           </div>
         )}
 
+        {/* ONGLET 5 : FLASHCARDS AVEC GESTION INDIVIDUELLE */}
         {activeTab === 'flashcards' && (
           <div className="flex flex-col gap-4 animate-in fade-in">
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="text-sm font-bold text-text">Flashcards du cours ({flashcards.length})</h2>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => { setEditingCardId(null); setCardForm({front: '', back: ''}); setIsCardModalOpen(true); }}
+                  className="text-xs bg-surface-elevated border border-border px-3 py-2 rounded-btn font-bold flex items-center gap-1.5 hover:bg-surface-interactive cursor-pointer"
+                >
+                  <Plus size={14} /> Ajouter
+                </button>
+                <button onClick={() => navigate('/session/' + course.id, { state: { from: `/courses/${course.id}` } })} className="text-xs bg-accent text-background px-3 py-2 rounded-btn font-bold flex items-center gap-1.5 glow-gold cursor-pointer">
+                  <BrainCircuit size={14} /> Réviser
+                </button>
+              </div>
+            </div>
+            
             {flashcards.length === 0 ? (
-              <div className="text-center py-12 border border-dashed border-border rounded-2xl text-text-muted text-sm">Aucune flashcard pour ce cours.</div>
+              <div className="text-center py-12 border border-dashed border-border rounded-2xl text-text-muted text-sm">
+                Aucune flashcard. Créez-en manuellement ou générez-les avec l'IA depuis un document.
+              </div>
             ) : (
               <div className="flex flex-col border border-border bg-surface rounded-card overflow-hidden shadow-sm">
                 {flashcards.map((card, idx) => (
-                  <div key={card.id} className={`p-4 flex flex-col gap-1 hover:bg-surface-interactive transition-colors ${idx !== flashcards.length -1 ? 'border-b border-border/50' : ''}`}>
-                    <div className="flex justify-between items-start gap-4">
+                  <div key={card.id} className={`p-4 flex items-start gap-4 hover:bg-surface-interactive transition-colors group ${idx !== flashcards.length -1 ? 'border-b border-border/50' : ''}`}>
+                    <div className="flex-1 min-w-0 flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <Badge variant={card.ease_factor >= 2.5 ? 'success' : 'warning'} className="text-[9px] shrink-0 mb-1">
+                          {card.ease_factor >= 2.5 ? 'Maîtrisée' : 'À revoir'}
+                        </Badge>
+                      </div>
                       <p className="text-sm font-medium text-text"><span className="text-text-muted font-mono mr-2 text-xs">Q:</span>{card.front}</p>
-                      <Badge variant={card.ease_factor >= 2.5 ? 'success' : 'warning'} className="text-[9px] shrink-0">
-                        {card.ease_factor >= 2.5 ? 'Maîtrisée' : 'À revoir'}
-                      </Badge>
+                      <p className="text-sm text-text-muted mt-1"><span className="opacity-50 font-mono mr-2 text-xs">R:</span>{card.back}</p>
                     </div>
-                    <p className="text-sm text-text-muted"><span className="opacity-50 font-mono mr-2 text-xs">R:</span>{card.back}</p>
+                    
+                    {/* LE MENU D'ÉDITION ET SUPPRESSION DE LA FLASHCARD */}
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                      <ResourceMenu 
+                        onEdit={() => { setEditingCardId(card.id); setCardForm({front: card.front, back: card.back}); setIsCardModalOpen(true); }}
+                        onDelete={() => setCardToDelete(card.id)}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -593,6 +657,35 @@ export function CourseDetail() {
           </div>
         )}
       </div>
+
+      {/* MODALES FLASHCARDS */}
+      {isCardModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="w-full max-w-md bg-surface-elevated border border-border rounded-modal p-6 shadow-apple flex flex-col gap-4">
+            <h3 className="font-serif text-xl font-bold">{editingCardId ? "Modifier la carte" : "Nouvelle carte"}</h3>
+            <form onSubmit={handleSaveCard} className="flex flex-col gap-3">
+              <label className="flex flex-col gap-1 text-[10px] uppercase font-bold text-text-muted">
+                Question (Recto)
+                <textarea 
+                  required rows={3} value={cardForm.front} onChange={(e) => setCardForm({...cardForm, front: e.target.value})}
+                  className="bg-background border border-border rounded-input px-3 py-2 text-sm font-serif text-text focus:border-accent resize-none"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-[10px] uppercase font-bold text-accent">
+                Réponse (Verso)
+                <textarea 
+                  required rows={3} value={cardForm.back} onChange={(e) => setCardForm({...cardForm, back: e.target.value})}
+                  className="bg-background border border-border rounded-input px-3 py-2 text-sm font-serif text-text focus:border-accent resize-none"
+                />
+              </label>
+              <div className="flex justify-end gap-2 mt-2">
+                <button type="button" onClick={() => setIsCardModalOpen(false)} className="px-4 py-2 bg-surface border border-border rounded-btn text-xs font-bold">Annuler</button>
+                <button type="submit" className="px-4 py-2 bg-accent text-background rounded-btn text-xs font-bold glow-gold">Enregistrer</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* MODALES COMMUNES */}
       {showBulkModal && (
@@ -636,6 +729,7 @@ export function CourseDetail() {
       <ConfirmModal isOpen={!!docToDelete} title="Supprimer le document ?" message="Ce document sera définitivement effacé." confirmText="Supprimer" cancelText="Annuler" isDanger={true} onConfirm={handleDeleteDocument} onClose={() => setDocToDelete(null)} />
       <ConfirmModal isOpen={!!chapterToDelete} title="Supprimer le chapitre ?" message="Attention, les sous-chapitres associés seront également supprimés." confirmText="Supprimer" cancelText="Annuler" isDanger={true} onConfirm={confirmDeleteChapter} onClose={() => setChapterToDelete(null)} />
       <ConfirmModal isOpen={isBatchDeleteModalOpen} title="Supprimer la sélection ?" message={`Voulez-vous vraiment supprimer les ${totalSelectedCount} éléments sélectionnés ?`} confirmText="Tout supprimer" cancelText="Annuler" isDanger={true} onConfirm={handleBatchDelete} onClose={() => setIsBatchDeleteModalOpen(false)} />
+      <ConfirmModal isOpen={!!cardToDelete} title="Supprimer la flashcard ?" message="Cette carte sera définitivement effacée." confirmText="Supprimer" cancelText="Annuler" isDanger={true} onConfirm={confirmDeleteCard} onClose={() => setCardToDelete(null)} />
     </div>
   );
 }
