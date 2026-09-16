@@ -1,122 +1,159 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
+// Configuration du Worker PDF
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 const getApiKey = () => import.meta.env.VITE_GEMINI_API_KEY;
 
+/**
+ * Extrait et nettoie le texte du PDF
+ */
 export async function extractTextFromPDF(fileUrl: string, startPage?: number, endPage?: number): Promise<string> {
   try {
     const loadingTask = pdfjsLib.getDocument(fileUrl);
     const pdf = await loadingTask.promise;
     let fullText = '';
+    
     const start = startPage && startPage > 0 ? startPage : 1;
     const end = endPage && endPage <= pdf.numPages ? endPage : pdf.numPages;
+
     for (let i = start; i <= end; i++) {
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
-      const pageText = textContent.items.map((item: any) => item.str).join(' ');
-      fullText += pageText + '\n\n';
+      const pageText = textContent.items
+        .map((item: any) => item.str)
+        .join(' ')
+        .replace(/\s+/g, ' '); // Nettoie les espaces multiples
+      fullText += `[Page ${i}]\n${pageText}\n\n`;
     }
-    return fullText;
+    return fullText.trim();
   } catch (error) {
     console.error("Erreur d'extraction PDF:", error);
-    throw new Error("Impossible d'extraire le texte du PDF.");
+    throw new Error("Erreur lors de la lecture du document juridique.");
   }
 }
 
-async function callGeminiKeyAuthorized(payload: any, retries = 4, delay = 3000): Promise<any> {
+/**
+ * Cœur de l'appel API avec gestion du mode JSON et typage
+ */
+async function callLawstudiesAI(
+  prompt: string, 
+  isJsonResponse: boolean = false,
+  systemInstruction: string = "Tu es un expert en droit suisse (avocat/professeur). Réponds avec précision en utilisant la terminologie juridique suisse (CO, CC, CP, LTF, etc.)."): Promise<any> {
   const apiKey = getApiKey();
-  if (!apiKey) throw new Error("Clé API Gemini introuvable.");
+  if (!apiKey) throw new Error("Clé API introuvable.");
+
+  const API_VERSION = 'v1beta'; 
+  const MODEL_NAME = 'gemini-1.5-flash';
   
-  // Utilisation de v1beta pour supporter correctement gemini-1.5-flash
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/${API_VERSION}/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
   
-  for (let i = 0; i < retries; i++) {
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      if (response.ok) {
-        return await response.json();
-      }
-      const errText = await response.text();
-      if (response.status === 503 && i < retries - 1) {
-        console.warn(`Modèle surchargé (503). Nouvelle tentative (${i + 1}/${retries - 1}) dans ${(delay * (i + 1)) / 1000}s...`);
-        await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
-        continue;
-      }
-      throw new Error(`Erreur API Gemini (${response.status}): ${errText}`);
-    } catch (err: any) {
-      if (i === retries - 1) throw err;
-      await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
+  const payload: any = {
+    contents: [{ parts: [{ text: prompt }] }],
+    systemInstruction: { parts: [{ text: systemInstruction }] },
+    generationConfig: {
+      temperature: 0.2, // Bas pour plus de rigueur juridique
+      topP: 0.8,
     }
+  };
+
+  if (isJsonResponse) {
+    payload.generationConfig.responseMimeType = "application/json";
   }
-  throw new Error("Le serveur Gemini est fortement sollicité. Veuillez patienter quelques secondes et relancer la génération.");
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error("Détails erreur API:", data);
+      throw new Error(`Erreur API Gemini (${response.status}): ${data.error?.message || 'Inconnue'}`);
+    }
+
+    const result = data.candidates[0].content.parts[0].text;
+    return isJsonResponse ? JSON.parse(result) : result;
+  } catch (err) {
+    console.error("Erreur critique Lawstudies AI:", err);
+    throw err;
+  }
 }
 
+/**
+ * Génère des Flashcards basées sur le droit suisse
+ */
 export async function generateAIFlashcards(text: string) {
-  const prompt = `Tu es un assistant de faculté de droit en Suisse. Génère une liste de flashcards de révision basées sur le texte juridique ci-dessous. 
-Renvoie UNIQUEMENT un tableau JSON valide au format strict : [{"question": "...", "answer": "..."}]. Pas de texte additionnel, pas de markdown autour, juste le JSON brut.
-Texte :
-${text.substring(0, 30000)}`;
-  
-  const data = await callGeminiKeyAuthorized({
-    contents: [{ parts: [{ text: prompt }] }]
-  });
-  
-  let rawText = data.candidates[0].content.parts[0].text.trim();
-  if (rawText.startsWith("```json")) {
-    rawText = rawText.slice(7);
-  } else if (rawText.startsWith("```")) {
-    rawText = rawText.slice(3);
-  }
-  if (rawText.endsWith("```")) {
-    rawText = rawText.slice(0, -3);
-  }
-  
-  return JSON.parse(rawText.trim());
+  const prompt = `Génère des flashcards de révision à partir de ce texte juridique. 
+Format JSON attendu : [{"question": "...", "answer": "..."}]
+Texte : ${text.substring(0, 35000)}`;
+
+  return callLawstudiesAI(prompt, true);
 }
 
+/**
+ * Résumé juridique structuré
+ */
 export async function generateAISummary(text: string): Promise<string> {
-  const prompt = `Tu es un juriste suisse. Résume le texte juridique fourni en Markdown :\n\n${text.substring(0, 30000)}`;
-  const data = await callGeminiKeyAuthorized({
-    contents: [{ parts: [{ text: prompt }] }]
-  });
-  return data.candidates[0].content.parts[0].text;
+  const prompt = `Fais un résumé structuré en Markdown de ce texte juridique. 
+Utilise les sections suivantes : 
+- **En bref** (2 phrases)
+- **Faits pertinents**
+- **Points de droit analysés**
+- **Conclusion/Décision**
+
+Texte : ${text.substring(0, 35000)}`;
+
+  return callLawstudiesAI(prompt, false);
 }
 
+/**
+ * Analyse d'arrêt (Case Law) complète
+ */
 export async function generateCaseLaw(text: string): Promise<any> {
-  const summary = await generateAISummary(text);
-  return {
-    title: "Arrêt analysé par l'IA",
-    atf_citation: "ATF non spécifié",
-    facts: summary,
-    procedure: "Procédure standard",
-    legal_issues: "Problématique juridique",
-    consideranda: "Considérants clés",
-    holding: "Dispositif"
-  };
+  const prompt = `Analyse cet arrêt de manière structurée.
+Format JSON attendu : 
+{
+  "title": "Nom de l'affaire ou résumé court",
+  "atf_citation": "Référence (ex: ATF 145 III 1)",
+  "facts": "Résumé des faits",
+  "procedure": "Historique procédural",
+  "legal_issues": "Questions de droit soulevées",
+  "consideranda": "Principaux considérants",
+  "holding": "Décision finale"
+}
+Texte : ${text.substring(0, 30000)}`;
+
+  return callLawstudiesAI(prompt, true);
 }
 
+/**
+ * Méthode de la Subsomption (Syllogisme Juridique)
+ */
 export async function generateSubsumption(text: string): Promise<any> {
-  const summary = await generateAISummary(text);
-  return {
-    legal_issue: "Question juridique du cas",
-    major_premise: "Base légale applicable",
-    minor_premise: "Application aux faits",
-    conclusion: "Solution juridique"
-  };
+  const prompt = `Applique la méthode de la subsomption (syllogisme juridique) sur ce cas.
+Format JSON attendu :
+{
+  "legal_issue": "La question litigieuse",
+  "major_premise": "La règle de droit applicable (Majeure)",
+  "minor_premise": "L'application aux faits (Mineure)",
+  "conclusion": "La solution juridique"
+}
+Texte : ${text.substring(0, 30000)}`;
+
+  return callLawstudiesAI(prompt, true, "Tu es un assistant spécialisé dans la méthodologie juridique suisse.");
 }
 
+/**
+ * Génère un examen blanc basé sur un titre de cours
+ */
 export async function generateMockExam(courseTitle: string): Promise<any> {
-  return {
-    title: `Examen blanc : ${courseTitle}`,
-    facts: "Faits de l'examen simulé...",
-    legal_issue: "Questions à résoudre",
-    major_premise: "Règles applicables",
-    minor_premise: "Subsumption",
-    conclusion: "Solution"
-  };
+  const prompt = `Génère un cas pratique d'examen pour le cours : ${courseTitle}.
+Le cas doit inclure un état de fait complexe et une solution détaillée basée sur le droit suisse.
+Format JSON attendu : { "title": "...", "facts": "...", "questions": ["..."], "solution_guidelines": "..." }`;
+
+  return callLawstudiesAI(prompt, true);
 }
