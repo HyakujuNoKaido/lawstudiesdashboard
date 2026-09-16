@@ -526,6 +526,11 @@ export async function archiveResource(table: 'courses' | 'documents' | 'flashcar
   if (error) throw error;
 }
 
+export async function deleteNote(noteId: string) {
+  const { error } = await supabase.from('notes').delete().eq('id', noteId);
+  if (error) throw error;
+}
+
 export async function fetchArchivedResources() {
   const [coursesRes, docsRes] = await Promise.all([
     supabase.from('courses').select('*').eq('is_archived', true),
