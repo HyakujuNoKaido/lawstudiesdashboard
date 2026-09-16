@@ -20,23 +20,23 @@ const ALLOWED_ACTIONS = new Set([
 
 const MAX_PROMPT_LENGTH = 120_000;
 
+// On priorise tes modèles 3.8 et 3.6, avec leurs variantes "latest" au cas où l'API l'exige
 const MODELS_TO_TRY = [
+  'gemini-3.8-flash',
+  'gemini-3.8-flash-latest',
   'gemini-3.6-flash',
-  'gemini-2.5-flash',
-  'gemini-1.5-flash',
+  'gemini-3.6-flash-latest'
 ];
 
-// À REMPLACER : Mets ici tes vrais domaines (ex: lawstudiesdashboard.pages.dev)
 const ALLOWED_ORIGINS = new Set([
   'http://localhost:5173',
   'http://localhost:3000',
-  'https://lawstudiesdashboard.pages.dev', // <-- Le vrai domaine de ton application !
+  'https://lawstudiesdashboard.pages.dev',
 ]);
 
 export async function onRequest(context: { request: Request; env: { GEMINI_API_KEY?: string } }) {
   const requestOrigin = context.request.headers.get('Origin');
   
-  // SÉCURITÉ STRICTE : Si pas d'origine ou origine inconnue -> Rejet 403
   if (!requestOrigin || !ALLOWED_ORIGINS.has(requestOrigin)) {
     return new Response(JSON.stringify({ error: 'Origine manquante ou non autorisée.' }), {
       status: 403,
@@ -94,10 +94,12 @@ export async function onRequest(context: { request: Request; env: { GEMINI_API_K
       },
     };
 
-    let lastError = '';
     let rawText: string | null = null;
     let responseOk = false;
     let responseStatus = 500;
+    
+    // NOUVEAU : On trace TOUTES les erreurs pour comprendre ce qui bloque
+    const errorLogs: string[] = [];
 
     for (const model of MODELS_TO_TRY) {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
@@ -118,18 +120,25 @@ export async function onRequest(context: { request: Request; env: { GEMINI_API_K
             responseOk = true;
             break;
           }
-          lastError = "Réponse vide reçue du modèle.";
+          errorLogs.push(`[${model}]: Réponse vide`);
         } else {
-          lastError = data.error?.message ?? `Erreur modèle ${model}`;
-          if ([400, 401, 403].includes(responseStatus)) break; 
+          const errMsg = data.error?.message ?? `Erreur inconnue`;
+          errorLogs.push(`[${model}]: ${errMsg}`);
+          // On arrête de chercher si l'erreur vient d'un prompt malformé (400) ou d'un problème d'authentification (401, 403)
+          if ([400, 401, 403].includes(responseStatus)) {
+            break; 
+          }
         }
       } catch (netErr: any) {
-        lastError = netErr.message ?? `Erreur réseau avec ${model}`;
+        errorLogs.push(`[${model}]: Erreur réseau - ${netErr.message}`);
       }
     }
 
     if (!responseOk || rawText === null) {
-      return new Response(JSON.stringify({ error: lastError || "Tous les modèles Gemini ont échoué." }), {
+      // NOUVEAU : Le proxy renvoie désormais la liste exacte de pourquoi chaque modèle a échoué
+      return new Response(JSON.stringify({ 
+        error: "Échec de tous les modèles de l'IA. Détails : " + errorLogs.join(" | ") 
+      }), {
         status: responseStatus,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
