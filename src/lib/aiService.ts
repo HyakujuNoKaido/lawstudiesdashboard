@@ -1,7 +1,7 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Configuration rigoureuse et propre du Worker PDF sans markdown
-pdfjsLib.GlobalWorkerOptions.workerSrc = '[https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js](https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js)';
+// URL stricte, sans aucun markdown
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 export interface ExtractedPdfPage { page: number; text: string; }
 export interface ExtractedPdfDocument { text: string; pages: ExtractedPdfPage[]; pageCount: number; }
@@ -136,7 +136,8 @@ function normalizeFlashcard(value: unknown, sourceType?: string): { card: Genera
 
   const sourcePages = Array.isArray(card.sourcePages) ? card.sourcePages.filter((p): p is number => Number.isInteger(p) && p > 0) : [];
 
-  if (sourceType === 'support PDF' && sourcePages.length === 0) {
+  // Exigence de traçabilité stricte basée sur le type exact
+  if (sourceType === 'pdf' && sourcePages.length === 0) {
     return { card: null, reason: 'Pages sources absentes pour un document PDF' };
   }
 
@@ -243,7 +244,8 @@ ${sourceContext}`;
   const parsedCards: GeneratedFlashcard[] = [];
 
   for (const item of arrayResult) {
-    const { card, reason } = normalizeFlashcard(item, mappedSourceType);
+    // On passe le vrai type d'option ('pdf', 'text', 'note') à la validation
+    const { card, reason } = normalizeFlashcard(item, options.sourceType);
     if (card) {
       parsedCards.push(card);
     } else {
@@ -302,7 +304,6 @@ N'ajoute aucune clé supplémentaire.
 ${sourceContext}`;
 
   const rawAnalysis = await callLawstudiesAI('generate_case_law', { prompt, isJsonResponse: true });
-
   const fallback = "Non précisé dans le support";
   
   const analysis: CaseLawAnalysis = {
